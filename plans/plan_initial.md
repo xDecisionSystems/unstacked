@@ -9,6 +9,7 @@ Confirmed scope (from user):
 - Deployment shape: **single team, one wiki instance**. Users and group membership are managed in the webapp. **Groups** are granted **read/write access at the chapter and page level**.
 - Search: no dedicated search index — grep-style filesystem search plus mkdocs' own generated static search.
 - Planned from day one: **AI search integration for Claude and ChatGPT**, so the search/read path is a clean, permission-aware API/MCP surface, not a later bolt-on.
+- Auth: **local passwords only** — no SSO/LDAP. Keep the auth layer behind a small `authenticate(email, password) -> user` seam anyway, so adding an external provider later is a new backend rather than a rewrite of every route.
 
 ## Architecture
 
@@ -136,8 +137,8 @@ Tasks marked **[P]** in the same phase are parallelizable — no shared files, n
 
 #### T1.2 — Password auth & sessions
 `opus` / `sol` · **M** · **high** · depends: T1.1
-`app/auth.py`: bcrypt hashing, login/logout routes, signed session cookies (itsdangerous, HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for all state-changing form posts, generic login failures that don't leak whether an account exists.
-**Done when:** login/logout work end to end, a tampered session cookie is rejected, and a form POST without a valid CSRF token is rejected.
+`app/auth.py`: bcrypt hashing, login/logout routes, signed session cookies (itsdangerous, HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for all state-changing form posts, generic login failures that don't leak whether an account exists, rate limiting on login. **Local passwords only** — no SSO/LDAP — but keep credential checking behind a single `authenticate(email, password) -> User | None` function so a future external provider is a new backend, not a rewrite.
+**Done when:** login/logout work end to end, a tampered session cookie is rejected, a form POST without a valid CSRF token is rejected, and no route reads the password hash outside `authenticate()`.
 
 #### T1.3 — API token auth
 `opus` / `sol` · **M** · **high** · depends: T1.1, T1.2
@@ -365,4 +366,3 @@ Install/deploy guide, backup/restore runbook, permission model explainer, and th
 
 1. Shelves — build now or defer? Books-at-root works without them and they can be added later without a migration (it's just a folder move).
 2. Should draft pages (`draft: true`) be excluded from `mkdocs build` output, or published like any other page?
-3. Is SSO/LDAP needed eventually, or is local password auth sufficient for the foreseeable future?

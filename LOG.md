@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-26 23:58 UTC — Claude Code
+Resolved the auth open question: local passwords only, no SSO/LDAP. Added
+it to confirmed scope and tightened task T1.2 to require an
+`authenticate()` seam plus login rate limiting, so an external provider
+could be added later without touching every route.
+- Files: `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-26 23:55 UTC — Claude Code
 Corrected the model-tier mapping in the plan per user: `luna` is the small
 tier and `terra` the mid tier (I had them reversed). Every task card now
