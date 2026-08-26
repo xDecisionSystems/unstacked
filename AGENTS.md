@@ -88,6 +88,29 @@ batch it up across turns.
   this repo only. It does not cover force-pushes, history rewrites, or
   pushing to any other remote/branch — those still need explicit sign-off.
 
+## Log every change in LOG.md
+
+[LOG.md](LOG.md) exists so Claude Code and Codex can see what the *other*
+agent did, even if no commit was made yet. After every change you make in
+this repo (docs or code):
+
+- Add a new entry to the **top** of `LOG.md` (newest first), with:
+  - An ISO-ish timestamp — run `date -u "+%Y-%m-%d %H:%M UTC"`, don't guess
+    or reuse a prior entry's time.
+  - Which agent made the change: `Claude Code` or `Codex`.
+  - A short description of *what* changed and *why*.
+  - A `Files:` line listing the files touched.
+- Keep only the most recent **15** entries. When adding a new entry would
+  make 16, delete the oldest (bottom-most) entry — regardless of how long
+  any entry is. Never trim by shortening entries instead of removing the
+  oldest one.
+- Log the change even if you are not committing it yet (e.g. mid-task,
+  work in progress) — `LOG.md` is how the other agent finds out about
+  uncommitted work in the working tree.
+- This is separate from git commit messages: commit messages describe one
+  commit; `LOG.md` is a shared, capped-length changelog both agents read
+  and write to stay in sync with each other.
+
 ## Verifying changes
 
 There's no code yet — as soon as there is, the key check for any content-
