@@ -10,9 +10,18 @@ how long any entry is.
 
 ---
 
+## 2026-08-26 23:55 UTC — Claude Code
+Corrected the model-tier mapping in the plan per user: `luna` is the small
+tier and `terra` the mid tier (I had them reversed). Every task card now
+lists both naming sets (`opus`/`sol`, `sonnet`/`terra`, `haiku`/`luna`) so
+either agent can read its own tier directly. Replaced the mapping prose
+with a table, dropped the now-resolved open question, and fixed the task
+count in the previous entry (39, not 34).
+- Files: `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-26 23:51 UTC — Claude Code
 Reviewed and expanded `plans/plan_initial.md` into a full subagent task
-breakdown: 34 tasks across 11 phases, each with a recommended model tier,
+breakdown: 39 tasks across 11 phases, each with a recommended model tier,
 context size, effort level, dependencies, and done-when criteria. Filled
 gaps found in review — path-traversal safety, write locking / optimistic
 concurrency, asset uploads, API tokens for AI clients, CSRF, mkdocs.yml
