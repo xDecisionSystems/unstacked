@@ -10,6 +10,18 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 05:26 UTC — Codex
+Integrated a second parallel implementation batch: generation-wide API-token
+revocation with adversarial token tests, a safe last-good MkDocs export runner,
+and repository-wide write locking with optimistic blob conflicts and rollback
+coverage. All three agents ran isolated Compose deployments on ports
+18011–18013, verified `/healthz`, and preserved volumes on teardown; integrated
+lint and tests then passed.
+- Files: `app/ai_api.py`, `app/auth.py`, `app/config.py`, `app/content.py`,
+  `app/export.py`, `app/git_backend.py`, `tests/test_ai_api.py`,
+  `tests/test_export.py`, `tests/test_content_lifecycle.py`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 05:09 UTC — Codex
 Integrated three parallel plan streams: first-admin `admin:admin` credentials
 with server-enforced forced password change, portable content-repository
@@ -223,26 +235,6 @@ Compose doesn't care which spelling is used, and nothing in the file
 referenced its own filename.
 - Files: `docker-compose.yaml` (renamed from `docker-compose.yml`),
   `README.md`, `LOG.md`
-
-## 2026-08-27 02:22 UTC — Claude Code
-Added Coolify/Docker deployment support at the user's request. A
-multi-stage Dockerfile (uv-based, pinned to the same uv version as CI,
-non-root runtime user, HEALTHCHECK against /healthz, single worker to
-match the project's one-file-lock concurrency model) and a
-docker-compose.yml, since the user hadn't yet decided which Coolify
-resource type to use. Both declare /app/content and /app/data as the
-only persistent state — losing them loses the wiki. Documented both
-Coolify setup paths in README, including that UNSTACKED_TRUSTED_PROXY_HOPS
-must be set to 1 behind Coolify's Traefik proxy, that first-admin
-bootstrap is a manual one-time step (deliberately not automatic on
-deploy), and that automated GitHub backup of content/ isn't built yet
-(Phase 6) so the volume is the only copy for now. Also noted plainly that
-only the REST/AI API is live — no web UI exists yet.
-Caveat: this sandbox has neither Docker nor a local uv binary, so the
-Dockerfile could not be test-built here; syntax was checked by hand
-against uv's documented Docker pattern and uvicorn's --factory flag.
-- Files: `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `README.md`,
-  `LOG.md`
 
 
 

@@ -208,11 +208,10 @@ named module before writing anything new. No marker means nothing is built.
 When `must_change_password` is true, issue a restricted session that can access only logout and the CSRF-protected current-password-verified change endpoint; block bearer-token issuance and every other authenticated route/service dependency until it clears the flag. A successful forced change revokes that restricted session and outstanding API tokens, then issues a new normal session.
 **Done when:** login/logout work end to end; fixation and tampered/expired cookies are rejected; unsafe form requests without valid CSRF are rejected; inactive users lose access; first use of `admin:admin` is forced through a server-enforced password change with no content/API access; and no route reads the password hash outside `authenticate()`.
 
-#### [~] T1.3 — API token auth
+#### [x] T1.3 — API token auth
 `opus` / `sol` · **M** · **high** · depends: T1.1, T1.2
 Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, and the user's current `api_token_generation`; verify an explicit algorithm and audience, then resolve the active user so machine clients inherit current group permissions. Admin/user revocation increments the generation and revokes all of that user's issued tokens. Keep tokens out of storage and logs, and document the lack of per-token revocation.
 **Done when:** a valid token authenticates as its active user; expired, wrong-audience, wrong-generation, tampered, and deactivated-user tokens fail; revocation invalidates all prior tokens; and raw tokens are never persisted or logged.
-**Remaining:** `app/auth.py` issues/verifies generation-scoped JWTs. Remaining: explicit tests for expired, wrong-audience, tampered and deactivated-user tokens; admin-facing revoke endpoint.
 
 #### [x] T1.4 — First-run bootstrap CLI
 `sonnet` / `terra` · **M** · **medium** · depends: T1.1, T3.2
@@ -266,7 +265,7 @@ Image/attachment upload into `docs/assets/<book>/`, request and decompressed-siz
 Initialize `content/` if absent: `git init` with an explicit initial branch; operator-owned `mkdocs.yml` enabling `search` and `awesome-nav` configured with `filename: .pages`; `requirements.txt` with exact build dependency versions; `hooks/drafts.py`; starter `docs/index.md`; a managed provider-neutral `docs/llm.md` workflow; root `docs/.pages`; and `.gitignore` (ignore `site/`). Bootstrap refuses to adopt a non-empty unknown directory and commits the initial tree. Existing content repos receive the workflow only when it is absent; the app never overwrites a locally maintained version. T7.2 adds CI without changing build semantics.
 **Done when:** bootstrap is idempotent; the generated repo builds via only `python -m venv`, `pip install -r requirements.txt`, and `mkdocs build --strict`; the workflow is available both as the rendered page and raw static `/llm.md`; draft output and draft search records are absent; malformed draft metadata fails clearly; and no app/database import is reachable from the hook.
 
-#### T3.3 — Write lock & optimistic concurrency
+#### [x] T3.3 — Write lock & optimistic concurrency
 `opus` / `sol` · **L** · **max** · depends: T3.1, T2.3
 Repository-scoped inter-process lock around validation → mutation → exact staging → commit, with a bounded acquisition timeout. Save requests carry both path and base blob SHA; re-check both after acquiring the lock. Snapshot affected paths/index state and roll back on any pre-commit failure. Committed history is never reset to conceal an error.
 **Done when:** concurrent saves from separate processes produce one commit plus one conflict; unrelated dirty state is preserved; injected write/stage/commit failures restore affected files and index; and no request can wait forever.
@@ -367,7 +366,7 @@ Today the backup target is env-var-only, wired once at startup via `ContentRepos
 
 Static export is a full non-draft recovery copy and has no per-user ACL. The app must display this warning before download actions. Public deployment is out of MVP scope.
 
-#### T7.1 — Build/export runner
+#### [x] T7.1 — Build/export runner
 `sonnet` / `terra` · **M** · **high** · depends: T3.2
 `app/export.py`: run the exact configured mkdocs executable with `build --strict` using argument arrays, a fixed working directory, a clean/minimal environment, timeout, and output cap; never shell-interpolate input. Build into a fresh temporary directory and atomically replace the last successful export. Do not include `gh-deploy` in MVP.
 **Done when:** export produces the full non-draft `site/`; a failed/timed-out build preserves the previous successful export and reports a sanitized useful error; drafts are absent from HTML and the search index; and only admins can trigger/download it after acknowledging the no-ACL warning.
