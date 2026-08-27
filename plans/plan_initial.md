@@ -30,6 +30,7 @@ content/
   .github/workflows/build.yml   # rebuilds the static site on push, app-independent
   docs/
     index.md
+    llm.md                    # maintained llm-md workflow; copied to static /llm.md
     <book-slug>/                # books live at the docs/ root — no shelves
       .pages                    # awesome-nav v3: title + nav order
       <chapter-slug>/
@@ -42,6 +43,7 @@ content/
 - Book → folder, Chapter → subfolder, Page → `.md` file. **Exactly two levels of nesting under a book**, so the tree stays predictable. **No shelves** — books sit at the `docs/` root. (If grouping is ever wanted, it's a folder move plus a `.pages` file, with no schema or data migration.)
 - Use the current `mkdocs-awesome-nav` plugin, explicitly configured with `filename: .pages`, for nav titles/ordering instead of a hand-maintained `nav:` in `mkdocs.yml`. The app never rewrites a giant nav tree — it writes/renames folders and small `.pages` files using the plugin's v3 syntax. A missing configured plugin makes mkdocs fail rather than fall back, so `requirements.txt`, CI, and the recovery runbook are part of the portable content repo.
 - Every page file starts with YAML front matter for app metadata mkdocs ignores: `id` (uuid, stable across renames), `title`, `created_at`, `updated_at`, `author`, `tags`, `draft`.
+- `docs/llm.md` is a managed, provider-neutral [llm-md](https://llm.md/) workflow that tells authenticated agents how to use the AI API safely. It contains no secrets and no content listing, so publishing the raw file at `/llm.md` cannot disclose ACL-protected paths. The portable MkDocs hook copies it unchanged to the root of a static build as `/llm.md`; the project does not require the alpha llm-md CLI at runtime.
 - **`mkdocs.yml` is bootstrap-generated and then operator-owned.** Normal content operations never rewrite it. The app reads and validates it, reports unsupported settings clearly, and preserves it byte-for-byte; deliberate configuration changes are made by an operator and committed in the content repo.
 
 ### Drafts
@@ -205,8 +207,8 @@ Image/attachment upload into `docs/assets/<book>/`, request and decompressed-siz
 
 #### T3.2 — Content repo bootstrap
 `sonnet` / `terra` · **M** · **medium** · depends: T3.1
-Initialize `content/` if absent: `git init` with an explicit initial branch; operator-owned `mkdocs.yml` enabling `search` and `awesome-nav` configured with `filename: .pages`; `requirements.txt` with exact build dependency versions; `hooks/drafts.py`; starter `docs/index.md`; root `docs/.pages`; and `.gitignore` (ignore `site/`). Bootstrap refuses to adopt a non-empty unknown directory and commits the initial tree. T7.2 adds CI without changing build semantics.
-**Done when:** bootstrap is idempotent; the generated repo builds via only `python -m venv`, `pip install -r requirements.txt`, and `mkdocs build --strict`; draft output and draft search records are absent; malformed draft metadata fails clearly; and no app/database import is reachable from the hook.
+Initialize `content/` if absent: `git init` with an explicit initial branch; operator-owned `mkdocs.yml` enabling `search` and `awesome-nav` configured with `filename: .pages`; `requirements.txt` with exact build dependency versions; `hooks/drafts.py`; starter `docs/index.md`; a managed provider-neutral `docs/llm.md` workflow; root `docs/.pages`; and `.gitignore` (ignore `site/`). Bootstrap refuses to adopt a non-empty unknown directory and commits the initial tree. Existing content repos receive the workflow only when it is absent; the app never overwrites a locally maintained version. T7.2 adds CI without changing build semantics.
+**Done when:** bootstrap is idempotent; the generated repo builds via only `python -m venv`, `pip install -r requirements.txt`, and `mkdocs build --strict`; the workflow is available both as the rendered page and raw static `/llm.md`; draft output and draft search records are absent; malformed draft metadata fails clearly; and no app/database import is reachable from the hook.
 
 #### T3.3 — Write lock & optimistic concurrency
 `opus` / `sol` · **M** · **high** · depends: T3.1, T2.3

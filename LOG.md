@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 00:32 UTC — Codex
+Added a managed provider-neutral `llm.md` workflow to the portable content
+repository. It explains authenticated AI API use without secrets or content
+discovery data, is served by the app and copied verbatim to static `/llm.md`,
+and is provisioned for existing repositories only when absent so local edits
+are preserved. Documented the contract and added endpoint/build verification.
+- Files: `app/content.py`, `app/main.py`, `tests/test_content_build.py`,
+  `tests/test_ai_api.py`, `README.md`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 00:27 UTC — Codex
 Implemented the first secure application slice for AI-authored wiki content.
 Added the FastAPI app, locked Python project, initial Alembic schema, Argon2

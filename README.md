@@ -79,6 +79,15 @@ All `/api/ai/*` routes require `Authorization: Bearer <token>`.
 Interactive request/response schemas are available at `/docs` while the app
 is running.
 
+## LLM workflow
+
+The website serves a maintained [llm-md](https://llm.md/) workflow at
+`/llm.md`. It documents the authenticated AI content API and safe operating
+rules without embedding secrets or an ACL-bypassing content index. The same
+file is committed as `content/docs/llm.md`, rendered by MkDocs, and copied to
+the root of static builds so it remains available when the site is recovered
+from the content repository alone.
+
 ## License
 
 GPLv3 — see [LICENSE](LICENSE).

@@ -46,6 +46,11 @@ def test_api_created_tree_builds_strictly_and_excludes_drafts(client, app_env):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     site = Path(settings.content_repo_path) / "site"
+    workflow = settings.content_repo_path / "docs" / "llm.md"
+    assert workflow.is_file()
+    assert "### user" in workflow.read_text(encoding="utf-8")
+    assert (site / "llm.md").read_text(encoding="utf-8") == workflow.read_text(encoding="utf-8")
+    assert (site / "llm" / "index.html").is_file()
     assert (site / "knowledge" / "reference" / "public-page" / "index.html").is_file()
     assert not (site / "knowledge" / "reference" / "draft-page").exists()
     assert "Draft Page" not in (site / "search" / "search_index.json").read_text()

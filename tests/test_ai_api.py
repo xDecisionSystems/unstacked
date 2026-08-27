@@ -156,6 +156,13 @@ def test_password_exchange_issues_bearer_token(client):
     assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 200
 
 
+def test_llm_md_is_available_from_the_app(client):
+    response = client.get("/llm.md")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert "### user" in response.text
+
+
 def test_password_exchange_is_rate_limited(client):
     for _ in range(5):
         response = client.post(

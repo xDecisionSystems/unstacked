@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import Response
 
 from app.ai_api import router as ai_router
 from app.ai_service import AIContentService
@@ -30,5 +31,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/healthz", tags=["System"])
     def healthcheck():
         return {"status": "ok"}
+
+    @app.get("/llm.md", include_in_schema=False)
+    def llm_md():
+        return Response(content.read_llm_md(), media_type="text/markdown")
 
     return app
