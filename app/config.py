@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     max_page_bytes: int = 2_000_000
     max_export_bytes: int = 50_000_000
     max_rate_limit_keys: int = 10_000
+    # Static exports intentionally live outside the content checkout: MkDocs'
+    # output must never make the nested repository dirty, and the last good
+    # artifact needs to survive a later failed build.
+    static_export_path: Path = Path("data/static-export")
+    mkdocs_executable: str = "mkdocs"
+    static_export_timeout_seconds: int = 120
+    static_export_output_limit_bytes: int = 65_536
 
     @field_validator(
         "github_token_path",
@@ -104,6 +111,12 @@ class Settings(BaseSettings):
         if self.trusted_proxy_hops < 0:
             raise ValueError("trusted proxy hops cannot be negative")
 
+        if not self.mkdocs_executable or "\x00" in self.mkdocs_executable:
+            raise ValueError("mkdocs executable must be a non-empty command path")
+        if self.static_export_timeout_seconds < 1:
+            raise ValueError("static export timeout must be positive")
+        if self.static_export_output_limit_bytes < 1:
+            raise ValueError("static export output limit must be positive")
         # An unset variable and an empty one mean the same thing here: no
         # backup remote.  Normalizing once keeps every consumer from having to
         # tell `""` and `None` apart.  The values themselves are validated by

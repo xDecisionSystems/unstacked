@@ -17,6 +17,7 @@ def app_env(tmp_path: Path):
         content_repo_path=tmp_path / "content",
         db_path=tmp_path / "data" / "app.db",
         content_lock_path=tmp_path / "data" / "content.lock",
+        static_export_path=tmp_path / "data" / "static-export",
         api_token_secret="test-secret-that-is-long-and-random-enough",
     )
     app = create_app(settings)
