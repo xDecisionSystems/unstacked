@@ -10,6 +10,26 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 02:22 UTC — Claude Code
+Added Coolify/Docker deployment support at the user's request. A
+multi-stage Dockerfile (uv-based, pinned to the same uv version as CI,
+non-root runtime user, HEALTHCHECK against /healthz, single worker to
+match the project's one-file-lock concurrency model) and a
+docker-compose.yml, since the user hadn't yet decided which Coolify
+resource type to use. Both declare /app/content and /app/data as the
+only persistent state — losing them loses the wiki. Documented both
+Coolify setup paths in README, including that UNSTACKED_TRUSTED_PROXY_HOPS
+must be set to 1 behind Coolify's Traefik proxy, that first-admin
+bootstrap is a manual one-time step (deliberately not automatic on
+deploy), and that automated GitHub backup of content/ isn't built yet
+(Phase 6) so the volume is the only copy for now. Also noted plainly that
+only the REST/AI API is live — no web UI exists yet.
+Caveat: this sandbox has neither Docker nor a local uv binary, so the
+Dockerfile could not be test-built here; syntax was checked by hand
+against uv's documented Docker pattern and uvicorn's --factory flag.
+- Files: `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `README.md`,
+  `LOG.md`
+
 ## 2026-08-27 01:05 UTC — Claude Code
 Reviewed Codex's implementation and fixed everything found, most-severe
 first. High: the JWT signing secret defaulted to a shared constant and was
@@ -154,13 +174,4 @@ either agent can read its own tier directly. Replaced the mapping prose
 with a table, dropped the now-resolved open question, and fixed the task
 count in the previous entry (39, not 34).
 - Files: `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-26 23:51 UTC — Claude Code
-Reviewed and expanded `plans/plan_initial.md` into a full subagent task
-breakdown: 39 tasks across 11 phases, each with a recommended model tier,
-context size, effort level, dependencies, and done-when criteria. Filled
-gaps found in review — path-traversal safety, write locking / optimistic
-concurrency, asset uploads, API tokens for AI clients, CSRF, mkdocs.yml
-ownership, and operator docs. Added dispatch guidance and open questions.
-- Files: `plans/plan_initial.md`
 

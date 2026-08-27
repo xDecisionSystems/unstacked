@@ -1,0 +1,39 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      UNSTACKED_ENVIRONMENT: production
+      # Required in production — the app refuses to start without it. Set
+      # this in Coolify's environment variables UI, never in this file.
+      UNSTACKED_API_TOKEN_SECRET: ${UNSTACKED_API_TOKEN_SECRET:?set UNSTACKED_API_TOKEN_SECRET}
+      UNSTACKED_API_TOKEN_AUDIENCE: ${UNSTACKED_API_TOKEN_AUDIENCE:-unstacked-ai}
+      UNSTACKED_API_TOKEN_TTL_SECONDS: ${UNSTACKED_API_TOKEN_TTL_SECONDS:-3600}
+      UNSTACKED_LOGIN_ATTEMPTS_PER_MINUTE: ${UNSTACKED_LOGIN_ATTEMPTS_PER_MINUTE:-5}
+      # Set to the number of reverse proxies in front of the app. Coolify
+      # puts one (Traefik) in front by default, so this is usually 1.
+      UNSTACKED_TRUSTED_PROXY_HOPS: ${UNSTACKED_TRUSTED_PROXY_HOPS:-1}
+      UNSTACKED_MAX_RATE_LIMIT_KEYS: ${UNSTACKED_MAX_RATE_LIMIT_KEYS:-10000}
+      UNSTACKED_MAX_PAGE_BYTES: ${UNSTACKED_MAX_PAGE_BYTES:-2000000}
+      UNSTACKED_MAX_EXPORT_BYTES: ${UNSTACKED_MAX_EXPORT_BYTES:-50000000}
+    volumes:
+      # The wiki's Git repository and the SQLite/lock/secret files are the
+      # entire state of the application. Losing these volumes loses the
+      # wiki, so back content/ up to GitHub (see plans/plan_initial.md) and
+      # snapshot the data/ volume through Coolify.
+      - content:/app/content
+      - data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  content:
+  data:

@@ -90,6 +90,76 @@ file is committed as `content/docs/llm.md`, rendered by MkDocs, and copied to
 the root of static builds so it remains available when the site is recovered
 from the content repository alone.
 
+## Deploying with Coolify
+
+A `Dockerfile` and `docker-compose.yml` are both provided; Coolify can use
+either depending on which resource type you create.
+
+**State that must be persisted.** The app's entire state is two directories
+— `content/` (the Git-backed wiki) and `data/` (SQLite database, the
+inter-process lock file, and a generated API token secret). Both must be
+mounted as persistent volumes, never left on the container's writable layer,
+or a redeploy wipes the wiki.
+
+### Option A — Dockerfile resource
+
+1. In Coolify, create a new **Application** from this GitHub repo, branch
+   `main`, build pack **Dockerfile**.
+2. Under **Storage**, add two persistent volumes:
+   - container path `/app/content`
+   - container path `/app/data`
+3. Under **Environment Variables**, set at minimum:
+   - `UNSTACKED_ENVIRONMENT=production`
+   - `UNSTACKED_API_TOKEN_SECRET` — generate one with
+     `python -c "import secrets; print(secrets.token_urlsafe(48))"`;
+     production refuses to start without this set explicitly (see
+     [app/config.py](app/config.py)).
+   - `UNSTACKED_TRUSTED_PROXY_HOPS=1` — Coolify puts its own Traefik proxy in
+     front of the app, so the login rate limiter needs to know to trust one
+     hop of `X-Forwarded-For`, or every client will share one bucket.
+   - Any other tuning from [.env.example](.env.example) you want to override.
+4. Set the exposed port to `8000` and the health check path to `/healthz`
+   (the `Dockerfile` already declares a `HEALTHCHECK` against it).
+5. Deploy. `create_app()` runs the database migration and content-repo
+   bootstrap automatically on startup — no separate init step is needed.
+
+### Option B — Docker Compose resource
+
+Point Coolify at `docker-compose.yml` directly. It declares the same two
+named volumes and reads its environment from Coolify's **Environment
+Variables** UI (Coolify substitutes `${VAR}` at deploy time), so the same
+variables from Option A step 3 apply — `UNSTACKED_API_TOKEN_SECRET` is
+required and the compose file will refuse to deploy without it.
+
+### First admin user (either option)
+
+Bootstrap only creates users; it never runs automatically, since a fresh
+deploy shouldn't silently create an admin account. After the first
+successful deploy, use Coolify's container terminal to run it once:
+
+```bash
+python -m app.bootstrap --email you@example.com --display-name "Admin"
+```
+
+This prints an initial API token once. Re-running it on a later deploy is
+safe — it leaves existing users untouched.
+
+### Backing up the wiki
+
+Right now the content Git repository's only copy is inside the `content`
+volume — the automated push-to-GitHub backup described in
+[plans/plan_initial.md](plans/plan_initial.md) (Phase 6) isn't built yet.
+Until then, back up that volume the same way you'd back up any other
+Coolify persistent volume, or periodically shell in and `git push` the
+`content/` repo to a remote yourself.
+
+### What's actually live right now
+
+Only the REST/AI content API (`/api/ai/*`, `/healthz`, `/llm.md`, `/docs`)
+is implemented — there is no browsable web UI yet (that's Phase 5 of the
+plan). Deploying today gets you a working, permission-checked API server,
+not a point-and-click wiki.
+
 ## License
 
 GPLv3 — see [LICENSE](LICENSE).
