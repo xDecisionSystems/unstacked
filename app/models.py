@@ -3,7 +3,6 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from pydantic import field_validator
 from sqlalchemy import CheckConstraint, Column, String, UniqueConstraint, event
 from sqlmodel import Field, Session, SQLModel, create_engine
 
@@ -75,10 +74,12 @@ class Permission(SQLModel, table=True):
     can_read: bool = True
     can_write: bool = False
 
-    @field_validator("path_prefix")
-    @classmethod
-    def _normalize_prefix(cls, value: str) -> str:
-        return normalize_path_prefix(value)
+    def __init__(self, **data):
+        """Normalize prefixes before SQLModel's table-model constructor bypasses validators."""
+
+        if "path_prefix" in data:
+            data["path_prefix"] = normalize_path_prefix(data["path_prefix"])
+        super().__init__(**data)
 
 
 def create_db_engine(db_path: Path):

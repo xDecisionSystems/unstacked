@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
@@ -44,10 +44,11 @@ def test_migrations_create_only_the_authorization_tables(database):
         membership = UserGroup(user_id=user.id, group_id=group.id)
         permission = Permission(
             group_id=group.id,
-            path_prefix="books/getting-started",
+            path_prefix="/books/getting-started/",
             can_read=True,
             can_write=True,
         )
+        assert permission.path_prefix == "books/getting-started"
         session.add_all([membership, permission])
         session.commit()
 
@@ -129,9 +130,14 @@ def test_unique_foreign_key_and_check_constraints_reject_invalid_rows(database):
             session.commit()
         session.rollback()
 
-        session.add(Permission(group_id=group.id, path_prefix="", can_read=True, can_write=False))
         with pytest.raises(IntegrityError):
-            session.commit()
+            session.execute(
+                text(
+                    "INSERT INTO permission (group_id, path_prefix, can_read, can_write) "
+                    "VALUES (:group_id, '', 1, 0)"
+                ),
+                {"group_id": group.id},
+            )
         session.rollback()
 
         user.session_generation = -1
