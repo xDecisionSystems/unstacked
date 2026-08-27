@@ -183,7 +183,7 @@ Make it idempotent and non-interactive-capable without accepting passwords in pr
 **Done when:** an adversarial cross-platform suite covers traversal, encoding, symlink races/escapes, reserved names, collisions, and Unicode normalization without rejecting ordinary international titles.
 > Security-critical: this is the single control preventing arbitrary filesystem read/write in a file-backed app.
 
-#### T2.2 — Front-matter I/O **[P]**
+#### [x] T2.2 — Front-matter I/O **[P]**
 `sonnet` / `terra` · **S** · **medium** · depends: T0.1
 `app/frontmatter_io.py`: read/write page files via `python-frontmatter`; schema for `id`/`title`/`created_at`/`updated_at`/`author`/`tags`/`draft`; tolerate missing/malformed front matter (hand-written or pasted-in files must not crash the app); preserve unknown keys on round-trip.
 **Done when:** round-trip tests preserve every field including unknown keys, and a file with no front matter still loads with sane defaults.

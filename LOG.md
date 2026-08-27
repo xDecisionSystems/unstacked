@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 00:38 UTC — Codex
+Added a tolerant front-matter I/O module so hand-authored pages without valid
+metadata remain readable, while atomic writes retain operator-defined metadata
+keys. Wired page creation and reads through the module and added focused
+round-trip/default tests; marked the completed plan task.
+- Files: `app/frontmatter_io.py`, `app/content.py`,
+  `tests/test_frontmatter_io.py`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 00:33 UTC — Codex
 Audited every planned task’s model tier, context level, and reasoning effort.
 Raised scaffolding/configuration, bootstrap, migrations, history, export, CI,
