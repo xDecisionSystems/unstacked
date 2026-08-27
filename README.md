@@ -74,11 +74,12 @@ repository. Generate a production signing secret, then start it with:
 export UNSTACKED_API_TOKEN_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 docker compose -f docker-compose.yaml up --build -d
 curl http://127.0.0.1:8001/healthz
-docker compose -f docker-compose.yaml exec app python -m app.bootstrap \
-  --email admin@example.com --display-name "Admin"
+docker compose -f docker-compose.yaml exec app python -m app.bootstrap
 ```
 
-The bootstrap command prompts for the initial password inside the container.
+Bootstrap creates the one initial administrator as `admin:admin`. Its first
+login is restricted to changing that default password; it cannot access content
+or issue API tokens until the change succeeds.
 The Compose configuration uses production mode, so it refuses to start without
 the signing secret. Do not use `docker compose -f docker-compose.yaml down -v`
 unless you intend to delete both the database and wiki content volumes.

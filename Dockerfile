@@ -38,7 +38,8 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     UNSTACKED_CONTENT_REPO_PATH=/app/content \
     UNSTACKED_DB_PATH=/app/data/app.db \
     UNSTACKED_CONTENT_LOCK_PATH=/app/data/content.lock \
-    UNSTACKED_API_TOKEN_SECRET_PATH=/app/data/api_token_secret
+    UNSTACKED_API_TOKEN_SECRET_PATH=/app/data/api_token_secret \
+    UNSTACKED_STATIC_EXPORT_PATH=/app/data/static-export
 
 # The content/ (Git-backed wiki) and data/ (SQLite + lock file + generated
 # secret) directories are the only application state and must be mounted as

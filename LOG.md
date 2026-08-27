@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 05:41 UTC — Codex
+Updated Docker/Coolify configuration for the implemented write-lock, session,
+static-export, and optional backup-sync settings. The static export path is
+explicitly persisted under `/app/data`; corrected the local deployment guide
+to use the fixed `admin:admin` bootstrap and mandatory first password change.
+- Files: `Dockerfile`, `docker-compose.yaml`, `README.md`, `LOG.md`
+
 ## 2026-08-27 05:37 UTC — Codex
 Integrated ACL enforcement, bounded ACL-first search, and the optional backup
 sync worker. The agents each passed focused security tests and a separate
@@ -223,19 +230,6 @@ healthy, hit /healthz, /llm.md and /docs successfully, and inspected
 uid 999, content repo initialized with real git history, generated
 api_token_secret correctly mode 0600.
 - Files: `Dockerfile`, `LOG.md`
-
-## 2026-08-27 02:46 UTC — Claude Code
-Fixed a Coolify Docker Compose build failure: `RUN uv sync --locked
---no-dev` (the step that installs the project itself, not just
-dependencies) exited 1 at Dockerfile:25. pyproject.toml declares
-`readme = "README.md"`, but the builder stage never copied README.md into
-the image, so hatchling had nothing to build the project's metadata from.
-Added README.md to the initial COPY alongside pyproject.toml/uv.lock.
-Diagnosed from the log (exact line match plus a well-known uv+hatchling
-Docker gotcha) rather than a local repro — this sandbox still has no
-Docker/uv, so the user needs to confirm the redeploy succeeds.
-- Files: `Dockerfile`, `LOG.md`
-
 
 
 
