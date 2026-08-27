@@ -167,7 +167,7 @@ Tasks marked **[P]** in the same phase are parallelizable — no shared files, n
 Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, and the user's current `api_token_generation`; verify an explicit algorithm and audience, then resolve the active user so machine clients inherit current group permissions. Admin/user revocation increments the generation and revokes all of that user's issued tokens. Keep tokens out of storage and logs, and document the lack of per-token revocation.
 **Done when:** a valid token authenticates as its active user; expired, wrong-audience, wrong-generation, tampered, and deactivated-user tokens fail; revocation invalidates all prior tokens; and raw tokens are never persisted or logged.
 
-#### T1.4 — First-run bootstrap CLI
+#### [x] T1.4 — First-run bootstrap CLI
 `sonnet` / `terra` · **M** · **medium** · depends: T1.1, T3.2
 `python -m app.bootstrap` — create the first admin user, initialize the DB, and (via T3.2) the content repo.
 Make it idempotent and non-interactive-capable without accepting passwords in process arguments.

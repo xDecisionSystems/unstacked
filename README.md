@@ -60,7 +60,9 @@ uv run uvicorn --factory app.main:create_app
 
 The bootstrap command prompts for a password and prints the initial expiring
 API token once. Clients can subsequently exchange the local password at
-`POST /api/auth/token`.
+`POST /api/auth/token`. Automation can pass `--password-stdin` to read the
+initial password from standard input; passwords are never accepted as command
+line arguments. Re-running bootstrap leaves existing users unchanged.
 
 ## AI content API
 

@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 00:42 UTC — Codex
+Completed the remaining initial scaffolding and bootstrap acceptance criteria.
+Added the planned template, sanitization, and MkDocs theme dependencies plus
+coverage tooling to the locked project; made first-run bootstrap safe for
+automation through standard input and idempotent on rerun; and documented the
+behavior. Marked T0.1 and T1.4 complete after verification.
+- Files: `pyproject.toml`, `uv.lock`, `app/bootstrap.py`,
+  `tests/test_bootstrap.py`, `README.md`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 00:38 UTC — Codex
 Added ACL-enforced AI page-history endpoints for Git commit lists, unified
 revision diffs, and restore-as-a-new-commit. Validated revision input and
