@@ -10,6 +10,38 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 04:33 UTC — Claude Code
+T6.1 (GitHub remote credential handling) landed — the last of the three
+parallel subagents, and the most security-sensitive: HTTPS PAT via a
+generated repo-local credential helper (never the URL, `.git/config`, or
+a process argument), SSH via a pinned repo-local `core.sshCommand`, error
+scrubbing, force-push made structurally impossible. Branched before the
+T1.2/T2.3 merges, so real conflicts this time (config.py: both added
+fields at the same insertion point; content.py: an import line) —
+resolved on a scratch branch, verified `git_backend.py`'s three-way
+auto-merge actually combined T2.3's commit_paths fix with this task's
+push/fetch/configure_remote rewrite correctly (it did) before finalizing.
+
+Didn't stop at reading the code and running its tests: configured a real
+local repo with a fake token file and checked by hand — `.git/config` and
+`git remote -v` never contain the token value, the helper file is
+owner-only (0600), and `git credential fill` retrieves the token
+correctly through git's real credential protocol. That's the strongest
+verification of the three merges today, matching the stakes.
+
+Marked T6.1 `[x]` with one honest caveat carried into the plan: "verified
+private" is an operator affirmation, not a live GitHub API check — nothing
+in this codebase makes real network calls, so that's a documented
+interpretation, not a gap I found. Real coverage gaps needing an actual
+GitHub account (SSH host-key enforcement, a live authenticated push) are
+also recorded rather than papered over. Full suite 200 passing, ruff
+clean. All three subagents from this dispatch are now merged; cleaned up
+the last worktree.
+- Files: `app/config.py`, `app/content.py`, `app/git_backend.py`,
+  `docker-compose.yaml`, `.env.example`, `tests/test_config.py`,
+  `tests/test_git_backend.py` (merged from subagent, conflicts resolved
+  by me); `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 04:19 UTC — Claude Code
 T2.3 (content repository update/delete/move/rename) landed from the second
 parallel subagent. This was the highest-risk of the three — content
@@ -214,13 +246,5 @@ path containment, and covered the complete restore history flow in tests.
 - Files: `app/git_backend.py`, `app/content.py`, `app/ai_service.py`,
   `app/ai_api.py`, `tests/test_ai_api.py`, `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-27 00:38 UTC — Codex
-Added the app CI workflow and the portable worst-case recovery drill. The
-drill copies only the content repository into a temporary directory, builds
-with a clean supported-Python environment and its own manifest, and proves a
-seeded draft is absent from HTML and static search. CI runs locked setup,
-linting, tests with coverage, migration upgrade, packaging, and that drill.
-- Files: `.github/workflows/ci.yml`, `scripts/worstcase_drill.sh`,
-  `plans/plan_initial.md`, `LOG.md`
 
 

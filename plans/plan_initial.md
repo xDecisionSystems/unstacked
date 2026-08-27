@@ -303,10 +303,12 @@ Screens for users, groups, memberships, permission grants, issue/revoke-all API 
 
 ### Phase 6 — GitHub backup
 
-#### T6.1 — Remote & credential handling
+#### [x] T6.1 — Remote & credential handling
 `opus` / `sol` · **M** · **high** · depends: T3.1, T0.2
 Configure and validate `origin`; support a least-privilege deploy key or PAT from environment/secret files without embedding credentials in the remote URL or process arguments. Pin/verify SSH host keys where SSH is used. Never log, echo, render, or persist a credential; scrub surfaced git errors.
 **Done when:** auth and non-fast-forward failures are distinguishable and useful without credential material; the configured remote is verified private for MVP; and no code path can force-push.
+**Note:** `GitBackend.configure_remote(RemoteConfig)` wires `origin` from settings, called once from `ContentRepository.initialize()`. HTTPS uses a generated repo-local credential helper (`.git/unstacked-credential-helper`, mode 0600) so the token reaches git only through the credential protocol — never the URL, `.git/config`, or a process argument; SSH pins the host key via a repo-local `core.sshCommand` and refuses an unpinned host. Verified independently, not just via the subagent's tests: configured a real repo with a fake token file and confirmed by hand that `.git/config` and `git remote -v` never contain the value, the helper file is owner-only, and `git credential fill` retrieves the token correctly through the real git credential protocol.
+"Verified private" is implemented as an explicit operator affirmation (`UNSTACKED_GITHUB_REMOTE_CONFIRMED_PRIVATE`) rather than a live GitHub API check — this repo has no way to test a real network call, and nothing else in the codebase makes one either. **Coverage gaps that need a real GitHub account to close:** SSH host-key pinning enforcement against actual github.com (the *configuration* is tested; OpenSSH's enforcement is not), an authenticated HTTPS push to a real private repo, and an actual privacy check (candidate for T6.3, which already expects network access).
 
 #### T6.2 — Debounced push worker
 `opus` / `sol` · **L** · **high** · depends: T6.1, T3.3
