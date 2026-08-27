@@ -20,24 +20,31 @@ A dedicated git repository, independent of the app's own source code repo, at `c
 ```
 content/
   mkdocs.yml
+  hooks/drafts.py               # excludes draft:true pages from the build
   .github/workflows/build.yml   # rebuilds the static site on push, app-independent
   docs/
-    <shelf-slug>/               # optional grouping layer (a Shelf)
+    index.md
+    <book-slug>/                # books live at the docs/ root — no shelves
       .pages                    # mkdocs-awesome-pages: title + nav order
-      <book-slug>/
+      <chapter-slug>/
         .pages
-        <chapter-slug>/
-          .pages
-          <page-slug>.md
-        <page-slug>.md          # pages directly in a book, no chapter
-    <book-slug>/                # books not in any shelf live at docs/ root
+        <page-slug>.md
+      <page-slug>.md            # pages directly in a book, no chapter
     assets/<book-slug>/...      # uploaded images/attachments
 ```
 
-- Book → folder, Chapter → subfolder, Page → `.md` file. Shelves are an optional top folder grouping several Books — this stays copy-paste-compatible with plain mkdocs.
+- Book → folder, Chapter → subfolder, Page → `.md` file. **Exactly two levels of nesting under a book**, so the tree stays predictable. **No shelves** — books sit at the `docs/` root. (If grouping is ever wanted, it's a folder move plus a `.pages` file, with no schema or data migration.)
 - Use `mkdocs-awesome-pages-plugin` (`.pages` files) for nav titles/ordering instead of a hand-maintained `nav:` in `mkdocs.yml`. The app never rewrites a giant nav tree — it writes/renames folders and small `.pages` files. Without the plugin installed, mkdocs falls back to alphabetical nav, which still builds.
 - Every page file starts with YAML front matter for app metadata mkdocs ignores: `id` (uuid, stable across renames), `title`, `created_at`, `updated_at`, `author`, `tags`, `draft`.
 - **`mkdocs.yml` is app-owned but hand-editable.** The app only ever rewrites a delimited managed block; anything a human adds outside that block is preserved.
+
+### Drafts
+
+Pages with `draft: true` in front matter are **excluded from the built site**. They stay fully visible and editable inside the app (subject to normal ACL) with a draft badge, and searchable there — they simply never reach `mkdocs build` output.
+
+Implementation: a native mkdocs `hooks:` entry (mkdocs ≥ 1.4) pointing at `hooks/drafts.py` **committed inside the content repo**, whose `on_files` drops any file whose front matter has `draft: true`. This deliberately avoids a third-party plugin so the exclusion survives the worst-case drill — copying `content/` to a clean mkdocs install carries the hook with it and drafts stay unpublished.
+
+> Caveat to document for operators: copying only `docs/` while leaving `mkdocs.yml`/`hooks/` behind would publish drafts. The recovery runbook (T10.6) must say "copy the whole `content/` directory," and the drill (T10.3) asserts drafts are absent from the output.
 
 ### Version history — git, not a revisions table
 
@@ -167,7 +174,7 @@ Token issue/revoke (hash at rest, plaintext shown once), `Authorization: Bearer`
 
 #### T2.3 — Content repository
 `opus` / `sol` · **L** · **high** · depends: T2.1, T2.2
-`app/content.py`: the core tree API — list/get/create/update/delete/move/rename for shelves, books, chapters, pages; tree walker producing the nav model; slug-rename via `git mv` so history follows the file; title change updates front matter *and* `.pages` without moving the file (URLs stay stable).
+`app/content.py`: the core tree API — list/get/create/update/delete/move/rename for books, chapters, and pages (no shelves; books live at the `docs/` root); tree walker producing the nav model; slug-rename via `git mv` so history follows the file; title change updates front matter *and* `.pages` without moving the file (URLs stay stable); enforce the two-level depth limit so a move can't nest a chapter inside a chapter.
 **Done when:** every operation leaves a tree that `mkdocs build` accepts, and rename preserves `git log --follow` history.
 
 #### T2.4 — Nav (`.pages`) management
@@ -191,8 +198,8 @@ Image/attachment upload into `docs/assets/<book>/`, content-type allowlist, size
 
 #### T3.2 — Content repo bootstrap
 `sonnet` / `terra` · **M** · **medium** · depends: T3.1
-Initialize `content/` if absent: `git init`, `mkdocs.yml` with the managed-block convention and the awesome-pages plugin, a starter `docs/index.md`, `.gitignore` (ignore `site/`), and the `.github/workflows/build.yml` that runs `mkdocs build` on push.
-**Done when:** a fresh bootstrap produces a directory that `mkdocs build` compiles with zero app involvement.
+Initialize `content/` if absent: `git init`, `mkdocs.yml` with the managed-block convention, the awesome-pages plugin, and a `hooks: [hooks/drafts.py]` entry; **`hooks/drafts.py`** — an `on_files` hook that reads each page's front matter and drops `draft: true` files from the build; a starter `docs/index.md`; `.gitignore` (ignore `site/`); and `.github/workflows/build.yml` that runs `mkdocs build` on push.
+**Done when:** a fresh bootstrap produces a directory that `mkdocs build` compiles with zero app involvement, and a page marked `draft: true` produces no output file.
 
 #### T3.3 — Write lock & optimistic concurrency
 `opus` / `sol` · **M** · **high** · depends: T3.1, T2.3
@@ -240,8 +247,8 @@ Jinja2 base template, sidebar tree (ACL-filtered), breadcrumbs, page view. No SP
 
 #### T5.3 — Editor & save flow **[P]**
 `sonnet` / `terra` · **M** · **medium** · depends: T5.2, T3.3
-EasyMDE editor, live preview via `render`, save posting the base SHA for conflict detection, create/rename/move/delete UI.
-**Done when:** an edit saves, commits, and re-renders; a stale save shows a conflict screen instead of overwriting.
+EasyMDE editor, live preview via `render`, save posting the base SHA for conflict detection, create/rename/move/delete UI, and a **draft toggle** that sets `draft: true` in front matter, with a visible draft badge on the page and in the tree so nobody mistakes an unpublished page for a live one.
+**Done when:** an edit saves, commits, and re-renders; a stale save shows a conflict screen instead of overwriting; toggling draft is reflected in the badge and keeps the page out of the next build.
 
 #### T5.4 — History UI **[P]**
 `sonnet` / `terra` · **M** · **medium** · depends: T3.4, T5.2
@@ -329,7 +336,7 @@ Create book → chapter → page via the API, assert the on-disk layout, then ru
 
 #### T10.3 — Worst-case drill script **[P]**
 `sonnet` / `terra` · **S** · **medium** · depends: T3.2
-`scripts/worstcase_drill.sh`: copy only `content/` to a temp dir, `pip install mkdocs` + plugins in a clean venv, `mkdocs build`, assert success. **This is the project's defining guarantee — it runs in CI.**
+`scripts/worstcase_drill.sh`: copy only `content/` to a temp dir, `pip install mkdocs` + plugins in a clean venv, `mkdocs build`, assert success — and assert a seeded `draft: true` page produced **no** output file, so the draft hook is proven to travel with the content. **This is the project's defining guarantee — it runs in CI.**
 
 #### T10.4 — Backup round-trip test **[P]**
 `sonnet` / `terra` · **M** · **medium** · depends: T6.3
@@ -362,7 +369,20 @@ Install/deploy guide, backup/restore runbook, permission model explainer, and th
 - **Backup round-trip:** push to a test GitHub repo, wipe local `content/`, restore, confirm identical history and files.
 - **Concurrency:** simultaneous saves to one page yield one commit and one conflict, never a lost update.
 
-## Open questions
+## Settled decisions
 
-1. Shelves — build now or defer? Books-at-root works without them and they can be added later without a migration (it's just a folder move).
-2. Should draft pages (`draft: true`) be excluded from `mkdocs build` output, or published like any other page?
+No open questions remain. Decisions made during planning, recorded so they
+aren't relitigated mid-implementation:
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Backend | Python / FastAPI | Reuses mkdocs' own markdown pipeline and `mkdocs build` instead of reimplementing them. |
+| Content storage | Markdown files in a git repo | The whole point: a working static site must be recoverable from the content folder alone. |
+| Revision history | Git commits | No revisions table; `git log`/`diff`/`checkout` replace it, and deletes are recoverable in place of a recycle bin. |
+| Database scope | Users, groups, permissions, API tokens only | Everything relational and security-sensitive; nothing else. |
+| Permissions | Group → path-prefix grants, most specific wins | Matches the file tree directly; no per-row ACL to keep in sync. |
+| Auth | Local passwords only | No SSO/LDAP, but kept behind an `authenticate()` seam. |
+| Shelves | Not built — books at `docs/` root | Adds a level nobody asked for; addable later as a folder move with no migration. |
+| Drafts | `draft: true` excluded from the build | Via a `hooks/drafts.py` inside the content repo, so exclusion survives the worst-case drill. |
+| Search | Grep, no index | Nothing to keep in sync or rebuild; mkdocs supplies static search after publish. |
+| AI access | One `ai_service` behind MCP and REST | Both transports inherit the same ACL; no second permission path to get wrong. |

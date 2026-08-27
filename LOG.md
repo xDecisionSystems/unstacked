@@ -10,6 +10,17 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 00:01 UTC — Claude Code
+Settled the last two open questions: no shelves (books live at the `docs/`
+root, two levels max under a book) and `draft: true` pages are excluded
+from the built site. Drafts are excluded via a `hooks/drafts.py` committed
+inside the content repo rather than a third-party plugin, so the exclusion
+travels with the content and survives the worst-case drill. Updated the
+content layout, T2.3, T3.2, T5.3 (draft toggle + badge) and T10.3 (drill
+now asserts drafts produce no output), and replaced "Open questions" with
+a settled-decisions table.
+- Files: `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-26 23:58 UTC — Claude Code
 Resolved the auth open question: local passwords only, no SSO/LDAP. Added
 it to confirmed scope and tightened task T1.2 to require an
