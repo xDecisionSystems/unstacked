@@ -197,18 +197,16 @@ named module before writing anything new. No marker means nothing is built.
 
 ### Phase 1 — Data layer & auth
 
-#### [~] T1.1 — Database schema
+#### [x] T1.1 — Database schema
 `sonnet` / `terra` · **M** · **high** · depends: T0.1, T0.2
 `app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. `users.username` is unique and suitable for the initial `admin` login; `must_change_password` is non-null and defaults false. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
 **Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, tests can insert a user, group, membership, and normalized permission, and migration coverage proves the initial-password flag and unique username survive upgrades.
-**Remaining:** Add the username and password-change-required fields with a safe migration for existing accounts, then test their database invariants.
 
-#### [~] T1.2 — Password auth & sessions
+#### [x] T1.2 — Password auth & sessions
 `opus` / `sol` · **M** · **high** · depends: T1.1
 `app/auth.py`: Argon2 password hashing via `pwdlib`, login/logout routes, signed session cookies containing only minimal identifiers and the current `session_generation` (HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for every cookie-authenticated state change, generic/timing-resistant login failures, and bounded login rate limiting. Authenticate by unique username (with email retained for account administration); rotate the session on login/logout; increment the generation on password/admin security reset; and reject inactive users on every request. **Local passwords only** — no SSO/LDAP — but keep credential checking behind `authenticate(username, password) -> User | None`.
 When `must_change_password` is true, issue a restricted session that can access only logout and the CSRF-protected current-password-verified change endpoint; block bearer-token issuance and every other authenticated route/service dependency until it clears the flag. A successful forced change revokes that restricted session and outstanding API tokens, then issues a new normal session.
 **Done when:** login/logout work end to end; fixation and tampered/expired cookies are rejected; unsafe form requests without valid CSRF are rejected; inactive users lose access; first use of `admin:admin` is forced through a server-enforced password change with no content/API access; and no route reads the password hash outside `authenticate()`.
-**Remaining:** Existing session authentication is complete. Add username login, server-enforced restricted first-login sessions, and forced-password-change tests.
 
 #### [~] T1.3 — API token auth
 `opus` / `sol` · **M** · **high** · depends: T1.1, T1.2
@@ -216,11 +214,10 @@ Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, a
 **Done when:** a valid token authenticates as its active user; expired, wrong-audience, wrong-generation, tampered, and deactivated-user tokens fail; revocation invalidates all prior tokens; and raw tokens are never persisted or logged.
 **Remaining:** `app/auth.py` issues/verifies generation-scoped JWTs. Remaining: explicit tests for expired, wrong-audience, tampered and deactivated-user tokens; admin-facing revoke endpoint.
 
-#### [~] T1.4 — First-run bootstrap CLI
+#### [x] T1.4 — First-run bootstrap CLI
 `sonnet` / `terra` · **M** · **medium** · depends: T1.1, T3.2
 `python -m app.bootstrap` — initialize the DB and (via T3.2) the content repo, then create the first administrator as `admin:admin` with `must_change_password=true`. It must be idempotent: bootstrap never resets, recreates, or prints the default password after the initial account exists. Do not accept passwords in process arguments.
 **Done when:** a clean checkout reaches a buildable content repo and the restricted `admin:admin` first-login flow in one command, rerunning cannot create a second accidental bootstrap admin, and the first login must replace the default password before accessing the application.
-**Remaining:** Replace the current operator-supplied email/password bootstrap interface with the fixed first administrator and forced-change flag, and add idempotence/first-login tests.
 
 ---
 
@@ -230,7 +227,7 @@ Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, a
 `opus` / `sol` · **S** · **high** · depends: T0.1, T0.2
 `app/paths.py`: slugify titles; canonicalize URL paths exactly once; reject double encoding; and provide a `safe_join(docs_root, *parts)` that resolves the existing nearest parent and **rejects anything escaping `docs/`**, including symlink escapes and case-fold collisions on case-insensitive filesystems. Handle reserved/internal names (`assets`, `.pages`, dotfiles), bounded lengths, collisions, null bytes, separators, Windows-reserved names, and Unicode normalization. Every filesystem module uses typed validated relative paths from here, never raw request strings.
 **Done when:** an adversarial cross-platform suite covers traversal, encoding, symlink races/escapes, reserved names, collisions, and Unicode normalization without rejecting ordinary international titles.
-**Remaining:** `app/paths.py` enforces canonical form, traversal/symlink escape, reserved and Windows device names, NFKC normalization; `tests/test_paths.py` is the adversarial suite. Remaining: symlink TOCTOU races (check-then-open) are not addressed.
+**Remaining:** Descriptor-confined read and no-clobber create helpers now protect page reads/creation from symlink races, alongside canonical form, traversal/symlink escape, reserved/Windows device names, and NFKC normalization. Remaining: update/move/delete/nav lifecycle operations still need a transaction-wide descriptor-based I/O refactor before this task can be complete.
 > Security-critical: this is the single control preventing arbitrary filesystem read/write in a file-backed app.
 
 #### [x] T2.2 — Front-matter I/O **[P]**
@@ -264,11 +261,10 @@ Image/attachment upload into `docs/assets/<book>/`, request and decompressed-siz
 **Done when:** two users produce distinct authors; history follows a rename; restore adds a commit; unrelated dirty files remain untouched; and adversarial refs/paths cannot become command options or escape the repo.
 **Fixed post-hoc (2026-08-27):** `commit_paths` assumed a plain `git add` on a missing path stages its deletion — GitPython actually raises `FileNotFoundError`. Discovered while building T2.3, since every delete/rename calls `commit_paths` with an already-removed source path. Now partitions paths into present/absent and stages absent ones via `index.remove(..., ignore_unmatch=True)`.
 
-#### [~] T3.2 — Content repo bootstrap
+#### [x] T3.2 — Content repo bootstrap
 `sonnet` / `terra` · **M** · **medium** · depends: T3.1
 Initialize `content/` if absent: `git init` with an explicit initial branch; operator-owned `mkdocs.yml` enabling `search` and `awesome-nav` configured with `filename: .pages`; `requirements.txt` with exact build dependency versions; `hooks/drafts.py`; starter `docs/index.md`; a managed provider-neutral `docs/llm.md` workflow; root `docs/.pages`; and `.gitignore` (ignore `site/`). Bootstrap refuses to adopt a non-empty unknown directory and commits the initial tree. Existing content repos receive the workflow only when it is absent; the app never overwrites a locally maintained version. T7.2 adds CI without changing build semantics.
 **Done when:** bootstrap is idempotent; the generated repo builds via only `python -m venv`, `pip install -r requirements.txt`, and `mkdocs build --strict`; the workflow is available both as the rendered page and raw static `/llm.md`; draft output and draft search records are absent; malformed draft metadata fails clearly; and no app/database import is reachable from the hook.
-**Remaining:** `ContentRepository.initialize()` generates mkdocs.yml, requirements.txt, hooks/drafts.py, docs/.pages, index.md and llm.md, and is idempotent. Remaining: T7.2's CI workflow is not yet written into the content repo.
 
 #### T3.3 — Write lock & optimistic concurrency
 `opus` / `sol` · **L** · **max** · depends: T3.1, T2.3
@@ -376,7 +372,7 @@ Static export is a full non-draft recovery copy and has no per-user ACL. The app
 `app/export.py`: run the exact configured mkdocs executable with `build --strict` using argument arrays, a fixed working directory, a clean/minimal environment, timeout, and output cap; never shell-interpolate input. Build into a fresh temporary directory and atomically replace the last successful export. Do not include `gh-deploy` in MVP.
 **Done when:** export produces the full non-draft `site/`; a failed/timed-out build preserves the previous successful export and reports a sanitized useful error; drafts are absent from HTML and the search index; and only admins can trigger/download it after acknowledging the no-ACL warning.
 
-#### T7.2 — Content-repo GitHub Action **[P]**
+#### [x] T7.2 — Content-repo GitHub Action **[P]**
 `sonnet` / `terra` · **S** · **medium** · depends: T3.2
 The workflow committed *inside the content repo* that installs `requirements.txt` and runs `mkdocs build --strict` on every push. It validates only and does not publish to Pages by default; artifacts use short retention and remain private.
 **Done when:** a push builds with no app/database reference, a draft is absent from output/search, and the workflow cannot accidentally make the artifact public.
