@@ -9,7 +9,6 @@ from pathlib import Path
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
-import yaml
 from git import Actor, Repo
 from sqlmodel import Session
 
@@ -18,6 +17,7 @@ from app.config import Settings
 from app.frontmatter_io import new_page, parse_page
 from app.git_backend import GitBackend, Revision, RevisionNotFound
 from app.models import User
+from app.nav import create_navigation
 from app.paths import (
     RESERVED_ROOT_NAMES,
     make_slug,
@@ -401,7 +401,7 @@ class ContentRepository:
             raise
 
     def _write_nav(self, path: Path, title: str) -> None:
-        self._atomic_write(path, yaml.safe_dump({"title": title, "nav": ["*"]}, sort_keys=False))
+        create_navigation(path, title)
 
     def _page_ref(self, relative: str) -> str:
         """Validate a page path for history use without requiring it on disk."""
