@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 00:43 UTC — Codex
+Ignored the generated coverage data file so the CI-equivalent verification
+command leaves no local test artifact in the application worktree.
+- Files: `.gitignore`, `LOG.md`
+
 ## 2026-08-27 00:42 UTC — Codex
 Completed the remaining initial scaffolding and bootstrap acceptance criteria.
 Added the planned template, sanitization, and MkDocs theme dependencies plus
