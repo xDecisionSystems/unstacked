@@ -4,11 +4,19 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from pydantic import field_validator
-from sqlalchemy import Column, String, event
+from sqlalchemy import CheckConstraint, Column, String, UniqueConstraint, event
 from sqlmodel import Field, Session, SQLModel, create_engine
 
 
 class User(SQLModel, table=True):
+    __table_args__ = (
+        CheckConstraint("session_generation >= 0", name="ck_user_session_generation_nonnegative"),
+        CheckConstraint(
+            "api_token_generation >= 0",
+            name="ck_user_api_token_generation_nonnegative",
+        ),
+    )
+
     id: int | None = Field(default=None, primary_key=True)
     email: str = Field(sa_column=Column(String, unique=True, index=True, nullable=False))
     password_hash: str
@@ -52,6 +60,15 @@ def normalize_path_prefix(raw: str) -> str:
 
 
 class Permission(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("group_id", "path_prefix", name="uq_permission_group_path_prefix"),
+        CheckConstraint("length(path_prefix) > 0", name="ck_permission_path_prefix_nonempty"),
+        CheckConstraint(
+            "can_write = 0 OR can_read = 1",
+            name="ck_permission_write_requires_read",
+        ),
+    )
+
     id: int | None = Field(default=None, primary_key=True)
     group_id: int = Field(foreign_key="group.id", index=True, ondelete="CASCADE")
     path_prefix: str = Field(index=True)
