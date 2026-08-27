@@ -73,7 +73,7 @@ repository. Generate a production signing secret, then start it with:
 ```bash
 export UNSTACKED_API_TOKEN_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 docker compose -f docker-compose.yaml up --build -d
-curl http://127.0.0.1:8000/healthz
+curl http://127.0.0.1:8001/healthz
 docker compose -f docker-compose.yaml exec app python -m app.bootstrap \
   --email admin@example.com --display-name "Admin"
 ```
@@ -84,7 +84,8 @@ the signing secret. Do not use `docker compose -f docker-compose.yaml down -v`
 unless you intend to delete both the database and wiki content volumes.
 
 The same `Dockerfile` is suitable for a Coolify Dockerfile deployment. Mount
-persistent storage at `/app/data` and `/app/content`, expose port `8000`, set
+persistent storage at `/app/data` and `/app/content`, expose the container
+port `8000`, set
 the production variables above, and configure one application replica. The
 current app does not yet push the nested content repository to GitHub, so back
 up both Coolify volumes independently.
@@ -143,7 +144,10 @@ or a redeploy wipes the wiki.
      front of the app, so the login rate limiter needs to know to trust one
      hop of `X-Forwarded-For`, or every client will share one bucket.
    - Any other tuning from [.env.example](.env.example) you want to override.
-4. Set the exposed port to `8000` and the health check path to `/healthz`
+4. Set the exposed port to `8000` and the health check path to `/healthz`.
+   The Compose file maps host port `UNSTACKED_HOST_PORT` (default `8001`) to
+   that internal port, so set `UNSTACKED_HOST_PORT` to an unused server port
+   in Coolify when you need direct host-port access.
    (the `Dockerfile` already declares a `HEALTHCHECK` against it).
 5. Deploy. `create_app()` runs the database migration and content-repo
    bootstrap automatically on startup — no separate init step is needed.

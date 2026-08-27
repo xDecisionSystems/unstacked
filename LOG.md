@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 03:20 UTC — Codex
+Kept the Docker application listener and health checks on internal port 8000,
+while making the external Compose host port configurable through
+`UNSTACKED_HOST_PORT` (default 8001) to avoid the occupied Coolify host port.
+Updated the deployment instructions with the host-to-container port mapping.
+- Files: `Dockerfile`, `docker-compose.yaml`, `README.md`, `LOG.md`
+
 ## 2026-08-27 03:06 UTC — Codex
 Validated the committed production Docker Compose deployment locally. Built
 the multi-stage image, started it with a generated non-committed signing
@@ -183,15 +190,3 @@ updated the plan and contributor/operator documentation for AI writes.
 - Files: `.env.example`, `.gitignore`, `pyproject.toml`, `uv.lock`, `app/*.py`,
   `app/migrations/**`, `tests/*.py`, `README.md`, `AGENTS.md`,
   `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 00:10 UTC — Codex
-Reviewed the planning-only repo and hardened the initial architecture plan.
-Clarified that static builds contain all non-draft content and have no ACL;
-kept API authentication inside the four-table database boundary with signed,
-generation-revocable tokens; specified deterministic ACL conflict behavior,
-safe cross-process content mutations, guarded non-destructive restore, strict
-recovery builds, and bounded search/upload/render behavior; corrected task
-dependencies and verification criteria; and updated current dependencies to
-Argon2 via `pwdlib` and `mkdocs-awesome-nav` v3 while retaining `.pages`.
-- Files: `plans/plan_initial.md`, `AGENTS.md`, `README.md`, `LOG.md`
-

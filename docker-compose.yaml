@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${UNSTACKED_HOST_PORT:-8001}:8000"
     environment:
       UNSTACKED_ENVIRONMENT: production
       # Required in production — the app refuses to start without it. Set
