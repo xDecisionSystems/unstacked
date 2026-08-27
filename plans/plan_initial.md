@@ -2,7 +2,7 @@
 
 ## Context
 
-`unstacked` is "a markdown version of BookStack." BookStack stores everything — books, chapters, pages, revisions — in MySQL. This project flips that: page **content** and its structure/history live as plain markdown files in a git repo, organized exactly the way mkdocs expects (`docs/` + `mkdocs.yml`), so that in a worst-case failure the content repo alone carries everything needed to create a clean mkdocs environment and build a working static site. A small SQL database is kept, but only for things that are inherently relational and security-sensitive: users, groups, and access-control rules. Content is backed up by pushing its git history to a GitHub remote.
+`unstacked` is "a markdown version of BookStack." BookStack stores everything — books, chapters, pages, revisions — in MySQL. This project flips that: page **content** and its structure/history live as plain markdown files in a git repo, organized exactly the way mkdocs expects (`docs/` + `mkdocs.yml`), so that in a worst-case failure the content repo alone carries everything needed to create a clean mkdocs environment and build a working static site. A small SQL database is kept, but only for things that are inherently relational and security-sensitive: users, groups, and access-control rules. **Everything lives on local disk; the app has no required external dependency.** Off-site backup is optional and pluggable — pushing the content repo's git history to a remote (GitHub or any other git host) is one built-in way to do it, not a requirement; syncing the `content/`/`data/` directories via `rsync`, `aws s3 sync`, or any other out-of-band mechanism the operator already trusts works exactly as well and needs nothing from the app.
 
 Confirmed scope (from user):
 - Backend: **Python/FastAPI** (lets the app reuse MkDocs/Python-Markdown configuration and invoke `mkdocs build`, instead of adopting an unrelated rendering stack).
@@ -10,11 +10,20 @@ Confirmed scope (from user):
 - Search: no dedicated search index — grep-style filesystem search plus mkdocs' own generated static search.
 - Planned from day one: **AI read and write integration for Claude, ChatGPT, and other agents**, so search/download and create-book/chapter/page operations use clean, permission-aware service and API/MCP surfaces rather than transport-specific logic.
 - Auth: **local passwords only** — no SSO/LDAP. Keep the auth layer behind a small `authenticate(email, password) -> user` seam anyway, so adding an external provider later is a new backend rather than a rewrite of every route.
-- Static output: the built mkdocs site has **no runtime ACL**. It is a recovery/export artifact containing every non-draft page, not a permission-preserving replacement for the app. The content remote and build artifacts are private; public deployment is outside MVP scope.
+- Static output: the built mkdocs site has **no runtime ACL**. It is a recovery/export artifact containing every non-draft page, not a permission-preserving replacement for the app. Any configured backup destination and build artifacts are private; public deployment is outside MVP scope.
 - Runtime deployment: package the FastAPI application in a Docker image for
-  GitHub-backed Coolify deployments. The single application replica receives
-  persistent mounts for both `/app/data` (SQLite/lock) and `/app/content`
-  (the nested Git repository); neither directory may be replaced on deploy.
+  Coolify (or any Docker host) deployments. The single application replica
+  receives persistent mounts for both `/app/data` (SQLite/lock) and
+  `/app/content` (the nested Git repository); neither directory may be
+  replaced on deploy. Nothing about running the app requires GitHub or any
+  other external service — those volumes are the durable state, full stop.
+- Backup: **optional and pluggable, never required.** The app is fully
+  functional with zero backup destination configured. Phase 6 exists purely
+  to reduce an operator's disaster-recovery risk, and a git-remote push
+  (already built, works against GitHub or any other git host) is one
+  interchangeable way to do that — `rsync` to another host or `aws s3 sync`
+  to a bucket are equally valid and need no app support beyond the
+  already-durable local directories to sync from.
 
 ### Implementation checkpoint (2026-08-27)
 
@@ -73,9 +82,11 @@ Implementation: a native mkdocs `hooks:` entry (mkdocs ≥ 1.4) pointing at `hoo
 
 - The content repo is a real git repo. Every save from the app = one commit authored as the editing user. This *is* the page revision history: `git log -- path`, `git diff`, `git show`, `git checkout <sha> -- path`. No `revisions` table.
 - Deletes are plain `git rm` + commit — recovery is `git checkout`, which replaces BookStack's recycle bin.
-- GitHub backup = this repo has a **private-by-default** GitHub remote. The app pushes after saves (debounced) and via a manual "Back up now" admin action, using a deploy key or PAT. Pushes are never forced and the app never auto-merges remote divergence.
-- "Restore from GitHub" clones only into an absent/empty destination or fast-forwards a clean checkout. Divergent or dirty local state is first preserved to a timestamped recovery directory and requires an explicit admin choice; restore never silently replaces unpushed commits.
-- Worst-case fallback: a GitHub Action in the content repo installs `requirements.txt` and runs `mkdocs build --strict` on every push, so the content repo alone — no app or database — regenerates the full non-draft static site. It does not recreate users, ACLs, or a private per-user view.
+- **Local storage is the whole story by default.** `content/` and `data/` on disk are durable, complete, and sufficient on their own — nothing about running the app requires a network call or an external account. Everything below this line is optional disaster-recovery insurance, not a dependency.
+- **Backup target = pluggable, not GitHub-specific.** One built-in target is a git remote: this repo has an optional **private-by-default** remote (GitHub, GitLab, a self-hosted git host — the code has no GitHub-specific dependency, only GitHub-flavored naming from when it was written). The app pushes after saves (debounced) and via a manual "Back up now" admin action, using a deploy key or PAT. Pushes are never forced and the app never auto-merges remote divergence. **This target is entirely optional** — if no remote is configured, the app runs exactly the same way, just without off-site copies.
+- A git remote is not the only valid target. `rsync`-ing `content/` (and `data/`, for the user/permission database) to another host, or `aws s3 sync`-ing them to a bucket, are equally valid and arguably simpler for an operator who doesn't want a GitHub account in the loop — they need no application code at all, just a cron job or the platform's own volume-backup feature (e.g. Coolify's). The debounced-sync-worker contract in T6.2 is written generically enough that a second target implementation (S3, rsync) could sit next to the git-remote one later, but building that second implementation is not required for MVP.
+- "Restore from [git remote]" clones only into an absent/empty destination or fast-forwards a clean checkout. Divergent or dirty local state is first preserved to a timestamped recovery directory and requires an explicit admin choice; restore never silently replaces unpushed commits. (An rsync/S3 restore is just as valid and is entirely outside the app — copy the files back and start the app pointed at them.)
+- Worst-case fallback: a GitHub Action *template* in the content repo installs `requirements.txt` and runs `mkdocs build --strict` on every push, so if a git remote happens to be GitHub, the content repo alone — no app or database — regenerates the full non-draft static site on push. This is a convenience for that one specific target, not part of the core recovery guarantee: the worst-case drill (T10.3) only requires the `content/` directory itself to build standalone, regardless of where or whether it's backed up.
 
 ### Concurrency
 
@@ -95,7 +106,7 @@ No content, revisions, API-token records, or search index live in the database. 
 
 | Module | Responsibility |
 |---|---|
-| `config` | Settings (paths, secrets, GitHub creds) via pydantic-settings |
+| `config` | Settings (paths, secrets, optional backup-remote creds) via pydantic-settings |
 | `models` | SQLModel schema: users/groups/memberships/permissions + migrations |
 | `auth` | Password hashing, sessions, CSRF, API-token auth |
 | `paths` | Slugs + path safety (traversal prevention) — every filesystem path goes through here |
@@ -296,29 +307,46 @@ EasyMDE editor, live preview via `render`, save posting the base SHA for conflic
 Revision list, side-by-side diff, restore button with confirmation.
 
 #### T5.5 — Admin UI
-`sonnet` / `terra` · **L** · **high** · depends: T4.3, T5.2, T1.3, T6.3, T7.1
-Screens for users, groups, memberships, permission grants, issue/revoke-all API tokens, and backup/export actions. Token UI states plainly that tokens are short-lived, shown once, and revocation affects all tokens for that user.
+`sonnet` / `terra` · **L** · **high** · depends: T4.3, T5.2, T1.3, T6.3, T6.4, T7.1
+Screens for users, groups, memberships, permission grants, issue/revoke-all API tokens, a **backup setup page** (configure/test/clear the backup target and trigger a manual backup — see T6.4, which owns the persistence and re-configuration logic this page calls), and export actions. Token UI states plainly that tokens are short-lived, shown once, and revocation affects all tokens for that user; the backup setup page carries the same "never rendered back" guarantee for a saved credential.
 
 ---
 
-### Phase 6 — GitHub backup
+### Phase 6 — Backup & disaster recovery (optional)
 
-#### [x] T6.1 — Remote & credential handling
+Nothing in this phase is required for the app to run. `content/` and `data/`
+on local disk are the complete, durable state; everything here exists only to
+give an operator who wants off-site insurance a way to get it, and a git
+remote is one interchangeable way among several (rsync, S3 sync, a platform's
+own volume-backup feature) — the only one with application code behind it so
+far, because it's the one that also doubles as the worst-case static-site
+fallback (T3.2/T10.3) when that remote happens to be a git host with CI.
+
+#### [x] T6.1 — Git-remote backup target (one implementation, not a requirement)
 `opus` / `sol` · **M** · **high** · depends: T3.1, T0.2
-Configure and validate `origin`; support a least-privilege deploy key or PAT from environment/secret files without embedding credentials in the remote URL or process arguments. Pin/verify SSH host keys where SSH is used. Never log, echo, render, or persist a credential; scrub surfaced git errors.
+Configure and validate an optional `origin`; support a least-privilege deploy key or PAT from environment/secret files without embedding credentials in the remote URL or process arguments. Pin/verify SSH host keys where SSH is used. Never log, echo, render, or persist a credential; scrub surfaced git errors. Configuring no remote at all is a fully supported, fully functional state — this step is skipped entirely when `github_remote_url` is unset.
 **Done when:** auth and non-fast-forward failures are distinguishable and useful without credential material; the configured remote is verified private for MVP; and no code path can force-push.
-**Note:** `GitBackend.configure_remote(RemoteConfig)` wires `origin` from settings, called once from `ContentRepository.initialize()`. HTTPS uses a generated repo-local credential helper (`.git/unstacked-credential-helper`, mode 0600) so the token reaches git only through the credential protocol — never the URL, `.git/config`, or a process argument; SSH pins the host key via a repo-local `core.sshCommand` and refuses an unpinned host. Verified independently, not just via the subagent's tests: configured a real repo with a fake token file and confirmed by hand that `.git/config` and `git remote -v` never contain the value, the helper file is owner-only, and `git credential fill` retrieves the token correctly through the real git credential protocol.
+**Note:** `GitBackend.configure_remote(RemoteConfig)` wires `origin` from settings, called once from `ContentRepository.initialize()`, and is a no-op when no remote URL is configured. HTTPS uses a generated repo-local credential helper (`.git/unstacked-credential-helper`, mode 0600) so the token reaches git only through the credential protocol — never the URL, `.git/config`, or a process argument; SSH pins the host key via a repo-local `core.sshCommand` and refuses an unpinned host. Verified independently, not just via the subagent's tests: configured a real repo with a fake token file and confirmed by hand that `.git/config` and `git remote -v` never contain the value, the helper file is owner-only, and `git credential fill` retrieves the token correctly through the real git credential protocol.
 "Verified private" is implemented as an explicit operator affirmation (`UNSTACKED_GITHUB_REMOTE_CONFIRMED_PRIVATE`) rather than a live GitHub API check — this repo has no way to test a real network call, and nothing else in the codebase makes one either. **Coverage gaps that need a real GitHub account to close:** SSH host-key pinning enforcement against actual github.com (the *configuration* is tested; OpenSSH's enforcement is not), an authenticated HTTPS push to a real private repo, and an actual privacy check (candidate for T6.3, which already expects network access).
+Despite GitHub-flavored settings names (`github_remote_url`, `github_token`, …), the implementation works against any git host reachable over https/ssh — nothing in `configure_remote` is GitHub-specific. Renaming those settings to generic `backup_remote_*` names is a reasonable future cleanup but not required; not doing it now to avoid unrelated churn.
 
-#### T6.2 — Debounced push worker
+#### T6.2 — Debounced backup-sync worker
 `opus` / `sol` · **L** · **high** · depends: T6.1, T3.3
-Background task coalescing rapid saves into a periodic push; retry transient failures with bounded exponential backoff and jitter; never block a save on network I/O. Derive durable pending state from local-vs-upstream refs, so startup resumes an unpushed branch without a queue table. Serialize with the repository lock and stop retrying non-fast-forward/auth/configuration errors until admin action. Surface ahead count, last success, and sanitized failure in the admin UI.
-**Done when:** ten rapid saves produce ten commits but fewer pushes; restart/offline periods recover automatically; divergence never triggers merge/force; and worker/admin git operations cannot race content commits.
+Background task coalescing rapid saves into a periodic sync to whichever backup target is configured (today: git-remote push via T6.1); retry transient failures with bounded exponential backoff and jitter; never block a save on network I/O. For the git-remote target, derive durable pending state from local-vs-upstream refs, so startup resumes an unpushed branch without a queue table. Serialize with the repository lock and stop retrying non-fast-forward/auth/configuration errors until admin action. Surface ahead count, last success, and sanitized failure in the admin UI. Do nothing at all — no background task, no admin-UI status — when no backup target is configured; this must never be on the startup-required path.
+**Done when:** ten rapid saves produce ten commits but fewer pushes; restart/offline periods recover automatically; divergence never triggers merge/force; worker/admin git operations cannot race content commits; and the app starts and runs normally with no backup target configured at all.
 
 #### T6.3 — Manual backup & restore **[P]**
 `opus` / `sol` · **L** · **high** · depends: T6.1
-"Back up now" (push) and guarded restore. Clone only into a validated absent/empty destination; permit fast-forward only from a clean checkout. For dirty/divergent state, first copy the entire local repo (including `.git`) to a timestamped recovery directory outside the target, verify that copy, show the divergence, and require a second explicit confirmation before any replacement. Never use force-push or destructive reset.
-**Done when:** empty and fast-forward restores work; dirty/divergent restores cannot proceed without a verified recovery copy and confirmation; invalid remotes cannot escape the configured destination; and interrupted replacement leaves either the old or restored repo recoverable.
+"Back up now" (sync to whichever target is configured — today, git-remote push) and guarded restore. For the git-remote target: clone only into a validated absent/empty destination; permit fast-forward only from a clean checkout. For dirty/divergent state, first copy the entire local repo (including `.git`) to a timestamped recovery directory outside the target, verify that copy, show the divergence, and require a second explicit confirmation before any replacement. Never use force-push or destructive reset. An operator relying on rsync/S3 instead needs no admin-UI support here at all — restoring is copying files back and pointing the app at them, entirely outside this task.
+**Done when:** empty and fast-forward restores work; dirty/divergent restores cannot proceed without a verified recovery copy and confirmation; invalid remotes cannot escape the configured destination; interrupted replacement leaves either the old or restored repo recoverable; and none of this is reachable or required when no backup target is configured.
+
+#### T6.4 — Backup setup page & runtime-editable configuration
+`opus` / `sol` · **M** · **high** · depends: T6.1, T4.3
+Today the backup target is env-var-only, wired once at startup via `ContentRepository.initialize()` → `GitBackend.configure_remote`. An operator wants a page to set this up rather than editing `.env`/Coolify env vars and redeploying — so this task makes it admin-UI-configurable at runtime:
+- Persist target configuration to a local file under `data/` (e.g. `data/backup_config.json`), following the same file-based-secret precedent already used for `api_token_secret_path` — **not** a new table, so the settled "four tables" database-scope decision stays intact. The stored record is target-typed (`type: "git-remote" | ...`) so a future S3/rsync implementation is another variant of the same record, not a redesign.
+- Admin-only read/update routes. Reading back the config **never** re-renders a saved token or key — same "shown once" precedent as the API-token screen — it shows target type, URL, and status only. Saving a new configuration re-runs `configure_remote` immediately (so a bad credential or unreachable host is caught the moment it's saved, not at the next restart) and only persists on success.
+- The admin UI page itself (folded into T5.5, not a separate screen): current status (configured / not configured, target type, last successful sync from T6.2, last sanitized error), a form to set/change the git-remote target (URL, the "confirmed private" affirmation checkbox, token *or* deploy-key-path + known-hosts-path), a "Back up now" button (T6.3), and a "Clear configuration" action that returns the app to the fully-supported "no backup target" state.
+**Done when:** an admin configures, tests (via the immediate `configure_remote` re-run), and clears a git-remote backup target entirely through the UI with no env var edit or redeploy; a saved credential is never rendered back in any subsequent read; and a failed save leaves the previous working configuration (or no configuration) in effect rather than a half-applied one.
 
 ---
 
@@ -435,6 +463,7 @@ aren't relitigated mid-implementation:
 | Shelves | Not built — books at `docs/` root | Adds a level nobody asked for; addable later as a folder move with no migration. |
 | Drafts | `draft: true` excluded from the build | Via a `hooks/drafts.py` inside the content repo, so exclusion survives the worst-case drill. |
 | Static output | Private full-wiki recovery/export artifact | MkDocs cannot reproduce database ACLs; every non-draft page is included. Public deployment is not implemented in MVP. |
+| Backup | Optional and pluggable — not required to run the app | Local disk (`content/` + `data/`) is durable and complete on its own. A git remote (GitHub or any git host) is one built-in target; `rsync`/S3 sync are equally valid and need no app code. Zero backup targets configured is a fully supported, fully functional state. |
 | Nav tooling | `mkdocs-awesome-nav` v3 with `filename: .pages` | Uses the maintained successor while retaining the repo's small `.pages` convention. |
 | Search | Grep, no app index | Nothing to keep in sync or rebuild; mkdocs supplies a separate search index inside static exports. |
 | AI access | Read/export and create operations through one `ai_service` behind MCP and REST | Both transports inherit the same ACL and Git mutation path; book/chapter creation is admin-only and page creation requires parent write access. |

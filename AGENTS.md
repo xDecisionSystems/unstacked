@@ -31,9 +31,14 @@ don't work around them without checking with the user first.
   content save is one git commit in the `content/` repo, authored as the
   editing user. Page history = `git log`/`git diff`/`git checkout` on that
   path.
-- **`content/` is its own git repository**, independent of this app's
-  source repo, with its own GitHub remote used for backup. Never merge its
-  history into the app repo's history.
+- **`content/` is its own git repository**, independent of this app's source
+  repo. Never merge its history into the app repo's history. **Local disk is
+  the complete, durable state on its own — no external backup is required
+  for the app to function.** An off-site backup target is optional and
+  pluggable: a git remote (GitHub or any other git host, already built) is
+  one option; `rsync`/S3 sync are equally valid alternatives that need no
+  application code. Never write code that assumes a GitHub remote (or any
+  backup target) is configured — it's a no-op when it isn't.
 - **Permissions are path-prefix based**, not tied to content rows (there
   are none). A `permissions` row maps `(group, path_prefix) -> read/write`;
   matching is segment-aware, greatest specificity wins, and explicit deny

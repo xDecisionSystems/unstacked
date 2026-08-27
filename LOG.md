@@ -10,6 +10,34 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 04:42 UTC — Claude Code
+User-directed architecture change: GitHub backup is no longer required or
+special-cased — everything must run purely on local disk, with off-site
+backup as optional and pluggable (git remote, rsync, S3, all equally
+valid). Rewrote the plan's context/scope, the "Version history" backup
+description, and the settled-decisions table accordingly; renamed Phase 6
+"GitHub backup" → "Backup & disaster recovery (optional)" and reframed
+T6.1 (already-built) as one interchangeable target implementation rather
+than a requirement, T6.2/T6.3 as generic "sync to whichever target is
+configured" with "no target configured" as an explicitly done-when-tested
+state. No code changed — T6.1's existing implementation already works
+against any git host despite GitHub-flavored settings names; noted that
+as a future optional rename, not required now.
+
+Also fixed AGENTS.md, which stated a GitHub remote as a non-negotiable
+design rule — that's now factually wrong and would have misled the next
+agent (Codex included) reading it as a hard rule; corrected it to match.
+
+Mid-turn, the user added a further requirement: an admin UI page to set
+up the backup target, rather than env-var-only configuration requiring a
+redeploy. Added a new task, T6.4, for runtime-editable backup
+configuration (persisted to a `data/` file, not the DB, keeping the
+settled four-table scope intact; save immediately re-validates via
+`configure_remote`; a saved credential is never rendered back, matching
+the API-token screen's precedent) and referenced it from T5.5's admin UI
+card. Plan is now 40 tasks (was 39).
+- Files: `plans/plan_initial.md`, `AGENTS.md`, `LOG.md`
+
 ## 2026-08-27 04:33 UTC — Claude Code
 T6.1 (GitHub remote credential handling) landed — the last of the three
 parallel subagents, and the most security-sensitive: HTTPS PAT via a
@@ -239,12 +267,6 @@ behavior. Marked T0.1 and T1.4 complete after verification.
 - Files: `pyproject.toml`, `uv.lock`, `app/bootstrap.py`,
   `tests/test_bootstrap.py`, `README.md`, `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-27 00:38 UTC — Codex
-Added ACL-enforced AI page-history endpoints for Git commit lists, unified
-revision diffs, and restore-as-a-new-commit. Validated revision input and
-path containment, and covered the complete restore history flow in tests.
-- Files: `app/git_backend.py`, `app/content.py`, `app/ai_service.py`,
-  `app/ai_api.py`, `tests/test_ai_api.py`, `plans/plan_initial.md`, `LOG.md`
 
 
 
