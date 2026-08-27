@@ -87,6 +87,7 @@ def test_non_admin_can_create_page_only_with_parent_write(client, app_env):
 
     with Session(app.state.engine) as session:
         user = User(
+            username="writer",
             email="writer@example.com",
             password_hash=hash_password("writer password is sufficiently long"),
             display_name="Writer Agent",
@@ -149,7 +150,7 @@ def test_authentication_validation_and_collisions(client, app_env):
 def test_password_exchange_issues_bearer_token(client):
     response = client.post(
         "/api/auth/token",
-        json={"email": "admin@example.com", "password": "correct horse battery staple"},
+        json={"username": "admin", "password": "correct horse battery staple"},
     )
     assert response.status_code == 200
     token = response.json()["access_token"]
@@ -220,12 +221,12 @@ def test_password_exchange_is_rate_limited(client):
     for _ in range(5):
         response = client.post(
             "/api/auth/token",
-            json={"email": "nobody@example.com", "password": "incorrect-password"},
+            json={"username": "nobody", "password": "incorrect-password"},
         )
         assert response.status_code == 401
     response = client.post(
         "/api/auth/token",
-        json={"email": "nobody@example.com", "password": "incorrect-password"},
+        json={"username": "nobody", "password": "incorrect-password"},
     )
     assert response.status_code == 429
     assert response.headers["retry-after"] == "60"

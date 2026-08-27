@@ -3,7 +3,7 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from app.ai_service import AccessDenied
@@ -31,8 +31,8 @@ def attachment_disposition(filename: str) -> str:
 
 
 class TokenRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=1024)
+    username: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class TokenResponse(BaseModel):
@@ -103,11 +103,13 @@ def _content_error(exc: Exception) -> HTTPException:
 def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
     settings = request.app.state.settings
     client_host = client_identifier(request, settings.trusted_proxy_hops)
-    request.app.state.login_limiter.check(f"{client_host}:{str(payload.email).casefold()}")
+    request.app.state.login_limiter.check(f"{client_host}:{payload.username}")
     with Session(request.app.state.engine) as session:
-        user = authenticate(session, str(payload.email), payload.password)
+        user = authenticate(session, payload.username, payload.password)
         if user is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
+        if user.must_change_password:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Password change required")
         token = create_api_token(user, request.app.state.settings)
     return TokenResponse(
         access_token=token,

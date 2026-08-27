@@ -21,10 +21,10 @@ from urllib.parse import parse_qsl
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from itsdangerous import Signer as _Signer
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from app.auth import authenticate, client_identifier
+from app.auth import authenticate, client_identifier, hash_password
 from app.config import Settings
 from app.models import User
 
@@ -36,6 +36,7 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 # A CSRF form post is a handful of fields; anything larger is not one, and
 # buffering it in a dependency would be an easy memory sink.
 MAX_FORM_BYTES = 64 * 1024
+MIN_PASSWORD_LENGTH = 12
 
 # Distinct itsdangerous salts give each purpose its own derived key, so a
 # session cookie can never be replayed as a CSRF token (or vice versa) even
@@ -47,14 +48,15 @@ router = APIRouter(prefix="/auth", tags=["Web session"])
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=1024)
+    username: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class LoginResponse(BaseModel):
     user_id: int
     display_name: str
     is_admin: bool
+    must_change_password: bool
     csrf_token: str
 
 
@@ -64,10 +66,20 @@ class LogoutResponse(BaseModel):
 
 class SessionResponse(BaseModel):
     user_id: int
+    username: str
     email: str
     display_name: str
     is_admin: bool
     csrf_token: str
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=1024)
+
+
+class PasswordChangeResponse(LoginResponse):
+    pass
 
 
 def _session_serializer(settings: Settings) -> URLSafeTimedSerializer:
@@ -154,6 +166,22 @@ def get_current_web_user(request: Request) -> User:
         return user
 
 
+def require_normal_web_user(
+    user: Annotated[User, Depends(get_current_web_user)],
+) -> User:
+    """Reject a forced-password-change session from ordinary web routes.
+
+    The restricted session intentionally remains valid for only the two
+    recovery actions: logout and password change.  Keeping this as a separate
+    dependency makes future browser routes opt into the same server-side
+    boundary instead of relying on a redirect in their templates.
+    """
+
+    if user.must_change_password:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Password change required")
+    return user
+
+
 async def _csrf_from_form(request: Request) -> str | None:
     """Pull the token out of a urlencoded body without Starlette's form parser.
 
@@ -222,9 +250,9 @@ def login(payload: LoginRequest, request: Request, response: Response) -> LoginR
     client_host = client_identifier(request, settings.trusted_proxy_hops)
     # Same bucket key as the bearer-token login route, so adding a second
     # entry point does not double an attacker's budget per credential.
-    request.app.state.login_limiter.check(f"{client_host}:{str(payload.email).casefold()}")
+    request.app.state.login_limiter.check(f"{client_host}:{payload.username}")
     with Session(request.app.state.engine) as session:
-        user = authenticate(session, str(payload.email), payload.password)
+        user = authenticate(session, payload.username, payload.password)
         if user is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
         csrf_token = issue_session_cookie(response, user, settings)
@@ -232,6 +260,7 @@ def login(payload: LoginRequest, request: Request, response: Response) -> LoginR
             user_id=user.id,
             display_name=user.display_name,
             is_admin=user.is_admin,
+            must_change_password=user.must_change_password,
             csrf_token=csrf_token,
         )
 
@@ -251,14 +280,56 @@ def logout(
 @router.get("/session", response_model=SessionResponse)
 def read_session(
     request: Request,
-    user: Annotated[User, Depends(get_current_web_user)],
+    user: Annotated[User, Depends(require_normal_web_user)],
 ) -> SessionResponse:
     payload = _read_session_cookie(request)
     settings: Settings = request.app.state.settings
     return SessionResponse(
         user_id=user.id,
+        username=user.username,
         email=user.email,
         display_name=user.display_name,
         is_admin=user.is_admin,
         csrf_token=_csrf_signer(settings).sign(str(payload["sid"])).decode("utf-8"),
     )
+
+
+@router.post(
+    "/change-password",
+    response_model=PasswordChangeResponse,
+    dependencies=[Depends(require_csrf)],
+)
+def change_password(
+    payload: PasswordChangeRequest,
+    request: Request,
+    response: Response,
+    user: Annotated[User, Depends(get_current_web_user)],
+) -> PasswordChangeResponse:
+    """Verify the current password, revoke credentials, and rotate the session.
+
+    This is deliberately available to restricted sessions.  It is the only
+    state-changing escape hatch apart from logout, and it creates a fresh
+    session only after both generations have been advanced atomically.
+    """
+
+    with Session(request.app.state.engine) as session:
+        persisted = session.get(User, user.id)
+        if persisted is None or authenticate(
+            session, user.username, payload.current_password
+        ) is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect")
+        persisted.password_hash = hash_password(payload.new_password)
+        persisted.must_change_password = False
+        persisted.session_generation += 1
+        persisted.api_token_generation += 1
+        session.add(persisted)
+        session.commit()
+        session.refresh(persisted)
+        csrf_token = issue_session_cookie(response, persisted, request.app.state.settings)
+        return PasswordChangeResponse(
+            user_id=persisted.id,
+            display_name=persisted.display_name,
+            is_admin=persisted.is_admin,
+            must_change_password=False,
+            csrf_token=csrf_token,
+        )

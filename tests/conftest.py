@@ -22,6 +22,7 @@ def app_env(tmp_path: Path):
     app = create_app(settings)
     with Session(app.state.engine) as session:
         admin = User(
+            username="admin",
             email="admin@example.com",
             password_hash=hash_password("correct horse battery staple"),
             display_name="Admin Agent",
