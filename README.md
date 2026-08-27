@@ -64,6 +64,31 @@ API token once. Clients can subsequently exchange the local password at
 initial password from standard input; passwords are never accepted as command
 line arguments. Re-running bootstrap leaves existing users unchanged.
 
+## Local Docker deployment
+
+Docker Compose runs the API with two named volumes: `data` holds the SQLite
+database and lock, while `content` holds the independent Git/MkDocs content
+repository. Generate a production signing secret, then start it with:
+
+```bash
+export UNSTACKED_API_TOKEN_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+docker compose -f docker-compose.yaml up --build -d
+curl http://127.0.0.1:8000/healthz
+docker compose -f docker-compose.yaml exec app python -m app.bootstrap \
+  --email admin@example.com --display-name "Admin"
+```
+
+The bootstrap command prompts for the initial password inside the container.
+The Compose configuration uses production mode, so it refuses to start without
+the signing secret. Do not use `docker compose -f docker-compose.yaml down -v`
+unless you intend to delete both the database and wiki content volumes.
+
+The same `Dockerfile` is suitable for a Coolify Dockerfile deployment. Mount
+persistent storage at `/app/data` and `/app/content`, expose port `8000`, set
+the production variables above, and configure one application replica. The
+current app does not yet push the nested content repository to GitHub, so back
+up both Coolify volumes independently.
+
 ## AI content API
 
 All `/api/ai/*` routes require `Authorization: Bearer <token>`.

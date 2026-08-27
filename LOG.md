@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 03:06 UTC — Codex
+Validated the committed production Docker Compose deployment locally. Built
+the multi-stage image, started it with a generated non-committed signing
+secret, confirmed `/healthz` and Docker health, and verified the initialized
+SQLite database and nested Git content repository on persistent volumes.
+Added the exact local test/bootstrap commands and recorded the Docker/Coolify
+state-persistence decision in the plan.
+- Files: `README.md`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 02:57 UTC — Claude Code
 User installed Docker Desktop, so I could finally test-build instead of
 reasoning from logs alone. Confirmed the README.md fix resolved the build
@@ -185,17 +194,4 @@ recovery builds, and bounded search/upload/render behavior; corrected task
 dependencies and verification criteria; and updated current dependencies to
 Argon2 via `pwdlib` and `mkdocs-awesome-nav` v3 while retaining `.pages`.
 - Files: `plans/plan_initial.md`, `AGENTS.md`, `README.md`, `LOG.md`
-
-## 2026-08-27 00:01 UTC — Claude Code
-Settled the last two open questions: no shelves (books live at the `docs/`
-root, two levels max under a book) and `draft: true` pages are excluded
-from the built site. Drafts are excluded via a `hooks/drafts.py` committed
-inside the content repo rather than a third-party plugin, so the exclusion
-travels with the content and survives the worst-case drill. Updated the
-content layout, T2.3, T3.2, T5.3 (draft toggle + badge) and T10.3 (drill
-now asserts drafts produce no output), and replaced "Open questions" with
-a settled-decisions table.
-- Files: `plans/plan_initial.md`, `LOG.md`
-
-
 

@@ -11,6 +11,10 @@ Confirmed scope (from user):
 - Planned from day one: **AI read and write integration for Claude, ChatGPT, and other agents**, so search/download and create-book/chapter/page operations use clean, permission-aware service and API/MCP surfaces rather than transport-specific logic.
 - Auth: **local passwords only** — no SSO/LDAP. Keep the auth layer behind a small `authenticate(email, password) -> user` seam anyway, so adding an external provider later is a new backend rather than a rewrite of every route.
 - Static output: the built mkdocs site has **no runtime ACL**. It is a recovery/export artifact containing every non-draft page, not a permission-preserving replacement for the app. The content remote and build artifacts are private; public deployment is outside MVP scope.
+- Runtime deployment: package the FastAPI application in a Docker image for
+  GitHub-backed Coolify deployments. The single application replica receives
+  persistent mounts for both `/app/data` (SQLite/lock) and `/app/content`
+  (the nested Git repository); neither directory may be replaced on deploy.
 
 ### Implementation checkpoint (2026-08-27)
 
