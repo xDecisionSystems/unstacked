@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from filelock import FileLock
-from git import Actor, BadName, Repo
+from git import Actor, BadName, GitCommandError, Repo
 
 SHA_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
 
@@ -19,6 +19,10 @@ _LOG_FORMAT = _FIELD_SEPARATOR.join(["%H", "%an", "%ae", "%aI", "%B"]) + _RECORD
 
 class RevisionNotFound(RuntimeError):
     """Raised when a revision or its version of a path cannot be found."""
+
+
+class GitSyncError(RuntimeError):
+    """A safe, operator-actionable Git remote synchronization failure."""
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,63 @@ class GitBackend:
                     self._remove_empty_parents(path.parent)
             raise
 
+    def push(self) -> None:
+        """Push the current branch to ``origin`` without exposing remote details.
+
+        Content commits remain local and usable if a backup is unavailable;
+        callers can retry this operation.  GitPython receives the refspec as a
+        single argument, never through a shell.
+        """
+
+        with self.lock:
+            repo = self.repo
+            branch = self._active_branch(repo)
+            remote = self._origin(repo)
+            try:
+                results = remote.push(refspec=f"{branch.name}:{branch.name}")
+            except GitCommandError as exc:
+                raise GitSyncError("unable to push content backup") from exc
+            if any(result.flags & result.ERROR for result in results):
+                raise GitSyncError("content backup rejected the push")
+
+    def fetch_and_fast_forward(self) -> bool:
+        """Fast-forward the current branch from ``origin`` when it is clean.
+
+        Refusing dirty repositories and non-fast-forward histories prevents a
+        remote backup from silently overwriting operator work or content that
+        was edited independently on another checkout.
+        """
+
+        with self.lock:
+            repo = self.repo
+            if repo.is_dirty(untracked_files=True):
+                raise GitSyncError("cannot synchronize a content repository with local changes")
+            branch = self._active_branch(repo)
+            remote = self._origin(repo)
+            try:
+                remote.fetch()
+                remote_ref = repo.refs[f"{remote.name}/{branch.name}"]
+            except (GitCommandError, IndexError) as exc:
+                raise GitSyncError("unable to fetch content backup") from exc
+
+            local_sha = repo.head.commit.hexsha
+            remote_sha = remote_ref.commit.hexsha
+            if local_sha == remote_sha:
+                return False
+            try:
+                repo.git.merge_base("--is-ancestor", local_sha, remote_sha)
+            except GitCommandError as exc:
+                if exc.status == 1:
+                    raise GitSyncError(
+                        "content histories diverged; manual reconciliation required"
+                    ) from exc
+                raise GitSyncError("unable to compare content backup history") from exc
+            try:
+                repo.git.merge("--ff-only", remote_ref.name)
+            except GitCommandError as exc:
+                raise GitSyncError("unable to fast-forward content from backup") from exc
+            return True
+
     def _show_or_empty(self, sha: str, relative: str) -> str | None:
         try:
             return self.show(sha, relative)
@@ -198,6 +259,20 @@ class GitBackend:
             return self.repo.commit(sha)
         except (BadName, ValueError) as exc:
             raise RevisionNotFound("revision not found") from exc
+
+    @staticmethod
+    def _active_branch(repo: Repo):
+        try:
+            return repo.active_branch
+        except TypeError as exc:
+            raise GitSyncError("content repository must be on a branch to synchronize") from exc
+
+    @staticmethod
+    def _origin(repo: Repo):
+        try:
+            return repo.remotes.origin
+        except AttributeError as exc:
+            raise GitSyncError("content backup remote 'origin' is not configured") from exc
 
     @staticmethod
     def _atomic_write(path: Path, text: str) -> None:

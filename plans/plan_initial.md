@@ -230,11 +230,10 @@ Image/attachment upload into `docs/assets/<book>/`, request and decompressed-siz
 
 ### Phase 3 — Git backend
 
-#### [~] T3.1 — Git wrapper
+#### [x] T3.1 — Git wrapper
 `opus` / `sol` · **M** · **high** · depends: T0.1, T0.2
 `app/git_backend.py`: GitPython wrapper — exact-path staging and `commit_as(user, paths, message)`, `log(path)`, `diff(sha_a, sha_b, path)`, `show(sha, path)`, restore-as-a-new-commit, `push()`, and guarded fetch/fast-forward. Validate SHAs/ref names and paths; never invoke a shell with interpolated input; never stage unrelated working-tree changes; scrub credentials and local sensitive paths from typed errors.
 **Done when:** two users produce distinct authors; history follows a rename; restore adds a commit; unrelated dirty files remain untouched; and adversarial refs/paths cannot become command options or escape the repo.
-**Remaining:** `app/git_backend.py` covers commit-as-user (index reset to HEAD first, so unrelated staging is never committed), `log` via `git log --follow`, diff, show and restore-as-new-commit. Remaining: `push()` and guarded fetch/fast-forward, and credential scrubbing in typed errors (T6.1).
 
 #### [~] T3.2 — Content repo bootstrap
 `sonnet` / `terra` · **M** · **medium** · depends: T3.1

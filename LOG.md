@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 03:52 UTC — Codex
+Completed the Git-wrapper plan task with guarded `origin` push and
+fetch/fast-forward operations. Synchronization now refuses dirty or divergent
+content histories and returns generic typed failures, preventing remote or
+credential details from reaching callers. Added bare-repository integration
+tests for push, fast-forward, and refusal behavior.
+- Files: `app/git_backend.py`, `tests/test_git_backend.py`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 03:49 UTC — Codex
 Completed three unblocked plan foundations: database-level authorization
 constraints with migration coverage, atomic awesome-nav `.pages` management,
@@ -160,14 +169,6 @@ seeded draft is absent from HTML and static search. CI runs locked setup,
 linting, tests with coverage, migration upgrade, packaging, and that drill.
 - Files: `.github/workflows/ci.yml`, `scripts/worstcase_drill.sh`,
   `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 00:38 UTC — Codex
-Added a tolerant front-matter I/O module so hand-authored pages without valid
-metadata remain readable, while atomic writes retain operator-defined metadata
-keys. Wired page creation and reads through the module and added focused
-round-trip/default tests; marked the completed plan task.
-- Files: `app/frontmatter_io.py`, `app/content.py`,
-  `tests/test_frontmatter_io.py`, `plans/plan_initial.md`, `LOG.md`
 
 ## 2026-08-27 00:33 UTC — Codex
 Audited every planned task’s model tier, context level, and reasoning effort.

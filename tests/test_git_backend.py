@@ -7,6 +7,7 @@ from git import Repo
 from sqlmodel import Session
 
 from app.content import ContentRepository
+from app.git_backend import GitBackend, GitSyncError
 from app.models import User
 from tests.conftest import bearer
 
@@ -118,3 +119,56 @@ def test_diff_against_a_revision_predating_the_page_shows_a_creation(client, app
     head = repo.head.commit.hexsha
     diff = content.page_diff(path, root, head)
     assert "original body" in diff
+
+
+def _sync_repositories(tmp_path: Path) -> tuple[Repo, Repo, GitBackend]:
+    """Create a content checkout and a second checkout sharing a bare backup."""
+
+    remote_path = tmp_path / "remote.git"
+    Repo.init(remote_path, bare=True)
+    local_path = tmp_path / "local"
+    local = Repo.init(local_path, initial_branch="main")
+    (local_path / "docs").mkdir()
+    (local_path / "docs" / "index.md").write_text("# Initial\n", encoding="utf-8")
+    local.index.add(["docs/index.md"])
+    local.index.commit("Initial")
+    local.create_remote("origin", remote_path.as_uri())
+    backend = GitBackend(local_path, tmp_path / "content.lock")
+    backend.push()
+    peer_path = tmp_path / "peer"
+    peer = Repo.clone_from(remote_path.as_uri(), peer_path, branch="main")
+    return local, peer, backend
+
+
+def test_push_and_guarded_fast_forward_use_the_content_backup(tmp_path: Path):
+    local, peer, backend = _sync_repositories(tmp_path)
+    peer_file = Path(peer.working_tree_dir) / "docs" / "from-peer.md"
+    peer_file.write_text("peer update\n", encoding="utf-8")
+    peer.index.add(["docs/from-peer.md"])
+    peer.index.commit("Peer update")
+    peer.remotes.origin.push("main:main")
+
+    assert backend.fetch_and_fast_forward() is True
+    assert (Path(local.working_tree_dir) / "docs" / "from-peer.md").is_file()
+    assert backend.fetch_and_fast_forward() is False
+
+
+def test_fast_forward_refuses_dirty_or_divergent_content_history(tmp_path: Path):
+    local, peer, backend = _sync_repositories(tmp_path)
+    local_file = Path(local.working_tree_dir) / "docs" / "local.md"
+    local_file.write_text("uncommitted operator work\n", encoding="utf-8")
+    with pytest.raises(GitSyncError, match="local changes"):
+        backend.fetch_and_fast_forward()
+    local_file.unlink()
+
+    peer_file = Path(peer.working_tree_dir) / "docs" / "peer.md"
+    peer_file.write_text("peer update\n", encoding="utf-8")
+    peer.index.add(["docs/peer.md"])
+    peer.index.commit("Peer update")
+    peer.remotes.origin.push("main:main")
+    local_file.write_text("local update\n", encoding="utf-8")
+    local.index.add(["docs/local.md"])
+    local.index.commit("Local update")
+
+    with pytest.raises(GitSyncError, match="diverged"):
+        backend.fetch_and_fast_forward()
