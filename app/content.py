@@ -15,7 +15,7 @@ from sqlmodel import Session
 from app.acl import load_policy
 from app.config import Settings
 from app.frontmatter_io import new_page, parse_page
-from app.git_backend import GitBackend, Revision, RevisionNotFound
+from app.git_backend import GitBackend, RemoteConfig, Revision, RevisionNotFound
 from app.models import User
 from app.nav import create_navigation
 from app.paths import (
@@ -139,37 +139,62 @@ class ContentRepository:
             if (self.root / ".git").is_dir():
                 self.docs.mkdir(parents=True, exist_ok=True)
                 self._ensure_llm_md()
-                return
-            if self.root.exists() and any(self.root.iterdir()):
-                raise ContentError("content path is non-empty and is not a git repository")
-            self.root.mkdir(parents=True, exist_ok=True)
-            self.docs.mkdir(parents=True, exist_ok=True)
-            (self.root / "hooks").mkdir(exist_ok=True)
-            self._atomic_write(self.root / "mkdocs.yml", MKDOCS_YML)
-            self._atomic_write(self.root / "requirements.txt", CONTENT_REQUIREMENTS)
-            self._atomic_write(self.root / "hooks" / "drafts.py", DRAFT_HOOK)
-            self._atomic_write(self.root / ".gitignore", "site/\n")
-            self._atomic_write(self.docs / ".pages", 'nav:\n  - index.md\n  - "*"\n')
-            self._atomic_write(self.docs / "index.md", "# Unstacked\n")
-            self._atomic_write(self.docs / "llm.md", LLM_MD_WORKFLOW)
-            repo = Repo.init(self.root, initial_branch="main")
-            repo.index.add(
-                [
-                    "mkdocs.yml",
-                    "requirements.txt",
-                    "hooks/drafts.py",
-                    ".gitignore",
-                    "docs/.pages",
-                    "docs/index.md",
-                    "docs/llm.md",
-                ]
-            )
-            actor = Actor("Unstacked", "system@unstacked.local")
-            repo.index.commit(
-                "Initialize portable MkDocs content repository",
-                author=actor,
-                committer=actor,
-            )
+            else:
+                self._bootstrap_repository()
+            # Configure the backup remote once, at startup, so every later
+            # push/fetch finds `origin` already pointed at the right place and
+            # already authenticated.  Failing here rather than at the first
+            # backup means a misconfigured credential surfaces immediately
+            # instead of silently leaving content unbacked-up.
+            self.git.configure_remote(self._remote_config())
+
+    def _remote_config(self) -> RemoteConfig:
+        """Map settings onto the backup remote description.
+
+        Kept here rather than in ``git_backend`` so the git wrapper stays
+        independent of the app's settings model.
+        """
+
+        return RemoteConfig(
+            url=self.settings.github_remote_url,
+            confirmed_private=self.settings.github_remote_confirmed_private,
+            token=self.settings.github_token,
+            token_path=self.settings.github_token_path,
+            ssh_key_path=self.settings.github_ssh_key_path,
+            ssh_known_hosts_path=self.settings.github_ssh_known_hosts_path,
+        )
+
+    def _bootstrap_repository(self) -> None:
+        if self.root.exists() and any(self.root.iterdir()):
+            raise ContentError("content path is non-empty and is not a git repository")
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.docs.mkdir(parents=True, exist_ok=True)
+        (self.root / "hooks").mkdir(exist_ok=True)
+        self._atomic_write(self.root / "mkdocs.yml", MKDOCS_YML)
+        self._atomic_write(self.root / "requirements.txt", CONTENT_REQUIREMENTS)
+        self._atomic_write(self.root / "hooks" / "drafts.py", DRAFT_HOOK)
+        self._atomic_write(self.root / ".gitignore", "site/\n")
+        self._atomic_write(self.docs / ".pages", 'nav:\n  - index.md\n  - "*"\n')
+        self._atomic_write(self.docs / "index.md", "# Unstacked\n")
+        self._atomic_write(self.docs / "llm.md", LLM_MD_WORKFLOW)
+        repo = Repo.init(self.root, initial_branch="main")
+        repo.index.add(
+            [
+                "mkdocs.yml",
+                "requirements.txt",
+                "hooks/drafts.py",
+                ".gitignore",
+                "docs/.pages",
+                "docs/index.md",
+                "docs/llm.md",
+            ]
+        )
+        actor = Actor("Unstacked", "system@unstacked.local")
+        repo.index.commit(
+            "Initialize portable MkDocs content repository",
+            author=actor,
+            committer=actor,
+        )
 
     def read_llm_md(self) -> str:
         workflow = self.docs / "llm.md"
