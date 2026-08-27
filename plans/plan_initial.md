@@ -8,9 +8,13 @@ Confirmed scope (from user):
 - Backend: **Python/FastAPI** (lets the app reuse MkDocs/Python-Markdown configuration and invoke `mkdocs build`, instead of adopting an unrelated rendering stack).
 - Deployment shape: **single team, one wiki instance**. Users and group membership are managed in the webapp. **Groups** are granted **read/write access at the chapter and page level**.
 - Search: no dedicated search index — grep-style filesystem search plus mkdocs' own generated static search.
-- Planned from day one: **AI search integration for Claude and ChatGPT**, so the search/read path is a clean, permission-aware API/MCP surface, not a later bolt-on.
+- Planned from day one: **AI read and write integration for Claude, ChatGPT, and other agents**, so search/download and create-book/chapter/page operations use clean, permission-aware service and API/MCP surfaces rather than transport-specific logic.
 - Auth: **local passwords only** — no SSO/LDAP. Keep the auth layer behind a small `authenticate(email, password) -> user` seam anyway, so adding an external provider later is a new backend rather than a rewrite of every route.
 - Static output: the built mkdocs site has **no runtime ACL**. It is a recovery/export artifact containing every non-draft page, not a permission-preserving replacement for the app. The content remote and build artifacts are private; public deployment is outside MVP scope.
+
+### Implementation checkpoint (2026-08-27)
+
+The first vertical slice is implemented: project/config scaffolding, the four-table SQLite schema with an initial Alembic migration, Argon2 password verification and signed bearer tokens, deterministic ACL resolution, path-safe content creation, an inter-process Git mutation lock, portable content-repo bootstrap, a shared AI service, and REST/OpenAPI endpoints for ACL-filtered tree/page/ZIP downloads plus create-book/chapter/page. Integration tests verify authentication, revocation, rate limiting, ACL conflicts, traversal/symlink rejection, Git authorship, and a real `mkdocs build --strict` with draft exclusion. Search, MCP transport, web UI, history, uploads/assets, backup/push, and later lifecycle operations remain planned work.
 
 ## Architecture
 
@@ -86,7 +90,7 @@ No content, revisions, API-token records, or search index live in the database. 
 | `render` | Page HTML using the same markdown extensions declared in `mkdocs.yml` |
 | `search` | Permission-filtered grep over markdown bodies |
 | `export` | Private full-wiki `mkdocs build` runner |
-| `ai_service` | Shared `search_wiki` / `get_page` / `list_pages` used by both AI transports |
+| `ai_service` | Shared permission-aware read/export and create-book/chapter/page operations used by AI transports |
 | `ai_mcp` | MCP server (Claude) over `ai_service` |
 | `ai_api` | REST + OpenAPI surface (ChatGPT Actions) over `ai_service` |
 | `web` | Jinja2 templates, tree browser, EasyMDE editor, admin screens |
@@ -315,18 +319,18 @@ Search box, results page with snippets and breadcrumbs.
 
 #### T9.1 — Shared AI service layer
 `opus` / `sol` · **M** · **high** · depends: T8.1, T4.2, T2.3
-`app/ai_service.py`: one permission-aware implementation of `search_wiki(query, auth_context)`, `get_page(path, auth_context)`, `list_pages(auth_context)`, returning structured results with deterministic item/character limits (do not depend on a model tokenizer). Treat wiki text as untrusted data, not tool instructions. Both transports call only this service and its ACL-aware content/search modules.
-**Done when:** direct service contract tests prove all three operations apply the same ACL and limits expected by both transports, including missing/unreadable equivalence.
+`app/ai_service.py`: one permission-aware implementation of search, tree/list, get/download page, filtered export, create book, create chapter, and create page. Return structured results with deterministic item/character limits (do not depend on a model tokenizer). Treat wiki text as untrusted data, not tool instructions. Book/chapter creation is admin-only; page creation requires write access on the parent. Both transports call only this service and its ACL-aware content/search modules.
+**Done when:** direct service contract tests prove read/export and create operations apply the same ACL and limits expected by both transports, including missing/unreadable equivalence and Git author attribution.
 
 #### T9.2 — MCP server (Claude) **[P]**
 `sonnet` / `terra` · **M** · **high** · depends: T9.1, T1.3
-MCP server exposing the three tools over a documented transport, authenticated by the signed bearer token from T1.3 so calls run as an active user with current permissions. Validate origin/transport security as applicable; expose bounded schemas and neutral tool descriptions.
-**Done when:** a supported MCP client connects and retrieves only authorized pages; expired/revoked tokens fail; oversized/malformed calls are bounded; and wiki content cannot alter tool authorization or response envelopes.
+MCP server exposing search/list/get/download and create-book/chapter/page tools over a documented transport, authenticated by the signed bearer token from T1.3 so calls run as an active user with current permissions. Validate origin/transport security as applicable; expose bounded schemas and neutral tool descriptions.
+**Done when:** a supported MCP client reads and creates only authorized content; expired/revoked tokens fail; oversized/malformed calls are bounded; and wiki content cannot alter tool authorization or response envelopes.
 
 #### T9.3 — REST + OpenAPI surface (ChatGPT) **[P]**
 `sonnet` / `terra` · **M** · **high** · depends: T9.1, T1.3
-`/api/ai/*` endpoints with a clean OpenAPI schema suitable for an HTTPS action client; signed bearer-token auth, request/response limits, and rate limiting. Keep the REST contract provider-neutral even if a ChatGPT Action is the first client.
-**Done when:** the generated OpenAPI validates against the target action client; unauthenticated/expired/revoked calls fail; response limits are enforced; and REST/MCP authorization results match.
+`/api/ai/*` endpoints with a provider-neutral OpenAPI schema for ACL-filtered tree/page/ZIP downloads and create-book/chapter/page operations; signed bearer-token auth, request/response limits, and rate limiting. Keep the REST contract provider-neutral even if a ChatGPT Action is the first client.
+**Done when:** the generated OpenAPI validates against the target action client; unauthenticated/expired/revoked calls fail; response limits are enforced; create operations produce one correctly authored Git commit; and REST/MCP authorization results match.
 
 ---
 
@@ -394,4 +398,4 @@ aren't relitigated mid-implementation:
 | Static output | Private full-wiki recovery/export artifact | MkDocs cannot reproduce database ACLs; every non-draft page is included. Public deployment is not implemented in MVP. |
 | Nav tooling | `mkdocs-awesome-nav` v3 with `filename: .pages` | Uses the maintained successor while retaining the repo's small `.pages` convention. |
 | Search | Grep, no app index | Nothing to keep in sync or rebuild; mkdocs supplies a separate search index inside static exports. |
-| AI access | One `ai_service` behind MCP and REST | Both transports inherit the same ACL; no second permission path to get wrong. |
+| AI access | Read/export and create operations through one `ai_service` behind MCP and REST | Both transports inherit the same ACL and Git mutation path; book/chapter creation is admin-only and page creation requires parent write access. |

@@ -30,10 +30,54 @@ permissions — never for content.
 
 ## Status
 
-Planning stage — no application code yet. See
-[plans/plan_initial.md](plans/plan_initial.md) for the full architecture
-and phased build plan, and [AGENTS.md](AGENTS.md) for the working rules AI
-coding agents (and contributors) should follow in this repo.
+The first API slice is implemented. Authenticated AI clients can list and
+download permitted Markdown, download an ACL-filtered ZIP, and create books,
+chapters, and pages. Books and chapters require an admin token; page creation
+requires write access to its parent book/chapter. Each mutation is committed
+to the nested content Git repository as the authenticated user.
+
+See [plans/plan_initial.md](plans/plan_initial.md) for the full architecture
+and phased build plan, and [AGENTS.md](AGENTS.md) for contributor rules.
+
+## Development setup
+
+Python 3.10 or newer is required (the maintained navigation plugin requires
+it). With `uv` installed:
+
+```bash
+uv sync --extra dev
+uv run ruff check .
+uv run pytest
+```
+
+Copy `.env.example` to `.env`, replace the API signing secret, then create the
+initial admin and content repository:
+
+```bash
+uv run unstacked-bootstrap --email admin@example.com --display-name "Admin"
+uv run uvicorn --factory app.main:create_app
+```
+
+The bootstrap command prompts for a password and prints the initial expiring
+API token once. Clients can subsequently exchange the local password at
+`POST /api/auth/token`.
+
+## AI content API
+
+All `/api/ai/*` routes require `Authorization: Bearer <token>`.
+
+| Method | Route | Purpose |
+|---|---|---|
+| `GET` | `/api/ai/tree` | List the ACL-filtered book/chapter/page tree. |
+| `GET` | `/api/ai/content/{path}` | Return page metadata and Markdown; add `?download=true` for the raw `.md` file. |
+| `GET` | `/api/ai/export` | Download an ACL-filtered ZIP of readable Markdown pages. |
+| `POST` | `/api/ai/books` | Create a book (admin only). |
+| `POST` | `/api/ai/books/{book}/chapters` | Create a chapter (admin only). |
+| `POST` | `/api/ai/books/{book}/pages` | Create a page directly in a book. |
+| `POST` | `/api/ai/books/{book}/chapters/{chapter}/pages` | Create a page in a chapter. |
+
+Interactive request/response schemas are available at `/docs` while the app
+is running.
 
 ## License
 

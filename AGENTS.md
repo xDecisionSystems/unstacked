@@ -43,9 +43,10 @@ don't work around them without checking with the user first.
 - **No dedicated search index.** Search is grep-style over the filesystem,
   filtered by the same permission check as everything else. Don't
   introduce a search database/index unless the user asks.
-- **AI-facing search/read (Claude MCP, ChatGPT API) reuses the same
+- **AI-facing read/write (Claude MCP, REST/OpenAPI) reuses the same
   content/search/acl modules** as the web app — it's a new transport, not
-  new logic or a permission bypass.
+  new logic or a permission bypass. Book/chapter creation is admin-only;
+  page creation requires write access on the parent path.
 
 ## Layout (see the plan for the authoritative version)
 
@@ -68,8 +69,9 @@ unstacked/
 - Front matter on every page (`id`, `title`, `created_at`, `updated_at`,
   `author`, `tags`, `draft`) is app metadata only — mkdocs ignores it.
   Don't repurpose it for anything mkdocs needs to read.
-- When adding a build/test/lint command as the project scaffolds up,
-  record it here so future agent runs don't have to rediscover it.
+- Development setup: `uv sync --extra dev`.
+- Lint: `uv run ruff check .`.
+- Tests (including a real strict MkDocs build): `uv run pytest`.
 
 ## Commit and push after every change
 
@@ -116,8 +118,9 @@ this repo (docs or code):
 
 ## Verifying changes
 
-There's no code yet — as soon as there is, the key check for any content-
-layer change is the "worst case" drill described in the plan: copy
-`content/` alone to a clean environment with mkdocs installed and confirm
-`mkdocs build` succeeds. Don't consider a content-layer change done until
-that still passes.
+Run `uv run ruff check .` and `uv run pytest`. The test suite includes a real
+`mkdocs build --strict` against API-created content and verifies that drafts
+are absent from HTML and the static search index. For broader content-layer
+changes, also run the standalone "worst case" drill described in the plan
+once that script is implemented. Don't consider a content-layer change done
+unless the strict build still passes.

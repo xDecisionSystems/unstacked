@@ -10,6 +10,19 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 00:27 UTC — Codex
+Implemented the first secure application slice for AI-authored wiki content.
+Added the FastAPI app, locked Python project, initial Alembic schema, Argon2
+login and signed bearer tokens, login throttling, deterministic path ACLs,
+safe filesystem/Git content services, portable MkDocs bootstrap, and shared
+AI service plus REST endpoints for filtered tree/page/ZIP downloads and
+book/chapter/page creation. Added integration and security tests, including
+a real strict MkDocs build proving drafts stay out of output/search, and
+updated the plan and contributor/operator documentation for AI writes.
+- Files: `.env.example`, `.gitignore`, `pyproject.toml`, `uv.lock`, `app/*.py`,
+  `app/migrations/**`, `tests/*.py`, `README.md`, `AGENTS.md`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 00:10 UTC — Codex
 Reviewed the planning-only repo and hardened the initial architecture plan.
 Clarified that static builds contain all non-draft content and have no ACL;
