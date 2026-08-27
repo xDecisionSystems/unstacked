@@ -79,6 +79,14 @@ class Settings(BaseSettings):
     trusted_proxy_hops: int = 0
     max_page_bytes: int = 2_000_000
     max_export_bytes: int = 50_000_000
+    # Search deliberately has its own smaller budgets.  A page may be valid
+    # wiki content yet too expensive to inspect on every keystroke.
+    max_search_query_chars: int = 500
+    max_search_results: int = 100
+    max_search_files: int = 1_000
+    max_search_file_bytes: int = 512_000
+    max_search_snippet_chars: int = 400
+    search_timeout_seconds: float = 5.0
     max_rate_limit_keys: int = 10_000
     # Static exports intentionally live outside the content checkout: MkDocs'
     # output must never make the nested repository dirty, and the last good
@@ -129,6 +137,18 @@ class Settings(BaseSettings):
             raise ValueError("backup sync debounce must be positive")
         if self.backup_sync_max_backoff_seconds < self.backup_sync_debounce_seconds:
             raise ValueError("backup sync maximum backoff must be at least the debounce")
+        if self.max_search_query_chars < 1:
+            raise ValueError("search query limit must be positive")
+        if self.max_search_results < 1:
+            raise ValueError("search result limit must be positive")
+        if self.max_search_files < 1:
+            raise ValueError("search file limit must be positive")
+        if self.max_search_file_bytes < 1:
+            raise ValueError("search file size limit must be positive")
+        if self.max_search_snippet_chars < 20:
+            raise ValueError("search snippet limit must be at least 20 characters")
+        if self.search_timeout_seconds <= 0:
+            raise ValueError("search timeout must be positive")
 
         # An unset variable and an empty one mean the same thing here: no
         # backup remote.  Normalizing once keeps every consumer from having to
