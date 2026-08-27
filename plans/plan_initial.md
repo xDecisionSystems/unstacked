@@ -177,7 +177,7 @@ named module before writing anything new. No marker means nothing is built.
 `app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
 **Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, and tests can insert a user, group, membership, and normalized permission.
 
-#### T1.2 — Password auth & sessions
+#### [x] T1.2 — Password auth & sessions
 `opus` / `sol` · **M** · **high** · depends: T1.1
 `app/auth.py`: Argon2 password hashing via `pwdlib`, login/logout routes, signed session cookies containing only minimal identifiers and the current `session_generation` (HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for every cookie-authenticated state change, generic/timing-resistant login failures, and bounded login rate limiting. Rotate the session on login/logout; increment the generation on password/admin security reset; and reject inactive users on every request. **Local passwords only** — no SSO/LDAP — but keep credential checking behind `authenticate(email, password) -> User | None`.
 **Done when:** login/logout work end to end; fixation and tampered/expired cookies are rejected; unsafe form requests without valid CSRF are rejected; inactive users lose access; and no route reads the password hash outside `authenticate()`.

@@ -10,6 +10,29 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 04:13 UTC — Claude Code
+Dispatched three parallel subagents (isolated git worktrees, opus tier) to
+coordinate plan implementation: T2.3 finish (update/delete/move/rename),
+T1.2 (web session auth), T6.1 (GitHub remote credentials) — run alongside
+Codex, which is independently committing to main. T2.3 was run solo
+(the plan forbids racing it against T2.1/T4.1/T4.2/T3.3); T1.2/T6.1 are
+independent modules so ran in parallel with it.
+
+T1.2 landed first. Reviewed its actual diff (not just its report):
+`app/web_auth.py`, cookie sessions cleanly separated from bearer-token
+auth, session_generation-based invalidation, synchronizer-pattern CSRF,
+fixation defense via a freshly rotated session id per login, shared rate
+limiter with the bearer login path. Independently re-ran the full suite
+and ruff myself before merging — both clean, 16 new tests. Found and
+fixed one real gap the subagent flagged itself: it added `itsdangerous`
+to pyproject.toml but had no uv binary to update uv.lock, which would
+have broken CI's `uv sync --locked`. Installed uv, regenerated the lock,
+reverified. Merged to main, marked T1.2 `[x]`.
+- Files: `.gitignore`, `uv.lock` (from me); `app/web_auth.py`,
+  `tests/test_web_auth.py`, `app/config.py`, `app/main.py`,
+  `.env.example`, `pyproject.toml` (merged from subagent);
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 03:52 UTC — Codex
 Completed the Git-wrapper plan task with guarded `origin` push and
 fetch/fast-forward operations. Synchronization now refuses dirty or divergent
@@ -179,11 +202,3 @@ and MCP transport to the frontier tier because failures can silently leak,
 corrupt, or destroy data. Added the risk-based assignment rule to the plan.
 - Files: `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-27 00:32 UTC — Codex
-Added a managed provider-neutral `llm.md` workflow to the portable content
-repository. It explains authenticated AI API use without secrets or content
-discovery data, is served by the app and copied verbatim to static `/llm.md`,
-and is provisioned for existing repositories only when absent so local edits
-are preserved. Documented the contract and added endpoint/build verification.
-- Files: `app/content.py`, `app/main.py`, `tests/test_content_build.py`,
-  `tests/test_ai_api.py`, `README.md`, `plans/plan_initial.md`, `LOG.md`
