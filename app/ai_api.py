@@ -1,16 +1,33 @@
+import re
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlmodel import Session
 
 from app.ai_service import AccessDenied
-from app.auth import authenticate, create_api_token, get_current_user
+from app.auth import authenticate, client_identifier, create_api_token, get_current_user
 from app.content import ContentError, ContentExists, ContentMissing, CreatedContent
 from app.models import User
 from app.paths import UnsafePath, make_slug, normalize_relative_path
 
 router = APIRouter(prefix="/api", tags=["AI content"])
+
+# Characters safe to place inside a quoted Content-Disposition filename.
+SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def attachment_disposition(filename: str) -> str:
+    """Build a Content-Disposition header that a hostile filename cannot break.
+
+    Slugs cannot contain quotes, but files may also be hand-created in the
+    content repository, so the name is sanitized rather than trusted.
+    """
+
+    fallback = SAFE_FILENAME_RE.sub("_", filename) or "page.md"
+    encoded = quote(filename, safe="")
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
 
 
 class TokenRequest(BaseModel):
@@ -84,7 +101,8 @@ def _content_error(exc: Exception) -> HTTPException:
 
 @router.post("/auth/token", response_model=TokenResponse)
 def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
-    client_host = request.client.host if request.client else "unknown"
+    settings = request.app.state.settings
+    client_host = client_identifier(request, settings.trusted_proxy_hops)
     request.app.state.login_limiter.check(f"{client_host}:{str(payload.email).casefold()}")
     with Session(request.app.state.engine) as session:
         user = authenticate(session, str(payload.email), payload.password)
@@ -187,11 +205,10 @@ def get_content(
     except (AccessDenied, ContentError, UnsafePath) as exc:
         raise _content_error(exc) from exc
     if download:
-        filename = path.rsplit("/", 1)[-1]
         return Response(
             content=raw,
             media_type="text/markdown; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers={"Content-Disposition": attachment_disposition(path.rsplit("/", 1)[-1])},
         )
     return {"path": path, "metadata": metadata, "markdown": markdown}
 

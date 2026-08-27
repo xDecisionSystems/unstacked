@@ -13,12 +13,18 @@ import yaml
 from git import Actor, Repo
 from sqlmodel import Session
 
-from app.acl import resolve_access
+from app.acl import load_policy
 from app.config import Settings
 from app.frontmatter_io import new_page, parse_page
 from app.git_backend import GitBackend, Revision, RevisionNotFound
 from app.models import User
-from app.paths import make_slug, normalize_relative_path, safe_join
+from app.paths import (
+    RESERVED_ROOT_NAMES,
+    make_slug,
+    normalize_relative_path,
+    path_depth,
+    safe_join,
+)
 
 
 class ContentError(RuntimeError):
@@ -66,7 +72,10 @@ from mkdocs.structure.files import Files
 def _is_draft(file, config):
     if not file.src_uri.endswith(".md"):
         return False
-    text = (Path(config.docs_dir) / file.src_uri).read_text(encoding="utf-8")
+    raw = (Path(config.docs_dir) / file.src_uri).read_text(encoding="utf-8")
+    # Normalize line endings first: a CRLF file would otherwise look like it
+    # had no front matter at all and a draft would be published.
+    text = raw.replace("\\r\\n", "\\n").replace("\\r", "\\n")
     if not text.startswith("---\\n"):
         return False
     end = text.find("\\n---\\n", 4)
@@ -232,6 +241,13 @@ class ContentRepository:
         actor: User,
     ) -> CreatedContent:
         parent = normalize_relative_path(parent)
+        # A book or a chapter, never deeper: the tree model and every nav
+        # listing assume at most two levels, so a page below that would be
+        # published to the static site yet invisible in the app.
+        if path_depth(parent) not in {1, 2}:
+            raise ContentError("pages live directly in a book or in one of its chapters")
+        if parent.split("/")[0] in RESERVED_ROOT_NAMES:
+            raise ContentError("reserved location")
         slug = make_slug(title, requested_slug)
         parent_path = safe_join(self.docs, parent)
         page_relative = f"{parent}/{slug}.md"
@@ -278,18 +294,24 @@ class ContentRepository:
         return document.metadata, document.content, raw
 
     def page_history(self, relative: str) -> list[Revision]:
-        return self.git.log(self._page_path(relative))
+        # Deliberately does not require the file to exist: a deleted page must
+        # stay inspectable and restorable, which is what stands in for a
+        # recycle bin here.
+        history = self.git.log(self._page_ref(relative))
+        if not history:
+            raise ContentMissing("page not found")
+        return history
 
     def page_diff(self, relative: str, from_revision: str, to_revision: str) -> str:
         try:
-            return self.git.diff(from_revision, to_revision, self._page_path(relative))
+            return self.git.diff(from_revision, to_revision, self._page_ref(relative))
         except RevisionNotFound as exc:
             raise ContentMissing("revision not found") from exc
 
     def restore_page(
         self, relative: str, revision: str, actor: User
     ) -> str:
-        page = self._page_path(relative)
+        page = self._deleted_or_existing_page_path(relative)
         with self.git.lock:
             try:
                 return self.git.restore_as_new_commit(
@@ -305,12 +327,14 @@ class ContentRepository:
                 raise ContentMissing("revision not found") from exc
 
     def authorized_pages(self, session: Session, user: User) -> list[str]:
+        # One permission load for the whole walk rather than a query per page.
+        policy = load_policy(session, user)
         pages = []
         for page in sorted(self.docs.rglob("*.md")):
             relative = page.relative_to(self.docs).as_posix()
-            if relative == "index.md":
+            if path_depth(relative) not in {2, 3}:
                 continue
-            if resolve_access(session, user, relative).can_read:
+            if policy.decide(relative).can_read:
                 pages.append(relative)
         return pages
 
@@ -379,11 +403,23 @@ class ContentRepository:
     def _write_nav(self, path: Path, title: str) -> None:
         self._atomic_write(path, yaml.safe_dump({"title": title, "nav": ["*"]}, sort_keys=False))
 
-    def _page_path(self, relative: str) -> Path:
+    def _page_ref(self, relative: str) -> str:
+        """Validate a page path for history use without requiring it on disk."""
+
         relative = normalize_relative_path(relative)
-        if not relative.endswith(".md"):
+        if not relative.endswith(".md") or path_depth(relative) not in {2, 3}:
             raise ContentMissing("page not found")
-        page = safe_join(self.docs, relative)
+        # Still resolved through safe_join so traversal cannot reach history
+        # for files outside docs/.
+        safe_join(self.docs, relative)
+        return f"docs/{relative}"
+
+    def _deleted_or_existing_page_path(self, relative: str) -> Path:
+        self._page_ref(relative)
+        return safe_join(self.docs, normalize_relative_path(relative))
+
+    def _page_path(self, relative: str) -> Path:
+        page = self._deleted_or_existing_page_path(relative)
         if not page.is_file():
             raise ContentMissing("page not found")
         return page

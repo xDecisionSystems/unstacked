@@ -1,7 +1,9 @@
+import unicodedata
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from pydantic import field_validator
 from sqlalchemy import Column, String, event
 from sqlmodel import Field, Session, SQLModel, create_engine
 
@@ -28,12 +30,38 @@ class UserGroup(SQLModel, table=True):
     group_id: int = Field(foreign_key="group.id", primary_key=True, ondelete="CASCADE")
 
 
+def normalize_path_prefix(raw: str) -> str:
+    """Return a grant prefix in the exact form ACL matching expects.
+
+    Matching is segment-aware, so a stored ``"book/chapter/"`` or
+    ``"/book/chapter"`` would silently never match anything.  Normalizing at
+    the boundary keeps a saved grant from quietly doing nothing.
+    """
+
+    candidate = unicodedata.normalize("NFKC", raw).strip().strip("/")
+    if not candidate:
+        raise ValueError("permission path prefix must not be empty")
+    if "\x00" in candidate or "\\" in candidate:
+        raise ValueError("permission path prefix contains invalid characters")
+    parts = [part for part in candidate.split("/") if part]
+    if len(parts) != len(candidate.split("/")):
+        raise ValueError("permission path prefix must not contain empty segments")
+    if any(part in {".", ".."} or part.startswith(".") for part in parts):
+        raise ValueError("permission path prefix must not contain relative segments")
+    return "/".join(parts)
+
+
 class Permission(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     group_id: int = Field(foreign_key="group.id", index=True, ondelete="CASCADE")
     path_prefix: str = Field(index=True)
     can_read: bool = True
     can_write: bool = False
+
+    @field_validator("path_prefix")
+    @classmethod
+    def _normalize_prefix(cls, value: str) -> str:
+        return normalize_path_prefix(value)
 
 
 def create_db_engine(db_path: Path):

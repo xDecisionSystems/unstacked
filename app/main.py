@@ -25,7 +25,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.content = content
     app.state.ai_service = AIContentService(content)
-    app.state.login_limiter = LoginRateLimiter(settings.login_attempts_per_minute)
+    app.state.login_limiter = LoginRateLimiter(
+        settings.login_attempts_per_minute,
+        max_keys=settings.max_rate_limit_keys,
+    )
     app.include_router(ai_router)
 
     @app.get("/healthz", tags=["System"])

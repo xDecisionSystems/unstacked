@@ -20,15 +20,23 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 class LoginRateLimiter:
-    def __init__(self, attempts: int, window_seconds: int = 60):
+    """Bounded in-process login throttle.
+
+    Keys are evicted as they expire and the table is capped, so an attacker
+    cycling identifiers cannot grow it without limit.
+    """
+
+    def __init__(self, attempts: int, window_seconds: int = 60, max_keys: int = 10_000):
         self.attempts = attempts
         self.window_seconds = window_seconds
+        self.max_keys = max_keys
         self._attempts: dict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
 
     def check(self, key: str) -> None:
         now = monotonic()
         with self._lock:
+            self._evict_expired(now)
             history = self._attempts[key]
             while history and history[0] <= now - self.window_seconds:
                 history.popleft()
@@ -39,6 +47,39 @@ class LoginRateLimiter:
                     headers={"Retry-After": str(self.window_seconds)},
                 )
             history.append(now)
+
+    def _evict_expired(self, now: float) -> None:
+        if len(self._attempts) < self.max_keys:
+            return
+        cutoff = now - self.window_seconds
+        expired = [
+            key
+            for key, history in self._attempts.items()
+            if not history or history[-1] <= cutoff
+        ]
+        for key in expired:
+            del self._attempts[key]
+        if len(self._attempts) >= self.max_keys:
+            # Every key is live: drop the oldest so memory stays bounded even
+            # under a distributed attack.
+            oldest = min(self._attempts, key=lambda key: self._attempts[key][-1])
+            del self._attempts[oldest]
+
+
+def client_identifier(request: Request, trusted_proxy_hops: int) -> str:
+    """Return the caller's address, honouring a configured proxy chain.
+
+    Without this every request behind a reverse proxy shares the proxy's
+    address and one client can exhaust the throttle for everyone.
+    """
+
+    if trusted_proxy_hops > 0:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        chain = [part.strip() for part in forwarded.split(",") if part.strip()]
+        if chain:
+            index = max(0, len(chain) - trusted_proxy_hops)
+            return chain[index]
+    return request.client.host if request.client else "unknown"
 
 
 def hash_password(password: str) -> str:
@@ -67,14 +108,14 @@ def create_api_token(user: User, settings: Settings) -> str:
         "aud": settings.api_token_audience,
         "jti": str(uuid4()),
     }
-    return jwt.encode(payload, settings.api_token_secret, algorithm="HS256")
+    return jwt.encode(payload, settings.token_secret, algorithm="HS256")
 
 
 def decode_api_token(token: str, settings: Settings) -> tuple[int, int]:
     try:
         payload = jwt.decode(
             token,
-            settings.api_token_secret,
+            settings.token_secret,
             algorithms=["HS256"],
             audience=settings.api_token_audience,
             options={"require": ["sub", "generation", "iat", "exp", "aud", "jti"]},

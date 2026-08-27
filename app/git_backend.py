@@ -10,6 +10,12 @@ from git import Actor, BadName, Repo
 
 SHA_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
 
+# ASCII unit/record separators cannot appear in a commit trailer, so parsing
+# stays unambiguous even for multi-line messages.
+_FIELD_SEPARATOR = "\x1f"
+_RECORD_SEPARATOR = "\x1e"
+_LOG_FORMAT = _FIELD_SEPARATOR.join(["%H", "%an", "%ae", "%aI", "%B"]) + _RECORD_SEPARATOR
+
 
 class RevisionNotFound(RuntimeError):
     """Raised when a revision or its version of a path cannot be found."""
@@ -35,46 +41,88 @@ class GitBackend:
         return Repo(self.repo_path)
 
     def commit_paths(self, paths: list[Path], *, name: str, email: str, message: str) -> str:
+        """Commit exactly ``paths`` on top of HEAD.
+
+        The index is reset to HEAD first, so content an operator (or a crashed
+        earlier operation) left staged cannot be swept into this commit and
+        misattributed to ``name``.  Only staging is discarded; working-tree
+        files are never modified.
+        """
+
         relative = [self._relative_path(path) for path in paths]
         repo = self.repo
+        if repo.head.is_valid():
+            # Discard anything else that was staged before adding our paths.
+            # Working-tree files are untouched, so an operator's edits survive;
+            # only their staging is dropped, which is far better than silently
+            # committing their work under this user's name.
+            repo.index.reset(repo.head.commit)
         try:
+            # Plain `git add` also records removals, so this same path serves
+            # deletions once they exist.
             repo.index.add(relative)
             actor = Actor(name, email)
             commit = repo.index.commit(message, author=actor, committer=actor)
             return commit.hexsha
         except Exception:
             if repo.head.is_valid():
-                repo.index.reset(repo.head.commit, paths=relative)
+                repo.index.reset(repo.head.commit)
             raise
 
-    def log(self, path: Path) -> list[Revision]:
-        relative = self._relative_path(path)
-        return [
-            Revision(
-                sha=commit.hexsha,
-                message=commit.message.rstrip("\n"),
-                author_name=commit.author.name,
-                author_email=commit.author.email,
-                authored_at=commit.authored_datetime.isoformat(),
-            )
-            for commit in self.repo.iter_commits(paths=relative)
-        ]
+    def log(self, path: Path | str) -> list[Revision]:
+        """Revisions touching ``path``, newest first, following renames.
 
-    def diff(self, sha_a: str, sha_b: str, path: Path) -> str:
+        Uses ``git log --follow`` rather than ``rev-list`` because only the
+        former can trace a page across a slug rename, and git history is the
+        only revision history this project keeps.
+        """
+
         relative = self._relative_path(path)
-        before = self.show(sha_a, relative)
-        after = self.show(sha_b, relative)
+        repo = self.repo
+        if not repo.head.is_valid():
+            return []
+        raw = repo.git.log(
+            "--follow",
+            f"--format={_LOG_FORMAT}",
+            "--",
+            relative,
+        )
+        revisions = []
+        for record in raw.split(_RECORD_SEPARATOR):
+            record = record.strip("\n")
+            if not record:
+                continue
+            sha, author_name, author_email, authored_at, message = record.split(
+                _FIELD_SEPARATOR
+            )
+            revisions.append(
+                Revision(
+                    sha=sha,
+                    message=message.rstrip("\n"),
+                    author_name=author_name,
+                    author_email=author_email,
+                    authored_at=authored_at,
+                )
+            )
+        return revisions
+
+    def diff(self, sha_a: str, sha_b: str, path: Path | str) -> str:
+        relative = self._relative_path(path)
+        before = self._show_or_empty(sha_a, relative)
+        after = self._show_or_empty(sha_b, relative)
+        if before is None and after is None:
+            raise RevisionNotFound("revision does not contain path")
         return "".join(
             difflib.unified_diff(
-                before.splitlines(keepends=True),
-                after.splitlines(keepends=True),
-                fromfile=f"{sha_a}:{relative}",
-                tofile=f"{sha_b}:{relative}",
+                (before or "").splitlines(keepends=True),
+                (after or "").splitlines(keepends=True),
+                fromfile=f"{sha_a}:{relative}" if before is not None else "/dev/null",
+                tofile=f"{sha_b}:{relative}" if after is not None else "/dev/null",
             )
         )
 
     def show(self, sha: str, path: Path | str) -> str:
-        relative = self._relative_path(path) if isinstance(path, Path) else path
+        relative = self._relative_path(path)
         commit = self._commit(sha)
         try:
             blob = commit.tree / relative
@@ -82,7 +130,10 @@ class GitBackend:
             raise RevisionNotFound("revision does not contain path") from exc
         if blob.type != "blob":
             raise RevisionNotFound("revision path is not a file")
-        return blob.data_stream.read().decode("utf-8")
+        try:
+            return blob.data_stream.read().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RevisionNotFound("revision path is not a UTF-8 text file") from exc
 
     def restore_as_new_commit(
         self,
@@ -93,12 +144,19 @@ class GitBackend:
         email: str,
         message: str,
     ) -> str:
-        """Restore one tracked file without rewriting history or staging other paths."""
+        """Restore one tracked file without rewriting history or staging other paths.
+
+        A page deleted in an earlier commit is recreated, which is what stands
+        in for a recycle bin here.
+        """
+
         relative = self._relative_path(path)
         restored = self.show(revision, relative)
         existed = path.exists()
         original = path.read_bytes() if existed else None
+        created_parents = not path.parent.exists()
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             self._atomic_write(path, restored)
             return self.commit_paths([path], name=name, email=email, message=message)
         except Exception:
@@ -107,13 +165,31 @@ class GitBackend:
                 self._atomic_write_bytes(path, original)
             else:
                 path.unlink(missing_ok=True)
+                if created_parents:
+                    self._remove_empty_parents(path.parent)
             raise
 
-    def _relative_path(self, path: Path) -> str:
+    def _show_or_empty(self, sha: str, relative: str) -> str | None:
+        try:
+            return self.show(sha, relative)
+        except RevisionNotFound:
+            return None
+
+    def _relative_path(self, path: Path | str) -> str:
+        if isinstance(path, str):
+            return path
         try:
             return path.resolve().relative_to(self.repo_path).as_posix()
         except ValueError as exc:
             raise ValueError("path is outside the content repository") from exc
+
+    def _remove_empty_parents(self, directory: Path) -> None:
+        while directory != self.repo_path and directory.is_dir():
+            try:
+                directory.rmdir()
+            except OSError:
+                return
+            directory = directory.parent
 
     def _commit(self, sha: str):
         if not SHA_RE.fullmatch(sha):

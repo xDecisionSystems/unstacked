@@ -10,6 +10,44 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 01:05 UTC — Claude Code
+Reviewed Codex's implementation and fixed everything found, most-severe
+first. High: the JWT signing secret defaulted to a shared constant and was
+only validated in production, so a default-environment run let anyone
+forge an admin token — now no default; dev/test generate and persist a
+private secret, production refuses to start without one, known
+placeholders are rejected everywhere. `commit_paths` committed the whole
+index (an operator's staged work could be swept into another user's commit
+and misattributed) — the index is now reset to HEAD before staging.
+Medium: `log()` used rev-list, which can't follow renames — switched to
+`git log --follow`; history/diff/restore required the file to exist,
+making deleted pages unrecoverable — they now work from history alone,
+which is what stands in for the recycle bin; the draft hook treated CRLF
+files as having no front matter and published them — now normalizes line
+endings first; pages could be created below the two-level depth limit,
+buildable but invisible in the tree — now rejected; the login rate limiter
+trusted the raw socket peer (one shared bucket behind any proxy) and grew
+unbounded — added a configurable trusted-proxy-hops lookup and a capped,
+evicting table. Lower: normalized `Permission.path_prefix` at the model
+boundary so a trailing slash can't silently grant nothing; batched ACL
+loading (`load_policy`) so a tree listing queries permissions once instead
+of per page; quoted `Content-Disposition` filenames against header
+injection; added Windows-reserved-name rejection to path safety; expanded
+`test_acl.py` to the plan's full nine-case truth table and `test_paths.py`
+to the full adversarial set (both found additional gaps in normalization,
+now fixed too); added a coverage floor (85%) to CI. Updated the plan with
+`[x]`/`[~]` status markers and Remaining notes on every partial task, and
+recorded the review in an Implementation checkpoint addendum. Full suite:
+100 tests passing, 88.65% coverage, ruff clean, worst-case drill still
+passes against a fresh bootstrap.
+- Files: `app/config.py`, `app/git_backend.py`, `app/paths.py`,
+  `app/acl.py`, `app/models.py`, `app/auth.py`, `app/content.py`,
+  `app/ai_api.py`, `app/main.py`, `.env.example`, `.github/workflows/ci.yml`,
+  `tests/test_acl.py`, `tests/test_paths.py`, `tests/test_config.py`,
+  `tests/test_git_backend.py`, `tests/test_rate_limit.py`,
+  `tests/test_content_structure.py`, `tests/test_content_build.py`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 00:43 UTC — Codex
 Ignored the generated coverage data file so the CI-equivalent verification
 command leaves no local test artifact in the application worktree.
@@ -126,8 +164,3 @@ concurrency, asset uploads, API tokens for AI clients, CSRF, mkdocs.yml
 ownership, and operator docs. Added dispatch guidance and open questions.
 - Files: `plans/plan_initial.md`
 
-## 2026-08-26 23:46 UTC — Claude Code
-Created LOG.md and added the logging requirement to AGENTS.md so every
-future change (by either agent) gets recorded here, not just at commit
-time.
-- Files: `LOG.md`, `AGENTS.md`

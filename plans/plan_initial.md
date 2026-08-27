@@ -14,7 +14,18 @@ Confirmed scope (from user):
 
 ### Implementation checkpoint (2026-08-27)
 
-The first vertical slice is implemented: project/config scaffolding, the four-table SQLite schema with an initial Alembic migration, Argon2 password verification and signed bearer tokens, deterministic ACL resolution, path-safe content creation, an inter-process Git mutation lock, portable content-repo bootstrap, a shared AI service, and REST/OpenAPI endpoints for ACL-filtered tree/page/ZIP downloads plus create-book/chapter/page. Integration tests verify authentication, revocation, rate limiting, ACL conflicts, traversal/symlink rejection, Git authorship, and a real `mkdocs build --strict` with draft exclusion. Search, MCP transport, web UI, history, uploads/assets, backup/push, and later lifecycle operations remain planned work.
+The first vertical slice is implemented: project/config scaffolding, the four-table SQLite schema with an initial Alembic migration, Argon2 password verification and signed bearer tokens, deterministic ACL resolution, path-safe content creation, an inter-process Git mutation lock, portable content-repo bootstrap, a shared AI service, and REST/OpenAPI endpoints for ACL-filtered tree/page/ZIP downloads plus create-book/chapter/page and page history. Integration tests verify authentication, revocation, rate limiting, ACL conflicts, traversal/symlink rejection, Git authorship, and a real `mkdocs build --strict` with draft exclusion. Search, MCP transport, web UI, uploads/assets, backup/push, and the remaining lifecycle operations (update/delete/move/rename) remain planned work.
+
+Per-task status is tracked with `[x]`/`[~]` markers below; a `[~]` task names what already exists so nobody rebuilds it.
+
+**Review pass (2026-08-27).** A review of that slice found and fixed:
+- The API token signing secret defaulted to a shared constant and was only validated in `production`, so a default-environment deployment let anyone forge an admin token. There is now no default: development generates a private persisted secret, production refuses to start without one, and known placeholders are rejected everywhere.
+- `commit_paths` committed the whole index, so anything an operator had staged was swept into the next user's commit under their name. The index is now reset to HEAD before staging.
+- `log()` used `rev-list`, which cannot follow renames; it now uses `git log --follow`, so history survives the slug renames T2.3 will add.
+- History, diff and restore required the file to exist, making deleted pages unrecoverable through the API and contradicting "git replaces the recycle bin". They now operate on the path's history.
+- The draft hook treated CRLF files as having no front matter and published them.
+- Pages could be created below the two-level limit, where they would build into the static site but never appear in the tree.
+- Login throttling trusted the socket peer (one shared bucket behind any proxy) and grew an unbounded key table.
 
 ## Architecture
 
@@ -134,6 +145,11 @@ reviewed primitive removes the risky part.
 
 Tasks marked **[P]** in the same phase are parallelizable — no shared files, no dependency between them.
 
+**Status markers.** `[x]` every acceptance criterion is met and tested. `[~]`
+code exists and is used in production paths but at least one criterion is
+unmet — read the task's "Remaining" note before picking it up, and check the
+named module before writing anything new. No marker means nothing is built.
+
 ---
 
 ### Phase 0 — Scaffolding
@@ -143,7 +159,7 @@ Tasks marked **[P]** in the same phase are parallelizable — no shared files, n
 `pyproject.toml` with a supported Python floor and bounded direct dependencies (FastAPI, uvicorn, SQLModel/SQLAlchemy, Alembic, GitPython, python-frontmatter, python-slugify, `pwdlib[argon2]`, itsdangerous, Jinja2, filelock, mkdocs, mkdocs-material, mkdocs-awesome-nav, HTML sanitizer, pytest, ruff); a reproducible lock file; `.gitignore` (must ignore `content/`, `data/`, `site/`, `.venv`); lint config; empty `app/` and `tests/` packages; README dev setup.
 **Done when:** a clean locked install succeeds, `ruff check` passes, and dependency versions used by app CI and the generated content-repo `requirements.txt` are intentionally compatible.
 
-#### T0.2 — Config module **[P]**
+#### [x] T0.2 — Config module **[P]**
 `sonnet` / `terra` · **S** · **medium** · depends: —
 `app/config.py` using pydantic-settings: `content_repo_path`, `db_path`, `session_secret`, API-token signing secret/audience/TTL, git remote/auth settings, `site_output_path`, upload/search limits, and `debug`. Load from env + ignored `.env`; include a redacted `.env.example`. Paths are resolved and validated once at startup. Production secrets have no insecure defaults and must be distinct where separation matters.
 **Done when:** development settings import with explicit safe dev values, production startup rejects missing/placeholder secrets, and no secret is committed, logged, placed in a command line, or rendered.
@@ -152,20 +168,22 @@ Tasks marked **[P]** in the same phase are parallelizable — no shared files, n
 
 ### Phase 1 — Data layer & auth
 
-#### T1.1 — Database schema
+#### [~] T1.1 — Database schema
 `sonnet` / `terra` · **M** · **high** · depends: T0.1, T0.2
 `app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
 **Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, and tests can insert a user, group, membership, and normalized permission.
+**Remaining:** `app/models.py` + Alembic initial migration cover all four tables, FK cascades and `normalize_path_prefix`. Remaining: unique/check constraints beyond email/name, and constraint-behaviour tests.
 
 #### T1.2 — Password auth & sessions
 `opus` / `sol` · **M** · **high** · depends: T1.1
 `app/auth.py`: Argon2 password hashing via `pwdlib`, login/logout routes, signed session cookies containing only minimal identifiers and the current `session_generation` (HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for every cookie-authenticated state change, generic/timing-resistant login failures, and bounded login rate limiting. Rotate the session on login/logout; increment the generation on password/admin security reset; and reject inactive users on every request. **Local passwords only** — no SSO/LDAP — but keep credential checking behind `authenticate(email, password) -> User | None`.
 **Done when:** login/logout work end to end; fixation and tampered/expired cookies are rejected; unsafe form requests without valid CSRF are rejected; inactive users lose access; and no route reads the password hash outside `authenticate()`.
 
-#### T1.3 — API token auth
+#### [~] T1.3 — API token auth
 `opus` / `sol` · **M** · **high** · depends: T1.1, T1.2
 Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, and the user's current `api_token_generation`; verify an explicit algorithm and audience, then resolve the active user so machine clients inherit current group permissions. Admin/user revocation increments the generation and revokes all of that user's issued tokens. Keep tokens out of storage and logs, and document the lack of per-token revocation.
 **Done when:** a valid token authenticates as its active user; expired, wrong-audience, wrong-generation, tampered, and deactivated-user tokens fail; revocation invalidates all prior tokens; and raw tokens are never persisted or logged.
+**Remaining:** `app/auth.py` issues/verifies generation-scoped JWTs. Remaining: explicit tests for expired, wrong-audience, tampered and deactivated-user tokens; admin-facing revoke endpoint.
 
 #### [x] T1.4 — First-run bootstrap CLI
 `sonnet` / `terra` · **M** · **medium** · depends: T1.1, T3.2
@@ -177,10 +195,11 @@ Make it idempotent and non-interactive-capable without accepting passwords in pr
 
 ### Phase 2 — Content engine
 
-#### T2.1 — Path safety & slugs
+#### [~] T2.1 — Path safety & slugs
 `opus` / `sol` · **S** · **high** · depends: T0.1, T0.2
 `app/paths.py`: slugify titles; canonicalize URL paths exactly once; reject double encoding; and provide a `safe_join(docs_root, *parts)` that resolves the existing nearest parent and **rejects anything escaping `docs/`**, including symlink escapes and case-fold collisions on case-insensitive filesystems. Handle reserved/internal names (`assets`, `.pages`, dotfiles), bounded lengths, collisions, null bytes, separators, Windows-reserved names, and Unicode normalization. Every filesystem module uses typed validated relative paths from here, never raw request strings.
 **Done when:** an adversarial cross-platform suite covers traversal, encoding, symlink races/escapes, reserved names, collisions, and Unicode normalization without rejecting ordinary international titles.
+**Remaining:** `app/paths.py` enforces canonical form, traversal/symlink escape, reserved and Windows device names, NFKC normalization; `tests/test_paths.py` is the adversarial suite. Remaining: symlink TOCTOU races (check-then-open) are not addressed.
 > Security-critical: this is the single control preventing arbitrary filesystem read/write in a file-backed app.
 
 #### [x] T2.2 — Front-matter I/O **[P]**
@@ -188,15 +207,17 @@ Make it idempotent and non-interactive-capable without accepting passwords in pr
 `app/frontmatter_io.py`: read/write page files via `python-frontmatter`; schema for `id`/`title`/`created_at`/`updated_at`/`author`/`tags`/`draft`; tolerate missing/malformed front matter (hand-written or pasted-in files must not crash the app); preserve unknown keys on round-trip.
 **Done when:** round-trip tests preserve every field including unknown keys, and a file with no front matter still loads with sane defaults.
 
-#### T2.3 — Content repository
+#### [~] T2.3 — Content repository
 `opus` / `sol` · **L** · **high** · depends: T2.1, T2.2, T2.4, T3.1
 `app/content.py`: the core tree API — list/get/create/update/delete/move/rename for books, chapters, and pages (no shelves; books live at the `docs/` root); tree walker producing the nav model; slug rename via the git wrapper so history follows the file; title change updates front matter *and* `.pages` without moving the file (URLs stay stable); enforce the two-level depth limit. All page writes use same-directory temporary files plus atomic replace. Each logical operation declares every affected content/nav/asset path and is committed once through the locked git mutation API; direct ad-hoc filesystem writes are forbidden.
 **Done when:** every successful operation leaves a clean index and a tree that `mkdocs build --strict` accepts; injected failures restore the pre-operation bytes; and rename preserves `git log --follow` history.
+**Remaining:** `app/content.py` implements create/read for books, chapters and pages plus tree/export and the two-level depth limit. Remaining: update, delete, move and slug-rename — including `git mv` so `--follow` keeps history.
 
 #### T2.4 — Nav (`.pages`) management
 `sonnet` / `terra` · **M** · **medium** · depends: T0.1, T2.1
 `app/nav.py`: parse and write awesome-nav v3 `.pages` files; explicit ordering and display titles; preserve unknown supported keys; reject malformed files without clobbering them; remove stale entries on delete. Writes are atomic and are orchestrated by T2.3 rather than committed independently.
 **Done when:** reorder changes only `.pages`; operator-added supported keys survive round trips; malformed YAML remains untouched with an actionable error; and `mkdocs build --strict` reflects the order.
+> Note: a minimal `_write_nav` currently lives inside `app/content.py` and only writes `{title, nav: ["*"]}` for a new container. This task extracts it into `app/nav.py` and adds parsing, reordering and stale-entry removal; until then `nav` in the module table is aspirational.
 
 #### T2.5 — Assets & uploads
 `opus` / `sol` · **M** · **high** · depends: T2.1, T2.3
@@ -207,15 +228,17 @@ Image/attachment upload into `docs/assets/<book>/`, request and decompressed-siz
 
 ### Phase 3 — Git backend
 
-#### T3.1 — Git wrapper
+#### [~] T3.1 — Git wrapper
 `opus` / `sol` · **M** · **high** · depends: T0.1, T0.2
 `app/git_backend.py`: GitPython wrapper — exact-path staging and `commit_as(user, paths, message)`, `log(path)`, `diff(sha_a, sha_b, path)`, `show(sha, path)`, restore-as-a-new-commit, `push()`, and guarded fetch/fast-forward. Validate SHAs/ref names and paths; never invoke a shell with interpolated input; never stage unrelated working-tree changes; scrub credentials and local sensitive paths from typed errors.
 **Done when:** two users produce distinct authors; history follows a rename; restore adds a commit; unrelated dirty files remain untouched; and adversarial refs/paths cannot become command options or escape the repo.
+**Remaining:** `app/git_backend.py` covers commit-as-user (index reset to HEAD first, so unrelated staging is never committed), `log` via `git log --follow`, diff, show and restore-as-new-commit. Remaining: `push()` and guarded fetch/fast-forward, and credential scrubbing in typed errors (T6.1).
 
-#### T3.2 — Content repo bootstrap
+#### [~] T3.2 — Content repo bootstrap
 `sonnet` / `terra` · **M** · **medium** · depends: T3.1
 Initialize `content/` if absent: `git init` with an explicit initial branch; operator-owned `mkdocs.yml` enabling `search` and `awesome-nav` configured with `filename: .pages`; `requirements.txt` with exact build dependency versions; `hooks/drafts.py`; starter `docs/index.md`; a managed provider-neutral `docs/llm.md` workflow; root `docs/.pages`; and `.gitignore` (ignore `site/`). Bootstrap refuses to adopt a non-empty unknown directory and commits the initial tree. Existing content repos receive the workflow only when it is absent; the app never overwrites a locally maintained version. T7.2 adds CI without changing build semantics.
 **Done when:** bootstrap is idempotent; the generated repo builds via only `python -m venv`, `pip install -r requirements.txt`, and `mkdocs build --strict`; the workflow is available both as the rendered page and raw static `/llm.md`; draft output and draft search records are absent; malformed draft metadata fails clearly; and no app/database import is reachable from the hook.
+**Remaining:** `ContentRepository.initialize()` generates mkdocs.yml, requirements.txt, hooks/drafts.py, docs/.pages, index.md and llm.md, and is idempotent. Remaining: T7.2's CI workflow is not yet written into the content repo.
 
 #### T3.3 — Write lock & optimistic concurrency
 `opus` / `sol` · **L** · **max** · depends: T3.1, T2.3
@@ -231,10 +254,11 @@ Routes for per-page history list, diff between revisions, and restore-to-revisio
 
 ### Phase 4 — Access control
 
-#### T4.1 — ACL resolution engine
+#### [~] T4.1 — ACL resolution engine
 `opus` / `sol` · **M** · **max** · depends: T1.1, T2.1
 `app/acl.py`: given a user and validated `docs/`-relative path, resolve read/write. A prefix matches whole path segments only. Across all memberships, select only rules at the greatest matching segment depth; at that depth, explicit deny wins over allow for each capability. `can_write=true` requires `can_read=true` at validation time. Admins bypass; inactive users never do; default deny. Ancestor containers are visible only when needed to reach a readable descendant, without granting access to their page bodies. Keep the resolver pure and return an explanation object for admin diagnostics without exposing it to unauthorized callers.
 **Done when:** a truth table covers inherited allow, more-specific allow/deny, equal-specificity cross-group conflict, sibling-prefix confusion (`chapter` vs `chapter-old`), write/read invariants, ancestor visibility, inactive users, default deny, and admin bypass.
+**Remaining:** `app/acl.py` is a pure resolver with segment-aware matching, greatest-specificity selection, deny-wins ties, write-implies-read, admin bypass and inactive denial; `AccessPolicy` loads rules once per request. Remaining: ancestor container visibility, and the explanation object for admin diagnostics.
 > Security-critical: every other module trusts this answer.
 
 #### T4.2 — ACL enforcement dependencies
@@ -326,30 +350,33 @@ Search box, results page with snippets and breadcrumbs.
 
 ### Phase 9 — AI integration
 
-#### T9.1 — Shared AI service layer
+#### [~] T9.1 — Shared AI service layer
 `opus` / `sol` · **L** · **high** · depends: T8.1, T4.2, T2.3
 `app/ai_service.py`: one permission-aware implementation of search, tree/list, get/download page, filtered export, create book, create chapter, and create page. Return structured results with deterministic item/character limits (do not depend on a model tokenizer). Treat wiki text as untrusted data, not tool instructions. Book/chapter creation is admin-only; page creation requires write access on the parent. Both transports call only this service and its ACL-aware content/search modules.
 **Done when:** direct service contract tests prove read/export and create operations apply the same ACL and limits expected by both transports, including missing/unreadable equivalence and Git author attribution.
+**Remaining:** `app/ai_service.py` is the single ACL-checked entry point for tree/get/export/create/history used by the REST transport. Remaining: search, and the token-budget-aware truncation contract.
 
 #### T9.2 — MCP server (Claude) **[P]**
 `opus` / `sol` · **L** · **high** · depends: T9.1, T1.3
 MCP server exposing search/list/get/download and create-book/chapter/page tools over a documented transport, authenticated by the signed bearer token from T1.3 so calls run as an active user with current permissions. Validate origin/transport security as applicable; expose bounded schemas and neutral tool descriptions.
 **Done when:** a supported MCP client reads and creates only authorized content; expired/revoked tokens fail; oversized/malformed calls are bounded; and wiki content cannot alter tool authorization or response envelopes.
 
-#### T9.3 — REST + OpenAPI surface (ChatGPT) **[P]**
+#### [~] T9.3 — REST + OpenAPI surface (ChatGPT) **[P]**
 `sonnet` / `terra` · **M** · **high** · depends: T9.1, T1.3
 `/api/ai/*` endpoints with a provider-neutral OpenAPI schema for ACL-filtered tree/page/ZIP downloads and create-book/chapter/page operations; signed bearer-token auth, request/response limits, and rate limiting. Keep the REST contract provider-neutral even if a ChatGPT Action is the first client.
 **Done when:** the generated OpenAPI validates against the target action client; unauthenticated/expired/revoked calls fail; response limits are enforced; create operations produce one correctly authored Git commit; and REST/MCP authorization results match.
+**Remaining:** `app/ai_api.py` exposes auth, tree, content, export, history, diff, restore and create endpoints with bearer auth. Remaining: search endpoint, response size limits, rate limiting beyond login, and OpenAPI validation against a real action client.
 
 ---
 
 ### Phase 10 — Testing, CI, docs
 
-#### T10.1 — ACL & path-safety test suites
+#### [~] T10.1 — ACL & path-safety test suites
 `opus` / `sol` · **L** · **high** · depends: T4.2, T2.1
 Consolidate the task-level ACL/path tests into exhaustive security regression suites, including segment-aware matching, conflicting equal-depth rules, inactive users, ancestor visibility, Unicode/case behavior, URL decoding, symlinks, and route/service authorization coverage. Add property-based tests where they improve boundary coverage.
+**Remaining:** `tests/test_acl.py` (truth table) and `tests/test_paths.py` (adversarial) are in place. Remaining: ancestor-visibility and explanation-object cases once T4.1 adds them, route/service authorization coverage (needs T4.2), and property-based boundary tests.
 
-#### T10.2 — Content round-trip integration test **[P]**
+#### [x] T10.2 — Content round-trip integration test **[P]**
 `sonnet` / `terra` · **L** · **high** · depends: T2.3, T3.2, T4.2
 Create book → chapter → page via the API, assert exact on-disk/front-matter/nav/git layout, then run `mkdocs build --strict`. Include title edit, reorder, move, delete, failed-operation rollback, and an unrelated dirty file.
 
