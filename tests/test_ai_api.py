@@ -3,9 +3,11 @@ from io import BytesIO
 from zipfile import ZipFile
 
 import jwt
+import pytest
 from git import Repo
 from sqlmodel import Session
 
+from app.acl import AccessDenied, AuthorizationContext
 from app.auth import create_api_token, hash_password
 from app.models import Group, Permission, User, UserGroup
 from tests.conftest import bearer
@@ -127,6 +129,69 @@ def test_non_admin_can_create_page_only_with_parent_write(client, app_env):
     assert forbidden.status_code == 404
     tree = client.get("/api/ai/tree", headers=headers).json()
     assert tree["books"][0]["slug"] == "engineering"
+
+
+def test_unreadable_and_missing_pages_have_the_same_public_response(client, app_env):
+    app, _settings, _admin, token = app_env
+    headers = bearer(token)
+    response = client.post("/api/ai/books", json={"title": "Private"}, headers=headers)
+    assert response.status_code == 201
+    assert (
+        client.post(
+            "/api/ai/books/private/pages",
+            json={"title": "Secret", "markdown": "do not disclose"},
+            headers=headers,
+        ).status_code
+        == 201
+    )
+    with Session(app.state.engine) as session:
+        reader = User(
+            username="reader",
+            email="reader@example.com",
+            password_hash=hash_password("reader password is sufficiently long"),
+            display_name="Reader",
+        )
+        session.add(reader)
+        session.commit()
+        session.refresh(reader)
+        reader_token = create_api_token(reader, app.state.settings)
+
+    unreadable = client.get("/api/ai/content/private/secret.md", headers=bearer(reader_token))
+    missing = client.get("/api/ai/content/private/missing.md", headers=bearer(reader_token))
+    assert (unreadable.status_code, unreadable.json()) == (missing.status_code, missing.json())
+    assert unreadable.status_code == 404
+
+
+def test_stale_or_descendant_grants_block_create_and_delete(client, app_env):
+    app, _settings, admin, token = app_env
+    headers = bearer(token)
+    assert client.post("/api/ai/books", json={"title": "Ops"}, headers=headers).status_code == 201
+    with Session(app.state.engine) as session:
+        group = Group(name="protected-paths")
+        session.add(group)
+        session.commit()
+        session.refresh(group)
+        session.add(
+            Permission(group_id=group.id, path_prefix="ops/future.md", can_read=True)
+        )
+        session.add(
+            Permission(group_id=group.id, path_prefix="ops/descendant", can_read=True)
+        )
+        session.commit()
+        persisted_admin = session.get(User, admin.id)
+        authorization = AuthorizationContext(session, persisted_admin)
+        with pytest.raises(AccessDenied):
+            app.state.ai_service.create_page(
+                authorization,
+                parent="ops",
+                title="Future",
+                slug=None,
+                markdown="body",
+                tags=[],
+                draft=False,
+            )
+        with pytest.raises(AccessDenied):
+            app.state.ai_service.delete_book(authorization, "ops")
 
 
 def test_authentication_validation_and_collisions(client, app_env):
