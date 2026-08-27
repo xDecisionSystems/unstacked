@@ -285,7 +285,7 @@ Routes for per-page history list, diff between revisions, and restore-to-revisio
 **Done when:** a truth table covers inherited allow, more-specific allow/deny, equal-specificity cross-group conflict, sibling-prefix confusion (`chapter` vs `chapter-old`), write/read invariants, ancestor visibility, inactive users, default deny, and admin bypass.
 > Security-critical: every other module trusts this answer.
 
-#### T4.2 — ACL enforcement dependencies
+#### [x] T4.2 — ACL enforcement dependencies
 `opus` / `sol` · **L** · **max** · depends: T4.1, T2.3
 Central authorization service plus FastAPI dependencies `require_read(path)` / `require_write(path)` wired into **every** content, search, history, asset, render, export, and AI path. Service-layer methods require an authorization context too, so internal transports cannot bypass route dependencies. Tree listings filter unreadable nodes; unreadable paths return the same 404 shape/timing class as missing paths. Create checks the destination parent and refuses a path carrying an orphaned exact rule; delete checks the target; move/slug-rename checks source and destination and is admin-only in the MVP because it changes path-based access. Delete/move/slug-rename is blocked while any exact or descendant permission rule targets the affected subtree; an admin must deliberately remove/recreate those grants first, and destination rules then determine access. This avoids pretending SQLite and git can form one atomic transaction.
 **Done when:** route/service coverage tests fail for unguarded reads or writes; missing/unreadable responses are indistinguishable at the contract level; and structural authorization cases cannot move content into or out of unauthorized trees, strand reusable stale grants, or partially coordinate database and git state.
@@ -342,7 +342,7 @@ Configure and validate an optional `origin`; support a least-privilege deploy ke
 "Verified private" is implemented as an explicit operator affirmation (`UNSTACKED_GITHUB_REMOTE_CONFIRMED_PRIVATE`) rather than a live GitHub API check — this repo has no way to test a real network call, and nothing else in the codebase makes one either. **Coverage gaps that need a real GitHub account to close:** SSH host-key pinning enforcement against actual github.com (the *configuration* is tested; OpenSSH's enforcement is not), an authenticated HTTPS push to a real private repo, and an actual privacy check (candidate for T6.3, which already expects network access).
 Despite GitHub-flavored settings names (`github_remote_url`, `github_token`, …), the implementation works against any git host reachable over https/ssh — nothing in `configure_remote` is GitHub-specific. Renaming those settings to generic `backup_remote_*` names is a reasonable future cleanup but not required; not doing it now to avoid unrelated churn.
 
-#### T6.2 — Debounced backup-sync worker
+#### [x] T6.2 — Debounced backup-sync worker
 `opus` / `sol` · **L** · **high** · depends: T6.1, T3.3
 Background task coalescing rapid saves into a periodic sync to whichever backup target is configured (today: git-remote push via T6.1); retry transient failures with bounded exponential backoff and jitter; never block a save on network I/O. For the git-remote target, derive durable pending state from local-vs-upstream refs, so startup resumes an unpushed branch without a queue table. Serialize with the repository lock and stop retrying non-fast-forward/auth/configuration errors until admin action. Surface ahead count, last success, and sanitized failure in the admin UI. Do nothing at all — no background task, no admin-UI status — when no backup target is configured; this must never be on the startup-required path.
 **Done when:** ten rapid saves produce ten commits but fewer pushes; restart/offline periods recover automatically; divergence never triggers merge/force; worker/admin git operations cannot race content commits; and the app starts and runs normally with no backup target configured at all.
@@ -380,7 +380,7 @@ The workflow committed *inside the content repo* that installs `requirements.txt
 
 ### Phase 8 — Search
 
-#### T8.1 — Search core
+#### [x] T8.1 — Search core
 `opus` / `sol` · **L** · **high** · depends: T2.3, T4.1
 `app/search.py`: fixed-string search by default over Markdown bodies and front-matter titles/tags; bound query length, result count, file size, runtime, and snippet size. Use ripgrep through argument arrays when available with a behaviorally equivalent pure-Python fallback. Discover candidate paths, authorize each path **before reading content or producing snippets/counts**, and paginate only the filtered set. Escape highlights at the final HTML boundary.
 **Done when:** a term appearing only in an unreadable page yields no result, count, timing-dependent snippet, or error leak; fallback and ripgrep return the same ordered contract; pathological input/files respect limits; and no query is interpreted as a regex or command option.

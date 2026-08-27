@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 05:37 UTC — Codex
+Integrated ACL enforcement, bounded ACL-first search, and the optional backup
+sync worker. The agents each passed focused security tests and a separate
+Docker Compose deployment (`/healthz` on ports 18021–18023); the combined lint
+and test suite passed before marking T4.2, T6.2, and T8.1 complete.
+- Files: `app/acl.py`, `app/ai_api.py`, `app/ai_service.py`, `app/backup.py`,
+  `app/config.py`, `app/git_backend.py`, `app/main.py`, `app/search.py`,
+  `tests/test_acl.py`, `tests/test_ai_api.py`, `tests/test_backup.py`,
+  `tests/test_search.py`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 05:26 UTC — Codex
 Integrated a second parallel implementation batch: generation-wide API-token
 revocation with adversarial token tests, a safe last-good MkDocs export runner,
@@ -225,16 +235,6 @@ Diagnosed from the log (exact line match plus a well-known uv+hatchling
 Docker gotcha) rather than a local repro — this sandbox still has no
 Docker/uv, so the user needs to confirm the redeploy succeeds.
 - Files: `Dockerfile`, `LOG.md`
-
-## 2026-08-27 02:28 UTC — Claude Code
-Renamed docker-compose.yml to docker-compose.yaml. Coolify's Docker
-Compose resource type looks for /docker-compose.yaml at the repo root by
-default and the user hit that lookup failure; renaming avoids needing to
-touch Coolify's "Docker Compose Location" setting. No content changed —
-Compose doesn't care which spelling is used, and nothing in the file
-referenced its own filename.
-- Files: `docker-compose.yaml` (renamed from `docker-compose.yml`),
-  `README.md`, `LOG.md`
 
 
 
