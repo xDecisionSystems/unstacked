@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 02:28 UTC — Claude Code
+Renamed docker-compose.yml to docker-compose.yaml. Coolify's Docker
+Compose resource type looks for /docker-compose.yaml at the repo root by
+default and the user hit that lookup failure; renaming avoids needing to
+touch Coolify's "Docker Compose Location" setting. No content changed —
+Compose doesn't care which spelling is used, and nothing in the file
+referenced its own filename.
+- Files: `docker-compose.yaml` (renamed from `docker-compose.yml`),
+  `README.md`, `LOG.md`
+
 ## 2026-08-27 02:22 UTC — Claude Code
 Added Coolify/Docker deployment support at the user's request. A
 multi-stage Dockerfile (uv-based, pinned to the same uv version as CI,

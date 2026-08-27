@@ -92,7 +92,7 @@ from the content repository alone.
 
 ## Deploying with Coolify
 
-A `Dockerfile` and `docker-compose.yml` are both provided; Coolify can use
+A `Dockerfile` and `docker-compose.yaml` are both provided; Coolify can use
 either depending on which resource type you create.
 
 **State that must be persisted.** The app's entire state is two directories
@@ -125,7 +125,7 @@ or a redeploy wipes the wiki.
 
 ### Option B — Docker Compose resource
 
-Point Coolify at `docker-compose.yml` directly. It declares the same two
+Point Coolify at `docker-compose.yaml` directly. It declares the same two
 named volumes and reads its environment from Coolify's **Environment
 Variables** UI (Coolify substitutes `${VAR}` at deploy time), so the same
 variables from Option A step 3 apply — `UNSTACKED_API_TOKEN_SECRET` is
