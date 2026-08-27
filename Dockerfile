@@ -7,7 +7,11 @@ FROM python:3.12-slim AS builder
 RUN pip install --disable-pip-version-check --no-cache-dir 'uv==0.10.11'
 
 WORKDIR /app
-COPY pyproject.toml uv.lock ./
+# README.md is required here, not just for docs: pyproject.toml declares
+# readme = "README.md", so hatchling (the build backend) fails to build the
+# project's own metadata without it, once the project itself is installed
+# below.
+COPY pyproject.toml uv.lock README.md ./
 # Dependencies only, in their own layer, so an app-code-only change doesn't
 # reinstall the whole environment.
 RUN uv sync --locked --no-install-project --no-dev

@@ -10,6 +10,18 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 02:46 UTC — Claude Code
+Fixed a Coolify Docker Compose build failure: `RUN uv sync --locked
+--no-dev` (the step that installs the project itself, not just
+dependencies) exited 1 at Dockerfile:25. pyproject.toml declares
+`readme = "README.md"`, but the builder stage never copied README.md into
+the image, so hatchling had nothing to build the project's metadata from.
+Added README.md to the initial COPY alongside pyproject.toml/uv.lock.
+Diagnosed from the log (exact line match plus a well-known uv+hatchling
+Docker gotcha) rather than a local repro — this sandbox still has no
+Docker/uv, so the user needs to confirm the redeploy succeeds.
+- Files: `Dockerfile`, `LOG.md`
+
 ## 2026-08-27 02:28 UTC — Claude Code
 Renamed docker-compose.yml to docker-compose.yaml. Coolify's Docker
 Compose resource type looks for /docker-compose.yaml at the repo root by
@@ -176,12 +188,4 @@ it to confirmed scope and tightened task T1.2 to require an
 could be added later without touching every route.
 - Files: `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-26 23:55 UTC — Claude Code
-Corrected the model-tier mapping in the plan per user: `luna` is the small
-tier and `terra` the mid tier (I had them reversed). Every task card now
-lists both naming sets (`opus`/`sol`, `sonnet`/`terra`, `haiku`/`luna`) so
-either agent can read its own tier directly. Replaced the mapping prose
-with a table, dropped the now-resolved open question, and fixed the task
-count in the previous entry (39, not 34).
-- Files: `plans/plan_initial.md`, `LOG.md`
 
