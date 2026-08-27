@@ -409,33 +409,70 @@ class GitBackend:
 
         with self.lock:
             repo = self.repo
-            branch = self._active_branch(repo)
-            remote = self._origin(repo)
-            # GitPython keeps only `error:`/`fatal:` lines in the exception it
-            # raises, which drops exactly the lines that say *why* a transport
-            # failed ("Permission denied (publickey)", "Host key verification
-            # failed").  The progress object retains them, so classification
-            # can see the real cause.
-            progress = RemoteProgress()
-            try:
-                results = remote.push(refspec=_push_refspec(branch.name), progress=progress)
-            except GitCommandError as exc:
-                raise _sync_error(
-                    exc, "unable to push content backup", progress.other_lines
-                ) from None
-            failures = [result for result in results if result.flags & result.ERROR]
-            if failures:
-                # `git push` reports a stale branch as a rejection rather than
-                # a process failure, so it is classified here instead.
-                rejected = any(
-                    result.flags & (result.REJECTED | result.REMOTE_REJECTED)
-                    for result in failures
+            self._push_locked(repo)
+
+    def pending_backup_count(self) -> int:
+        """Return locally committed revisions not represented by known upstream refs.
+
+        This is intentionally a refs-only check: it has no network side effect
+        and therefore remains useful after a restart or an offline period.  If
+        this checkout has never pushed, every local commit is pending.
+        """
+
+        with self.lock:
+            return self._pending_backup_count_locked(self.repo)
+
+    def push_pending(self) -> int:
+        """Push local pending commits, if any, under one repository lock.
+
+        The count is derived from refs rather than an in-memory queue, so a
+        process crash cannot lose the fact that a content commit needs backup.
+        """
+
+        with self.lock:
+            repo = self.repo
+            pending = self._pending_backup_count_locked(repo)
+            if pending:
+                self._push_locked(repo)
+            return pending
+
+    def _push_locked(self, repo: Repo) -> None:
+        """Push while the caller owns ``self.lock``; never force-push."""
+
+        branch = self._active_branch(repo)
+        remote = self._origin(repo)
+        # GitPython keeps only `error:`/`fatal:` lines in the exception it
+        # raises, which drops exactly the lines that say *why* a transport
+        # failed ("Permission denied (publickey)", "Host key verification
+        # failed").  The progress object retains them, so classification
+        # can see the real cause.
+        progress = RemoteProgress()
+        try:
+            results = remote.push(refspec=_push_refspec(branch.name), progress=progress)
+        except GitCommandError as exc:
+            raise _sync_error(exc, "unable to push content backup", progress.other_lines) from None
+        failures = [result for result in results if result.flags & result.ERROR]
+        if failures:
+            # `git push` reports a stale branch as a rejection rather than a
+            # process failure, so it is classified here instead.
+            rejected = any(
+                result.flags & (result.REJECTED | result.REMOTE_REJECTED) for result in failures
+            )
+            if rejected:
+                raise GitNonFastForwardError(
+                    "content backup rejected the push as non-fast-forward"
                 )
-                if rejected:
-                    raise GitNonFastForwardError(
-                        "content backup rejected the push as non-fast-forward"
-                    )
-                raise GitSyncError("content backup rejected the push")
+            raise GitSyncError("content backup rejected the push")
+
+    def _pending_backup_count_locked(self, repo: Repo) -> int:
+        branch = self._active_branch(repo)
+        remote = self._origin(repo)
+        try:
+            upstream = repo.commit(f"{remote.name}/{branch.name}")
+        except (BadName, ValueError):
+            # No remote-tracking ref exists until the first successful push.
+            return sum(1 for _commit in repo.iter_commits(branch.name))
+        return int(repo.git.rev_list("--count", f"{upstream.hexsha}..{branch.name}"))
 
     def fetch_and_fast_forward(self) -> bool:
         """Fast-forward the current branch from ``origin`` when it is clean.

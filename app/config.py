@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # required together; an unpinned host key is not accepted.
     github_ssh_key_path: Path | None = None
     github_ssh_known_hosts_path: Path | None = None
+    # A backup is deliberately off the request path.  This is the shortest
+    # delay before a worker coalesces a burst of local commits into one push.
+    backup_sync_debounce_seconds: float = 10.0
+    backup_sync_max_backoff_seconds: float = 300.0
     login_attempts_per_minute: int = 5
     # Number of trusted reverse proxies in front of the app.  0 means the
     # socket peer is the client; behind a proxy this must be set or every
@@ -121,6 +125,10 @@ class Settings(BaseSettings):
             raise ValueError("static export output limit must be positive")
         if self.content_lock_timeout_seconds <= 0:
             raise ValueError("content lock timeout must be positive")
+        if self.backup_sync_debounce_seconds <= 0:
+            raise ValueError("backup sync debounce must be positive")
+        if self.backup_sync_max_backoff_seconds < self.backup_sync_debounce_seconds:
+            raise ValueError("backup sync maximum backoff must be at least the debounce")
 
         # An unset variable and an empty one mean the same thing here: no
         # backup remote.  Normalizing once keeps every consumer from having to
