@@ -7,6 +7,7 @@ from app.auth import LoginRateLimiter
 from app.config import Settings
 from app.content import ContentRepository
 from app.models import create_db_engine, migrate_schema
+from app.web_auth import router as web_auth_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -30,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_keys=settings.max_rate_limit_keys,
     )
     app.include_router(ai_router)
+    app.include_router(web_auth_router)
 
     @app.get("/healthz", tags=["System"])
     def healthcheck():
