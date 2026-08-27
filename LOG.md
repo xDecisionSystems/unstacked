@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 04:54 UTC — Codex
+Updated the authentication and bootstrap plan for the required first account:
+`admin:admin` is a one-time administrator with a server-enforced mandatory
+password change. Reopened the affected completed tasks to cover username and
+flag migrations, restricted first-login sessions, token/content blocking, and
+the idempotent fixed-credential bootstrap.
+- Files: `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 04:42 UTC — Claude Code
 User-directed architecture change: GitHub backup is no longer required or
 special-cased — everything must run purely on local disk, with off-site
@@ -257,15 +265,6 @@ passes against a fresh bootstrap.
 Ignored the generated coverage data file so the CI-equivalent verification
 command leaves no local test artifact in the application worktree.
 - Files: `.gitignore`, `LOG.md`
-
-## 2026-08-27 00:42 UTC — Codex
-Completed the remaining initial scaffolding and bootstrap acceptance criteria.
-Added the planned template, sanitization, and MkDocs theme dependencies plus
-coverage tooling to the locked project; made first-run bootstrap safe for
-automation through standard input and idempotent on rerun; and documented the
-behavior. Marked T0.1 and T1.4 complete after verification.
-- Files: `pyproject.toml`, `uv.lock`, `app/bootstrap.py`,
-  `tests/test_bootstrap.py`, `README.md`, `plans/plan_initial.md`, `LOG.md`
 
 
 

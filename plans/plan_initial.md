@@ -95,12 +95,26 @@ The app is a single wiki instance but may have multiple server processes. Use a 
 ### Database — users, groups, permissions only
 
 SQLite (SQLModel/SQLAlchemy):
-- `users` (id, email, password hash, display name, is_admin, is_active, session_generation, api_token_generation)
+- `users` (id, username, email, password hash, display name, is_admin, is_active, must_change_password, session_generation, api_token_generation)
 - `groups` (id, name, description)
 - `user_groups` (user_id, group_id)
 - `permissions` (group_id, path_prefix, can_read, can_write) — `path_prefix` is a normalized, segment-aware relative path under `docs/`; raw string prefix matching is forbidden. Resolution semantics are defined under T4.1.
 
 No content, revisions, API-token records, or search index live in the database. AI clients use expiring signed bearer tokens containing user ID, token generation, issued-at, expiry, audience, and a unique token ID. Incrementing `users.api_token_generation` revokes all outstanding API tokens for that user; deactivating the user rejects them immediately. This deliberately trades per-token naming/revocation for the repo's strict four-table database boundary.
+
+### First administrator credentials
+
+The initial account is always created as **`admin` / `admin`** (username and
+password). It is an administrator, has `must_change_password=true`, and is the
+only account bootstrap creates. The first successful password login may create
+only a password-change session: every other authenticated route, including API
+token issuance and AI/content operations, rejects that session until the
+password is changed. The change-password operation must validate the current
+password, set a compliant replacement, clear `must_change_password`, revoke
+the temporary session and any outstanding API tokens, and issue a fresh normal
+session. This is enforced server-side, not merely as a UI redirect. Re-running
+bootstrap never recreates or resets the account; an administrator uses the
+ordinary reset process if this initial credential is lost.
 
 ### App modules (FastAPI)
 
@@ -183,15 +197,18 @@ named module before writing anything new. No marker means nothing is built.
 
 ### Phase 1 — Data layer & auth
 
-#### [x] T1.1 — Database schema
+#### [~] T1.1 — Database schema
 `sonnet` / `terra` · **M** · **high** · depends: T0.1, T0.2
-`app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
-**Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, and tests can insert a user, group, membership, and normalized permission.
+`app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. `users.username` is unique and suitable for the initial `admin` login; `must_change_password` is non-null and defaults false. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
+**Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, tests can insert a user, group, membership, and normalized permission, and migration coverage proves the initial-password flag and unique username survive upgrades.
+**Remaining:** Add the username and password-change-required fields with a safe migration for existing accounts, then test their database invariants.
 
-#### [x] T1.2 — Password auth & sessions
+#### [~] T1.2 — Password auth & sessions
 `opus` / `sol` · **M** · **high** · depends: T1.1
-`app/auth.py`: Argon2 password hashing via `pwdlib`, login/logout routes, signed session cookies containing only minimal identifiers and the current `session_generation` (HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for every cookie-authenticated state change, generic/timing-resistant login failures, and bounded login rate limiting. Rotate the session on login/logout; increment the generation on password/admin security reset; and reject inactive users on every request. **Local passwords only** — no SSO/LDAP — but keep credential checking behind `authenticate(email, password) -> User | None`.
-**Done when:** login/logout work end to end; fixation and tampered/expired cookies are rejected; unsafe form requests without valid CSRF are rejected; inactive users lose access; and no route reads the password hash outside `authenticate()`.
+`app/auth.py`: Argon2 password hashing via `pwdlib`, login/logout routes, signed session cookies containing only minimal identifiers and the current `session_generation` (HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for every cookie-authenticated state change, generic/timing-resistant login failures, and bounded login rate limiting. Authenticate by unique username (with email retained for account administration); rotate the session on login/logout; increment the generation on password/admin security reset; and reject inactive users on every request. **Local passwords only** — no SSO/LDAP — but keep credential checking behind `authenticate(username, password) -> User | None`.
+When `must_change_password` is true, issue a restricted session that can access only logout and the CSRF-protected current-password-verified change endpoint; block bearer-token issuance and every other authenticated route/service dependency until it clears the flag. A successful forced change revokes that restricted session and outstanding API tokens, then issues a new normal session.
+**Done when:** login/logout work end to end; fixation and tampered/expired cookies are rejected; unsafe form requests without valid CSRF are rejected; inactive users lose access; first use of `admin:admin` is forced through a server-enforced password change with no content/API access; and no route reads the password hash outside `authenticate()`.
+**Remaining:** Existing session authentication is complete. Add username login, server-enforced restricted first-login sessions, and forced-password-change tests.
 
 #### [~] T1.3 — API token auth
 `opus` / `sol` · **M** · **high** · depends: T1.1, T1.2
@@ -199,11 +216,11 @@ Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, a
 **Done when:** a valid token authenticates as its active user; expired, wrong-audience, wrong-generation, tampered, and deactivated-user tokens fail; revocation invalidates all prior tokens; and raw tokens are never persisted or logged.
 **Remaining:** `app/auth.py` issues/verifies generation-scoped JWTs. Remaining: explicit tests for expired, wrong-audience, tampered and deactivated-user tokens; admin-facing revoke endpoint.
 
-#### [x] T1.4 — First-run bootstrap CLI
+#### [~] T1.4 — First-run bootstrap CLI
 `sonnet` / `terra` · **M** · **medium** · depends: T1.1, T3.2
-`python -m app.bootstrap` — create the first admin user, initialize the DB, and (via T3.2) the content repo.
-Make it idempotent and non-interactive-capable without accepting passwords in process arguments.
-**Done when:** a clean checkout reaches a usable admin and buildable content repo in one command, and rerunning cannot create a second accidental bootstrap admin.
+`python -m app.bootstrap` — initialize the DB and (via T3.2) the content repo, then create the first administrator as `admin:admin` with `must_change_password=true`. It must be idempotent: bootstrap never resets, recreates, or prints the default password after the initial account exists. Do not accept passwords in process arguments.
+**Done when:** a clean checkout reaches a buildable content repo and the restricted `admin:admin` first-login flow in one command, rerunning cannot create a second accidental bootstrap admin, and the first login must replace the default password before accessing the application.
+**Remaining:** Replace the current operator-supplied email/password bootstrap interface with the fixed first administrator and forced-change flag, and add idempotence/first-login tests.
 
 ---
 
