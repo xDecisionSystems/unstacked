@@ -41,6 +41,21 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+class RevokeTokensRequest(BaseModel):
+    """Optionally select another user whose machine credentials to revoke.
+
+    Omitting ``user_id`` always means the bearer-token caller.  Selecting a
+    different account is an administrator-only security operation.
+    """
+
+    user_id: int | None = Field(default=None, gt=0)
+
+
+class RevokeTokensResponse(BaseModel):
+    user_id: int
+    api_token_generation: int
+
+
 class ContainerCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     slug: str | None = None
@@ -115,6 +130,40 @@ def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
         access_token=token,
         expires_in=request.app.state.settings.api_token_ttl_seconds,
     )
+
+
+@router.post("/auth/tokens/revoke", response_model=RevokeTokensResponse)
+def revoke_api_tokens(
+    payload: RevokeTokensRequest,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> RevokeTokensResponse:
+    """Invalidate every bearer token issued to one account.
+
+    There are intentionally no token rows: advancing the account generation
+    invalidates every signed token for that account without retaining a raw
+    credential or even a credential fingerprint.  A user can revoke their own
+    tokens; only an administrator may revoke another user's tokens.
+    """
+
+    target_id = payload.user_id if payload.user_id is not None else user.id
+    if target_id is None:  # Defensive: authenticated users always have an id.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid bearer token")
+    if target_id != user.id and not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required")
+
+    with Session(request.app.state.engine) as session:
+        target = session.get(User, target_id)
+        if target is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        target.api_token_generation += 1
+        session.add(target)
+        session.commit()
+        session.refresh(target)
+        return RevokeTokensResponse(
+            user_id=target.id,
+            api_token_generation=target.api_token_generation,
+        )
 
 
 @router.get("/ai/tree")

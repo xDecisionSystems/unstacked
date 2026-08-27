@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from zipfile import ZipFile
 
+import jwt
 from git import Repo
 from sqlmodel import Session
 
@@ -241,3 +243,95 @@ def test_incrementing_token_generation_revokes_existing_token(client, app_env):
         session.add(persisted)
         session.commit()
     assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 401
+
+
+def _signed_token(settings, user: User, **overrides: object) -> str:
+    """Build a deliberately controlled token for negative verification cases."""
+
+    now = datetime.now(timezone.utc)
+    payload: dict[str, object] = {
+        "sub": str(user.id),
+        "generation": user.api_token_generation,
+        "iat": now,
+        "exp": now + timedelta(hours=1),
+        "aud": settings.api_token_audience,
+        "jti": "test-jti",
+    }
+    payload.update(overrides)
+    return jwt.encode(payload, settings.token_secret, algorithm="HS256")
+
+
+def test_bearer_tokens_reject_expiry_wrong_audience_and_tampering(client, app_env):
+    _app, settings, admin, _token = app_env
+    expired = _signed_token(settings, admin, exp=datetime.now(timezone.utc) - timedelta(seconds=1))
+    wrong_audience = _signed_token(settings, admin, aud="another-service")
+    valid = _signed_token(settings, admin)
+    tampered = f"{valid[:-1]}{'A' if valid[-1] != 'A' else 'B'}"
+
+    for token in (expired, wrong_audience, tampered):
+        response = client.get("/api/ai/tree", headers=bearer(token))
+        assert response.status_code == 401
+        assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_bearer_token_rechecks_active_user_and_generation(client, app_env):
+    app, settings, admin, token = app_env
+    second_token = create_api_token(admin, settings)
+    assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 200
+    assert client.get("/api/ai/tree", headers=bearer(second_token)).status_code == 200
+
+    with Session(app.state.engine) as session:
+        persisted = session.get(User, admin.id)
+        persisted.is_active = False
+        session.add(persisted)
+        session.commit()
+    assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 401
+
+    with Session(app.state.engine) as session:
+        persisted = session.get(User, admin.id)
+        persisted.is_active = True
+        persisted.api_token_generation += 1
+        session.add(persisted)
+        session.commit()
+    assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 401
+    assert client.get("/api/ai/tree", headers=bearer(second_token)).status_code == 401
+
+
+def test_revoke_all_endpoint_invalidates_every_token_for_caller(client, app_env):
+    _app, settings, admin, token = app_env
+    second_token = create_api_token(admin, settings)
+
+    revoked = client.post("/api/auth/tokens/revoke", json={}, headers=bearer(token))
+    assert revoked.status_code == 200
+    assert revoked.json()["user_id"] == admin.id
+    assert revoked.json()["api_token_generation"] == 1
+    assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 401
+    assert client.get("/api/ai/tree", headers=bearer(second_token)).status_code == 401
+
+
+def test_only_admin_can_revoke_another_users_tokens(client, app_env):
+    app, settings, admin, admin_token = app_env
+    with Session(app.state.engine) as session:
+        user = User(
+            username="member",
+            email="member@example.com",
+            password_hash=hash_password("member password is sufficiently long"),
+            display_name="Member",
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        member_token = create_api_token(user, settings)
+        member_id = user.id
+
+    denied = client.post(
+        "/api/auth/tokens/revoke", json={"user_id": admin.id}, headers=bearer(member_token)
+    )
+    assert denied.status_code == 403
+
+    revoked = client.post(
+        "/api/auth/tokens/revoke", json={"user_id": member_id}, headers=bearer(admin_token)
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["user_id"] == member_id
+    assert client.get("/api/ai/tree", headers=bearer(member_token)).status_code == 401
