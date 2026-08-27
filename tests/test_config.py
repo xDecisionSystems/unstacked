@@ -76,3 +76,34 @@ def test_production_accepts_a_real_secret(tmp_path: Path):
 def test_invalid_limits_are_rejected(tmp_path: Path, field: str, value: int, message: str):
     with pytest.raises(ValueError, match=message):
         _settings(tmp_path, environment="development", **{field: value})
+
+
+def test_no_backup_remote_is_configured_by_default(tmp_path: Path):
+    """A backup remote is opt-in, and never assumed to be private."""
+
+    settings = _settings(tmp_path, environment="development")
+    assert settings.github_remote_url is None
+    assert settings.github_remote_confirmed_private is False
+    assert settings.github_token is None
+    assert settings.github_token_path is None
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["github_token_path", "github_ssh_key_path", "github_ssh_known_hosts_path"],
+)
+def test_a_blank_credential_path_is_unset_rather_than_the_current_directory(
+    tmp_path: Path, field: str
+):
+    """Deployment templates pass unused variables through as empty strings."""
+
+    settings = _settings(tmp_path, environment="development", **{field: ""})
+    assert getattr(settings, field) is None
+
+
+def test_a_blank_remote_url_or_token_is_treated_as_unset(tmp_path: Path):
+    settings = _settings(
+        tmp_path, environment="development", github_remote_url="  ", github_token=" "
+    )
+    assert settings.github_remote_url is None
+    assert settings.github_token is None

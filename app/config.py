@@ -4,7 +4,7 @@ import stat
 from pathlib import Path
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MINIMUM_SECRET_BYTES = 32
@@ -45,6 +45,26 @@ class Settings(BaseSettings):
     # secret as API tokens but under a separate itsdangerous salt, so the two
     # token families cannot be swapped for one another.
     session_ttl_seconds: int = 43_200
+    # --- Content backup remote (see GitBackend.configure_remote) -------------
+    # The backup remote MUST be a private repository: a `content/` backup is a
+    # complete, unfiltered copy of the wiki (drafts included) with no per-user
+    # ACL, exactly like the static export.  Nothing here verifies that over the
+    # network, so the operator affirms it explicitly and the remote is not
+    # configured at all without that affirmation.
+    github_remote_url: str | None = None
+    github_remote_confirmed_private: bool = False
+    # HTTPS transport: a fine-grained PAT scoped to this one repository with
+    # only Contents read/write.  As with the token signing secret, prefer the
+    # file path: a path in the environment is not a secret, whereas an inline
+    # value is visible to anything that can read the process environment or a
+    # container's configuration.  The path wins when both are set.
+    github_token: str | None = None
+    github_token_path: Path | None = None
+    # SSH transport: a repository deploy key (write access to this repo only)
+    # and the known_hosts entry its host key is pinned against.  Both are
+    # required together; an unpinned host key is not accepted.
+    github_ssh_key_path: Path | None = None
+    github_ssh_known_hosts_path: Path | None = None
     login_attempts_per_minute: int = 5
     # Number of trusted reverse proxies in front of the app.  0 means the
     # socket peer is the client; behind a proxy this must be set or every
@@ -53,6 +73,25 @@ class Settings(BaseSettings):
     max_page_bytes: int = 2_000_000
     max_export_bytes: int = 50_000_000
     max_rate_limit_keys: int = 10_000
+
+    @field_validator(
+        "github_token_path",
+        "github_ssh_key_path",
+        "github_ssh_known_hosts_path",
+        mode="before",
+    )
+    @classmethod
+    def blank_optional_path_is_unset(cls, value: object) -> object:
+        """Treat an empty variable as "not configured", not as ``Path(".")``.
+
+        Deployment templates commonly pass every variable through with an
+        empty default; without this, an unused credential path would parse as
+        the current directory and be read as if it were a secret file.
+        """
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @model_validator(mode="after")
     def resolve_and_validate_secrets(self) -> "Settings":
@@ -64,6 +103,14 @@ class Settings(BaseSettings):
             raise ValueError("login rate limit must be positive")
         if self.trusted_proxy_hops < 0:
             raise ValueError("trusted proxy hops cannot be negative")
+
+        # An unset variable and an empty one mean the same thing here: no
+        # backup remote.  Normalizing once keeps every consumer from having to
+        # tell `""` and `None` apart.  The values themselves are validated by
+        # GitBackend.configure_remote, which raises errors that are already
+        # scrubbed of credential material.
+        self.github_remote_url = (self.github_remote_url or "").strip() or None
+        self.github_token = (self.github_token or "").strip() or None
 
         secret = (self.api_token_secret or "").strip()
         if secret.casefold() in REJECTED_SECRETS:

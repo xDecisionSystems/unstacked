@@ -20,6 +20,21 @@ services:
       UNSTACKED_MAX_RATE_LIMIT_KEYS: ${UNSTACKED_MAX_RATE_LIMIT_KEYS:-10000}
       UNSTACKED_MAX_PAGE_BYTES: ${UNSTACKED_MAX_PAGE_BYTES:-2000000}
       UNSTACKED_MAX_EXPORT_BYTES: ${UNSTACKED_MAX_EXPORT_BYTES:-50000000}
+      # Content backup remote. The repository MUST be private: the backup is a
+      # complete, unfiltered copy of the wiki including drafts, with no
+      # per-user permissions. Nothing verifies that over the network, so the
+      # remote is not configured at all unless it is confirmed here.
+      UNSTACKED_GITHUB_REMOTE_URL: ${UNSTACKED_GITHUB_REMOTE_URL:-}
+      UNSTACKED_GITHUB_REMOTE_CONFIRMED_PRIVATE: ${UNSTACKED_GITHUB_REMOTE_CONFIRMED_PRIVATE:-false}
+      # Prefer mounting the token as a file (a path is not a secret) over
+      # setting UNSTACKED_GITHUB_TOKEN, which is visible to anything that can
+      # read this container's configuration.
+      UNSTACKED_GITHUB_TOKEN_PATH: ${UNSTACKED_GITHUB_TOKEN_PATH:-}
+      UNSTACKED_GITHUB_TOKEN: ${UNSTACKED_GITHUB_TOKEN:-}
+      # SSH alternative: a deploy key plus the known_hosts entry its host key
+      # is pinned against. Both are required together.
+      UNSTACKED_GITHUB_SSH_KEY_PATH: ${UNSTACKED_GITHUB_SSH_KEY_PATH:-}
+      UNSTACKED_GITHUB_SSH_KNOWN_HOSTS_PATH: ${UNSTACKED_GITHUB_SSH_KNOWN_HOSTS_PATH:-}
     volumes:
       # The wiki's Git repository and the SQLite/lock/secret files are the
       # entire state of the application. Losing these volumes loses the
