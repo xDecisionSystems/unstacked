@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -14,10 +14,17 @@ from sqlmodel import Session
 
 from app.acl import load_policy
 from app.config import Settings
-from app.frontmatter_io import new_page, parse_page
+from app.frontmatter_io import PageDocument, new_page, parse_page, write_page
 from app.git_backend import GitBackend, Revision, RevisionNotFound
 from app.models import User
-from app.nav import create_navigation
+from app.nav import (
+    NavigationError,
+    create_navigation,
+    read_navigation,
+    remove_stale_entry,
+    set_order,
+    set_title,
+)
 from app.paths import (
     RESERVED_ROOT_NAMES,
     make_slug,
@@ -45,6 +52,81 @@ class CreatedContent:
     path: str
     slug: str
     commit: str
+
+
+@dataclass(frozen=True)
+class MovedContent:
+    """The result of a slug rename or a page move, including where it came from.
+
+    Callers need the previous path as well as the new one: it is the only way a
+    UI or API client can invalidate the old URL, and path-prefix permissions are
+    resolved against the location rather than an identity.
+    """
+
+    kind: str
+    path: str
+    slug: str
+    previous_path: str
+    commit: str
+
+
+class _Rollback:
+    """Records what an operation is about to change so it can be undone.
+
+    One logical content operation touches several files — a page, a ``.pages``,
+    both halves of a rename — yet produces a single commit.  Anything that
+    fails before that commit must leave the pre-operation bytes on disk,
+    because a half-applied operation would both dirty the index and leave a
+    tree that ``mkdocs build --strict`` rejects.
+    """
+
+    def __init__(self) -> None:
+        self._files: dict[Path, bytes | None] = {}
+        self._created_directories: list[Path] = []
+
+    def file(self, path: Path) -> Path:
+        # Only the first snapshot of a path counts; a later one would capture
+        # bytes this operation itself wrote.
+        if path not in self._files:
+            self._files[path] = path.read_bytes() if path.is_file() else None
+        return path
+
+    def tree(self, directory: Path) -> list[Path]:
+        """Snapshot every file under ``directory`` and return those paths."""
+
+        paths = sorted(child for child in directory.rglob("*") if child.is_file())
+        for path in paths:
+            self.file(path)
+        return paths
+
+    def created_directory(self, path: Path) -> Path:
+        self._created_directories.append(path)
+        return path
+
+    def undo(self) -> None:
+        for path, original in self._files.items():
+            if original is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                _atomic_write_bytes(path, original)
+        # After the files are back where they belong, anything this operation
+        # newly created is safe to drop wholesale.
+        for directory in reversed(self._created_directories):
+            shutil.rmtree(directory, ignore_errors=True)
+
+
+def _atomic_write_bytes(path: Path, content: bytes) -> None:
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except Exception:
+        Path(temporary).unlink(missing_ok=True)
+        raise
 
 
 MKDOCS_YML = """site_name: Unstacked
@@ -240,14 +322,7 @@ class ContentRepository:
         draft: bool,
         actor: User,
     ) -> CreatedContent:
-        parent = normalize_relative_path(parent)
-        # A book or a chapter, never deeper: the tree model and every nav
-        # listing assume at most two levels, so a page below that would be
-        # published to the static site yet invisible in the app.
-        if path_depth(parent) not in {1, 2}:
-            raise ContentError("pages live directly in a book or in one of its chapters")
-        if parent.split("/")[0] in RESERVED_ROOT_NAMES:
-            raise ContentError("reserved location")
+        parent = self._validate_page_parent(parent)
         slug = make_slug(title, requested_slug)
         parent_path = safe_join(self.docs, parent)
         page_relative = f"{parent}/{slug}.md"
@@ -292,6 +367,315 @@ class ContentRepository:
         raw = page.read_text(encoding="utf-8")
         document = parse_page(raw, default_title=page.stem)
         return document.metadata, document.content, raw
+
+    def update_page(
+        self,
+        relative: str,
+        markdown: str,
+        tags: list[str],
+        draft: bool,
+        actor: User,
+    ) -> str:
+        """Rewrite a page body and its editable metadata as one commit.
+
+        There is deliberately no ``base_sha`` parameter yet.  Accepting one and
+        ignoring it would let a caller believe stale writes were being rejected
+        when they silently overwrite; T3.3 adds the parameter together with the
+        re-check that makes it mean something.
+
+        ``title`` is not editable here: changing it is
+        :meth:`set_page_title`, which must stay a separate path so a title edit
+        never looks like it could move a URL.  ``author`` keeps the creator's
+        address — who made this particular edit is recorded by the Git commit,
+        which is the project's only revision history.
+        """
+
+        if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
+            raise ContentError("page exceeds configured size limit")
+        rollback = _Rollback()
+        with self.git.lock:
+            page = self._page_path(relative)
+            page_relative = normalize_relative_path(relative)
+            document = self._read_document(page)
+            now = datetime.now(timezone.utc).isoformat()
+            metadata = {"updated_at": now, "tags": list(tags), "draft": draft}
+            # Repair app metadata a hand-authored page never had, rather than
+            # serializing the nulls the tolerant reader substitutes for it.
+            metadata.update(self._repaired_metadata(document, actor, now))
+            rollback.file(page)
+            try:
+                write_page(page, replace(document, content=markdown), metadata=metadata)
+                return self.git.commit_paths(
+                    [page],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Update page: {page_relative}",
+                )
+            except Exception:
+                rollback.undo()
+                raise
+
+    def set_page_title(self, relative: str, title: str, actor: User) -> str:
+        """Retitle a page without moving it, so existing links keep resolving.
+
+        Separate from :meth:`move_page` on purpose: a slug is a URL and a title
+        is a label, and conflating them silently breaks every inbound link the
+        moment somebody fixes a typo in a heading.
+        """
+
+        title = self._validate_title(title)
+        rollback = _Rollback()
+        with self.git.lock:
+            page = self._page_path(relative)
+            page_relative = normalize_relative_path(relative)
+            document = self._read_document(page)
+            now = datetime.now(timezone.utc).isoformat()
+            metadata = {"title": title, "updated_at": now}
+            metadata.update(self._repaired_metadata(document, actor, now))
+            rollback.file(page)
+            try:
+                write_page(page, document, metadata=metadata)
+                return self.git.commit_paths(
+                    [page],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Retitle page: {page_relative}",
+                )
+            except Exception:
+                rollback.undo()
+                raise
+
+    def set_container_title(self, relative: str, title: str, actor: User) -> str:
+        """Retitle a book or chapter through its ``.pages``, never its folder.
+
+        A container has no front matter, so its display name lives in the
+        navigation file.  Renaming the folder instead would change every
+        descendant URL and every path-prefix permission that targets it.
+        """
+
+        title = self._validate_title(title)
+        rollback = _Rollback()
+        with self.git.lock:
+            container = self._container_path(relative)
+            navigation = container / ".pages"
+            if not navigation.is_file():
+                raise ContentMissing("navigation file not found")
+            rollback.file(navigation)
+            try:
+                set_title(navigation, title)
+                return self.git.commit_paths(
+                    [navigation],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Retitle {self._kind(relative)}: {normalize_relative_path(relative)}",
+                )
+            except NavigationError as exc:
+                rollback.undo()
+                raise ContentError("navigation file is malformed") from exc
+            except Exception:
+                rollback.undo()
+                raise
+
+    def delete_page(self, relative: str, actor: User) -> str:
+        """Remove a page from the tree; Git keeps it recoverable.
+
+        The file is staged as a deletion rather than merely unlinked, so
+        ``page_history`` and ``restore_page`` still reach it — that history is
+        what stands in for a recycle bin here.
+        """
+
+        rollback = _Rollback()
+        with self.git.lock:
+            page = self._page_path(relative)
+            page_relative = normalize_relative_path(relative)
+            rollback.file(page)
+            try:
+                affected = [page]
+                affected.extend(self._changed_nav(rollback, page.parent, old=page.name))
+                page.unlink()
+                return self.git.commit_paths(
+                    affected,
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Delete page: {page_relative}",
+                )
+            except Exception:
+                rollback.undo()
+                raise
+
+    def delete_chapter(self, book_slug: str, chapter_slug: str, actor: User) -> str:
+        """Delete a chapter and everything inside it in one commit."""
+
+        return self._delete_container(
+            f"{make_slug(book_slug, book_slug)}/{make_slug(chapter_slug, chapter_slug)}", actor
+        )
+
+    def delete_book(self, book_slug: str, actor: User) -> str:
+        """Delete a book and every chapter and page inside it in one commit."""
+
+        return self._delete_container(make_slug(book_slug, book_slug), actor)
+
+    def move_page(
+        self,
+        relative: str,
+        new_parent: str | None,
+        new_slug: str | None,
+        actor: User,
+    ) -> MovedContent:
+        """Move a page to another book or chapter and/or give it a new slug.
+
+        The bytes are copied verbatim — no ``updated_at`` bump — so the two
+        halves are a 100% similarity match and ``git log --follow`` keeps the
+        page's history unbroken.  A move that also rewrote the file would look
+        to Git like a delete plus an unrelated create.
+
+        ``new_parent`` of ``None`` keeps the current parent (a pure slug
+        rename); ``new_slug`` of ``None`` keeps the current slug (a pure move).
+        """
+
+        rollback = _Rollback()
+        with self.git.lock:
+            page = self._page_path(relative)
+            page_relative = normalize_relative_path(relative)
+            parent = page_relative.rsplit("/", 1)[0]
+            target_parent = self._validate_page_parent(new_parent if new_parent else parent)
+            slug = make_slug(page.stem, new_slug if new_slug else page.stem)
+            target_parent_path = safe_join(self.docs, target_parent)
+            target_relative = f"{target_parent}/{slug}.md"
+            target = safe_join(self.docs, target_relative)
+            if not target_parent_path.is_dir():
+                raise ContentMissing("destination book or chapter not found")
+            if target == page:
+                raise ContentError("page is already at that location")
+            if target.exists():
+                raise ContentExists("a page already exists at that location")
+            rollback.file(page)
+            rollback.file(target)
+            try:
+                affected = [page, target]
+                if target_parent_path == page.parent:
+                    affected.extend(
+                        self._changed_nav(rollback, page.parent, old=page.name, new=target.name)
+                    )
+                else:
+                    affected.extend(self._changed_nav(rollback, page.parent, old=page.name))
+                    affected.extend(
+                        self._changed_nav(rollback, target_parent_path, new=target.name)
+                    )
+                _atomic_write_bytes(target, page.read_bytes())
+                page.unlink()
+                commit = self.git.commit_paths(
+                    affected,
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Move page: {page_relative} -> {target_relative}",
+                )
+            except Exception:
+                rollback.undo()
+                raise
+        return MovedContent("page", target_relative, slug, page_relative, commit)
+
+    def rename_book(self, book_slug: str, new_slug: str, actor: User) -> MovedContent:
+        """Give a book a new slug, keeping its chapters, pages and history.
+
+        Books live at the ``docs/`` root and there are no shelves, so a book has
+        no parent to move between: "moving" one is exactly a slug rename.
+        """
+
+        return self._rename_container(make_slug(book_slug, book_slug), new_slug, actor)
+
+    def rename_chapter(
+        self, book_slug: str, chapter_slug: str, new_slug: str, actor: User
+    ) -> MovedContent:
+        """Give a chapter a new slug within its own book.
+
+        Chapters deliberately cannot move between books: the two-level model
+        gives a chapter exactly one legal depth, and relocating one would move
+        every page inside it across a permission prefix boundary in a single
+        request.  Move the pages individually if that is really the intent.
+        """
+
+        book_slug = make_slug(book_slug, book_slug)
+        return self._rename_container(
+            f"{book_slug}/{make_slug(chapter_slug, chapter_slug)}", new_slug, actor
+        )
+
+    def _delete_container(self, relative: str, actor: User) -> str:
+        """Delete a book or chapter recursively, as one commit.
+
+        Recursive rather than empty-only: a book whose chapters outlived it
+        would be unreachable in the app yet still built into the static site,
+        and forcing a client to delete N children first would turn one logical
+        action into N commits that cannot be undone together.  Every removed
+        path stays in Git history, so nothing is actually lost.
+        """
+
+        rollback = _Rollback()
+        with self.git.lock:
+            container = self._container_path(relative)
+            kind = self._kind(relative)
+            # Snapshot the whole subtree before it goes, and declare exactly
+            # those paths to the commit.
+            affected = rollback.tree(container)
+            try:
+                affected = list(affected)
+                affected.extend(
+                    self._changed_nav(rollback, container.parent, old=container.name)
+                )
+                shutil.rmtree(container)
+                return self.git.commit_paths(
+                    affected,
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Delete {kind}: {container.relative_to(self.docs).as_posix()}",
+                )
+            except Exception:
+                rollback.undo()
+                raise
+
+    def _rename_container(self, relative: str, new_slug: str, actor: User) -> MovedContent:
+        rollback = _Rollback()
+        with self.git.lock:
+            container = self._container_path(relative)
+            kind = self._kind(relative)
+            previous_path = container.relative_to(self.docs).as_posix()
+            slug = make_slug(container.name, new_slug)
+            parent = container.parent
+            # A book's parent is ``docs`` itself, which has no relative name.
+            target_relative = (
+                slug
+                if parent == self.docs
+                else f"{parent.relative_to(self.docs).as_posix()}/{slug}"
+            )
+            target = safe_join(self.docs, target_relative)
+            if target == container:
+                raise ContentError("container already has that slug")
+            if target.exists():
+                raise ContentExists("a book or chapter already exists at that location")
+            sources = rollback.tree(container)
+            rollback.created_directory(target)
+            try:
+                affected = list(sources)
+                affected.extend(
+                    target / source.relative_to(container) for source in sources
+                )
+                affected.extend(
+                    self._changed_nav(rollback, parent, old=container.name, new=slug)
+                )
+                # An in-place directory rename keeps every blob byte-identical,
+                # so Git records renames and `--follow` still reaches the pages'
+                # earlier history.
+                os.replace(container, target)
+                commit = self.git.commit_paths(
+                    affected,
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Rename {kind}: {previous_path} -> {target_relative}",
+                )
+            except Exception:
+                rollback.undo()
+                raise
+        return MovedContent(kind, target_relative, slug, previous_path, commit)
 
     def page_history(self, relative: str) -> list[Revision]:
         # Deliberately does not require the file to exist: a deleted page must
@@ -402,6 +786,116 @@ class ContentRepository:
 
     def _write_nav(self, path: Path, title: str) -> None:
         create_navigation(path, title)
+
+    @staticmethod
+    def _validate_title(title: str) -> str:
+        if not isinstance(title, str) or not title.strip():
+            raise ContentError("title must be a non-empty string")
+        return title.strip()
+
+    def _validate_page_parent(self, parent: str) -> str:
+        """Normalize a book or chapter path a page may legally live in."""
+
+        parent = normalize_relative_path(parent)
+        # A book or a chapter, never deeper: the tree model and every nav
+        # listing assume at most two levels, so a page below that would be
+        # published to the static site yet invisible in the app.
+        if path_depth(parent) not in {1, 2}:
+            raise ContentError("pages live directly in a book or in one of its chapters")
+        if parent.split("/")[0] in RESERVED_ROOT_NAMES:
+            raise ContentError("reserved location")
+        return parent
+
+    def _container_path(self, relative: str) -> Path:
+        """Resolve an existing book or chapter directory, enforcing the depth limit."""
+
+        relative = normalize_relative_path(relative)
+        if path_depth(relative) not in {1, 2}:
+            raise ContentError("only books and chapters are containers")
+        if relative.split("/")[0] in RESERVED_ROOT_NAMES:
+            raise ContentError("reserved location")
+        container = safe_join(self.docs, relative)
+        if not container.is_dir():
+            raise ContentMissing("book or chapter not found")
+        return container
+
+    @staticmethod
+    def _kind(relative: str) -> str:
+        return "book" if path_depth(normalize_relative_path(relative)) == 1 else "chapter"
+
+    def _read_document(self, page: Path) -> PageDocument:
+        raw = page.read_text(encoding="utf-8")
+        if len(raw.encode("utf-8")) > self.settings.max_page_bytes:
+            raise ContentError("page exceeds configured size limit")
+        return parse_page(raw, default_title=page.stem)
+
+    @staticmethod
+    def _repaired_metadata(document: PageDocument, actor: User, now: str) -> dict:
+        """Fill in app fields a hand-authored page never had.
+
+        The tolerant reader substitutes ``None`` for a missing ``id``, author or
+        creation time; writing those back verbatim would put explicit nulls into
+        the operator's front matter.
+        """
+
+        repaired = {}
+        if document.metadata.get("id") is None:
+            repaired["id"] = str(uuid4())
+        if document.metadata.get("created_at") is None:
+            repaired["created_at"] = now
+        if document.metadata.get("author") is None:
+            repaired["author"] = actor.email
+        return repaired
+
+    def _changed_nav(
+        self,
+        rollback: "_Rollback",
+        container: Path,
+        *,
+        old: str | None = None,
+        new: str | None = None,
+    ) -> list[Path]:
+        """Keep an explicit ``.pages`` order in step with a rename or delete.
+
+        Unstacked writes wildcard navigation, so most operations need no nav
+        edit at all and this returns nothing.  An operator who pinned an
+        explicit order is the reason it exists: without it a rename would drop
+        the node out of the sidebar and a delete would leave an entry pointing
+        at a file that no longer exists, and ``mkdocs build --strict`` fails on
+        the second one.
+        """
+
+        navigation_path = container / ".pages"
+        if not navigation_path.is_file():
+            return []
+        try:
+            entries = read_navigation(navigation_path).entries
+        except NavigationError as exc:
+            # The message carries a server-absolute path, so it is not reused.
+            raise ContentError("navigation file is malformed") from exc
+        if entries is None or any(not isinstance(entry, str) for entry in entries):
+            # A nested mapping is a supported awesome-nav declaration whose
+            # target cannot be inferred; leave the operator's file verbatim.
+            return []
+        try:
+            if old is not None and old in entries:
+                if new is None:
+                    rollback.file(navigation_path)
+                    remove_stale_entry(navigation_path, old)
+                    return [navigation_path]
+                updated = list(entries)
+                updated[updated.index(old)] = new
+                rollback.file(navigation_path)
+                set_order(navigation_path, updated)
+                return [navigation_path]
+            if new is not None and "*" not in entries and new not in entries:
+                # No wildcard means an unlisted page would vanish from the nav.
+                rollback.file(navigation_path)
+                set_order(navigation_path, [*entries, new])
+                return [navigation_path]
+        except NavigationError as exc:
+            raise ContentError("navigation file is malformed") from exc
+        return []
 
     def _page_ref(self, relative: str) -> str:
         """Validate a page path for history use without requiring it on disk."""
