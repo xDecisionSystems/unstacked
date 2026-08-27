@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     content_repo_path: Path = Path("content")
     db_path: Path = Path("data/app.db")
     content_lock_path: Path = Path("data/content.lock")
+    # Every content mutation holds this repository-wide inter-process lock.
+    # A finite timeout means a wedged peer cannot make a request wait forever.
+    content_lock_timeout_seconds: float = 15.0
     # No default secret: a shared constant would let anyone forge a token for
     # any user.  Development and test generate a private random secret on
     # first use; production must supply one explicitly.
@@ -110,13 +113,15 @@ class Settings(BaseSettings):
             raise ValueError("login rate limit must be positive")
         if self.trusted_proxy_hops < 0:
             raise ValueError("trusted proxy hops cannot be negative")
-
         if not self.mkdocs_executable or "\x00" in self.mkdocs_executable:
             raise ValueError("mkdocs executable must be a non-empty command path")
         if self.static_export_timeout_seconds < 1:
             raise ValueError("static export timeout must be positive")
         if self.static_export_output_limit_bytes < 1:
             raise ValueError("static export output limit must be positive")
+        if self.content_lock_timeout_seconds <= 0:
+            raise ValueError("content lock timeout must be positive")
+
         # An unset variable and an empty one mean the same thing here: no
         # backup remote.  Normalizing once keeps every consumer from having to
         # tell `""` and `None` apart.  The values themselves are validated by

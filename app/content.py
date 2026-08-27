@@ -15,7 +15,13 @@ from sqlmodel import Session
 from app.acl import load_policy
 from app.config import Settings
 from app.frontmatter_io import PageDocument, new_page, parse_page, write_page
-from app.git_backend import GitBackend, RemoteConfig, Revision, RevisionNotFound
+from app.git_backend import (
+    GitBackend,
+    GitWriteLockTimeout,
+    RemoteConfig,
+    Revision,
+    RevisionNotFound,
+)
 from app.models import User
 from app.nav import (
     NavigationError,
@@ -49,6 +55,14 @@ class ContentExists(ContentError):
 
 class ContentMissing(ContentError):
     pass
+
+
+class ContentConflict(ContentError):
+    """The page changed after the client read the base revision."""
+
+
+class ContentLockTimeout(ContentError):
+    """A bounded content-write wait elapsed before the lock became available."""
 
 
 @dataclass(frozen=True)
@@ -243,10 +257,14 @@ class ContentRepository:
         self.settings = settings
         self.root = settings.content_repo_path.resolve()
         self.docs = self.root / "docs"
-        self.git = GitBackend(self.root, settings.content_lock_path)
+        self.git = GitBackend(
+            self.root,
+            settings.content_lock_path,
+            lock_timeout_seconds=settings.content_lock_timeout_seconds,
+        )
 
     def initialize(self) -> None:
-        with self.git.lock:
+        with self.git.write_lock():
             if (self.root / ".git").is_dir():
                 self.docs.mkdir(parents=True, exist_ok=True)
                 self._ensure_llm_md()
@@ -323,7 +341,7 @@ class ContentRepository:
         slug = make_slug(title, requested_slug)
         book = safe_join(self.docs, slug)
         nav = book / ".pages"
-        with self.git.lock:
+        with self.git.write_lock():
             if book.exists():
                 raise ContentExists("book already exists")
             try:
@@ -352,7 +370,7 @@ class ContentRepository:
         book = safe_join(self.docs, book_slug)
         chapter = safe_join(self.docs, f"{book_slug}/{slug}")
         nav = chapter / ".pages"
-        with self.git.lock:
+        with self.git.write_lock():
             if not book.is_dir():
                 raise ContentMissing("book not found")
             if chapter.exists():
@@ -401,7 +419,7 @@ class ContentRepository:
                 "draft": draft,
             },
         )
-        with self.git.lock:
+        with self.git.write_lock():
             if not is_confined_directory(self.docs, parent):
                 raise ContentMissing("parent book or chapter not found")
             try:
@@ -439,13 +457,14 @@ class ContentRepository:
         tags: list[str],
         draft: bool,
         actor: User,
+        *,
+        base_blob_sha: str,
     ) -> str:
         """Rewrite a page body and its editable metadata as one commit.
 
-        There is deliberately no ``base_sha`` parameter yet.  Accepting one and
-        ignoring it would let a caller believe stale writes were being rejected
-        when they silently overwrite; T3.3 adds the parameter together with the
-        re-check that makes it mean something.
+        ``base_blob_sha`` is the blob ID the caller received with this page.
+        It is checked only after acquiring the cross-process write lock; a
+        check before that lock would leave a time-of-check/time-of-use gap.
 
         ``title`` is not editable here: changing it is
         :meth:`set_page_title`, which must stay a separate path so a title edit
@@ -457,27 +476,45 @@ class ContentRepository:
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
             raise ContentError("page exceeds configured size limit")
         rollback = _Rollback()
-        with self.git.lock:
-            page = self._page_path(relative)
-            page_relative = normalize_relative_path(relative)
-            document = self._read_document(page)
-            now = datetime.now(timezone.utc).isoformat()
-            metadata = {"updated_at": now, "tags": list(tags), "draft": draft}
-            # Repair app metadata a hand-authored page never had, rather than
-            # serializing the nulls the tolerant reader substitutes for it.
-            metadata.update(self._repaired_metadata(document, actor, now))
-            rollback.file(page)
-            try:
-                write_page(page, replace(document, content=markdown), metadata=metadata)
-                return self.git.commit_paths(
-                    [page],
-                    name=actor.display_name,
-                    email=actor.email,
-                    message=f"Update page: {page_relative}",
-                )
-            except Exception:
-                rollback.undo()
-                raise
+        try:
+            with self.git.write_lock():
+                page = self._page_path(relative)
+                page_relative = normalize_relative_path(relative)
+                try:
+                    current_blob_sha = self.git.blob_sha(page)
+                except RevisionNotFound as exc:
+                    raise ContentMissing("page not found") from exc
+                if current_blob_sha != base_blob_sha:
+                    raise ContentConflict("page changed; reload it before saving")
+                document = self._read_document(page)
+                now = datetime.now(timezone.utc).isoformat()
+                metadata = {"updated_at": now, "tags": list(tags), "draft": draft}
+                # Repair app metadata a hand-authored page never had, rather than
+                # serializing the nulls the tolerant reader substitutes for it.
+                metadata.update(self._repaired_metadata(document, actor, now))
+                rollback.file(page)
+                try:
+                    write_page(page, replace(document, content=markdown), metadata=metadata)
+                    return self.git.commit_paths(
+                        [page],
+                        name=actor.display_name,
+                        email=actor.email,
+                        message=f"Update page: {page_relative}",
+                    )
+                except Exception:
+                    rollback.undo()
+                    raise
+        except GitWriteLockTimeout as exc:
+            raise ContentLockTimeout(str(exc)) from exc
+
+    def page_blob_sha(self, relative: str) -> str:
+        """Return the opaque version callers must send back with an update."""
+
+        page = self._page_path(relative)
+        try:
+            return self.git.blob_sha(page)
+        except RevisionNotFound as exc:
+            raise ContentMissing("page not found") from exc
 
     def set_page_title(self, relative: str, title: str, actor: User) -> str:
         """Retitle a page without moving it, so existing links keep resolving.
@@ -489,7 +526,7 @@ class ContentRepository:
 
         title = self._validate_title(title)
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
             document = self._read_document(page)
@@ -519,7 +556,7 @@ class ContentRepository:
 
         title = self._validate_title(title)
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             container = self._container_path(relative)
             navigation = container / ".pages"
             if not navigation.is_file():
@@ -549,7 +586,7 @@ class ContentRepository:
         """
 
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
             rollback.file(page)
@@ -598,7 +635,7 @@ class ContentRepository:
         """
 
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
             parent = page_relative.rsplit("/", 1)[0]
@@ -675,7 +712,7 @@ class ContentRepository:
         """
 
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             container = self._container_path(relative)
             kind = self._kind(relative)
             # Snapshot the whole subtree before it goes, and declare exactly
@@ -699,7 +736,7 @@ class ContentRepository:
 
     def _rename_container(self, relative: str, new_slug: str, actor: User) -> MovedContent:
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             container = self._container_path(relative)
             kind = self._kind(relative)
             previous_path = container.relative_to(self.docs).as_posix()
@@ -760,7 +797,7 @@ class ContentRepository:
         self, relative: str, revision: str, actor: User
     ) -> str:
         page = self._deleted_or_existing_page_path(relative)
-        with self.git.lock:
+        with self.git.write_lock():
             try:
                 return self.git.restore_as_new_commit(
                     page,

@@ -5,11 +5,12 @@ import shlex
 import stat
 import tempfile
 from collections.abc import Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from filelock import FileLock
+from filelock import FileLock, Timeout
 from git import Actor, BadName, GitCommandError, RemoteProgress, Repo
 
 SHA_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
@@ -23,6 +24,10 @@ _LOG_FORMAT = _FIELD_SEPARATOR.join(["%H", "%an", "%ae", "%aI", "%B"]) + _RECORD
 
 class RevisionNotFound(RuntimeError):
     """Raised when a revision or its version of a path cannot be found."""
+
+
+class GitWriteLockTimeout(RuntimeError):
+    """A content write could not acquire the repository lock in time."""
 
 
 class GitSyncError(RuntimeError):
@@ -147,10 +152,26 @@ class Revision:
 
 
 class GitBackend:
-    def __init__(self, repo_path: Path, lock_path: Path):
+    def __init__(self, repo_path: Path, lock_path: Path, *, lock_timeout_seconds: float = 15.0):
         self.repo_path = repo_path.resolve()
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        self.lock = FileLock(lock_path, timeout=15)
+        self.lock = FileLock(lock_path, timeout=lock_timeout_seconds)
+
+    @contextmanager
+    def write_lock(self):
+        """Acquire the single repository mutation lock with a finite wait.
+
+        The lock is deliberately shared by all app processes pointing at this
+        content checkout, not merely by one FastAPI process.  FileLock is
+        re-entrant for this backend instance, so callers can safely compose a
+        high-level mutation with ``commit_paths``.
+        """
+
+        try:
+            with self.lock:
+                yield
+        except Timeout as exc:
+            raise GitWriteLockTimeout("content repository is busy; retry the request") from exc
 
     @property
     def repo(self) -> Repo:
@@ -224,35 +245,53 @@ class GitBackend:
         history across a slug change.
         """
 
-        relative = [self._relative_path(path) for path in paths]
-        repo = self.repo
-        if repo.head.is_valid():
-            # Discard anything else that was staged before adding our paths.
-            # Working-tree files are untouched, so an operator's edits survive;
-            # only their staging is dropped, which is far better than silently
-            # committing their work under this user's name.
-            repo.index.reset(repo.head.commit)
-        present, removed = [], []
-        for item in relative:
-            (present if (self.repo_path / item).exists() else removed).append(item)
-        try:
-            if removed and repo.head.is_valid():
-                # `git add` raises on a path that is gone, so a deletion has to
-                # be staged explicitly.  ``--cached`` only: the working tree is
-                # already in its post-operation state and must not be touched.
-                # ``--ignore-unmatch`` keeps a declared-but-untracked path (an
-                # operator's scratch file inside a deleted book) from failing
-                # the whole operation; it was never in history to remove.
-                repo.index.remove(removed, r=True, ignore_unmatch=True)
-            if present:
-                repo.index.add(present)
-            actor = Actor(name, email)
-            commit = repo.index.commit(message, author=actor, committer=actor)
-            return commit.hexsha
-        except Exception:
+        with self.write_lock():
+            relative = [self._relative_path(path) for path in paths]
+            repo = self.repo
+            # A failed add/commit must put the index back byte-for-byte.  A
+            # reset-to-HEAD would silently erase an operator's staged work.
+            index_snapshot = self._snapshot_index()
             if repo.head.is_valid():
+                # Discard anything else that was staged before adding our paths.
+                # Working-tree files are untouched, so an operator's edits survive;
+                # only their staging is dropped, which is far better than silently
+                # committing their work under this user's name.
                 repo.index.reset(repo.head.commit)
-            raise
+            present, removed = [], []
+            for item in relative:
+                (present if (self.repo_path / item).exists() else removed).append(item)
+            try:
+                if removed and repo.head.is_valid():
+                    # `git add` raises on a path that is gone, so a deletion has to
+                    # be staged explicitly.  ``--cached`` only: the working tree is
+                    # already in its post-operation state and must not be touched.
+                    # ``--ignore-unmatch`` keeps a declared-but-untracked path (an
+                    # operator's scratch file inside a deleted book) from failing
+                    # the whole operation; it was never in history to remove.
+                    repo.index.remove(removed, r=True, ignore_unmatch=True)
+                if present:
+                    repo.index.add(present)
+                actor = Actor(name, email)
+                commit = repo.index.commit(message, author=actor, committer=actor)
+                return commit.hexsha
+            except Exception:
+                self._restore_index(index_snapshot)
+                raise
+
+    def blob_sha(self, path: Path | str) -> str:
+        """Return the current HEAD blob SHA for one tracked content file."""
+
+        relative = self._relative_path(path)
+        repo = self.repo
+        if not repo.head.is_valid():
+            raise RevisionNotFound("content repository has no commits")
+        try:
+            blob = repo.head.commit.tree / relative
+        except KeyError as exc:
+            raise RevisionNotFound("revision does not contain path") from exc
+        if blob.type != "blob":
+            raise RevisionNotFound("revision path is not a file")
+        return blob.hexsha
 
     def log(self, path: Path | str) -> list[Revision]:
         """Revisions touching ``path``, newest first, following renames.
@@ -456,6 +495,28 @@ class GitBackend:
             return path.resolve().relative_to(self.repo_path).as_posix()
         except ValueError as exc:
             raise ValueError("path is outside the content repository") from exc
+
+    def _snapshot_index(self) -> bytes | None:
+        index_path = Path(self.repo.git_dir) / "index"
+        return index_path.read_bytes() if index_path.exists() else None
+
+    def _restore_index(self, snapshot: bytes | None) -> None:
+        """Restore a pre-mutation index snapshot without changing HEAD/files."""
+
+        index_path = Path(self.repo.git_dir) / "index"
+        if snapshot is None:
+            index_path.unlink(missing_ok=True)
+            return
+        descriptor, temporary = tempfile.mkstemp(dir=index_path.parent, prefix=".index.restore.")
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(snapshot)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, index_path)
+        except Exception:
+            Path(temporary).unlink(missing_ok=True)
+            raise
 
     def _remove_empty_parents(self, directory: Path) -> None:
         while directory != self.repo_path and directory.is_dir():
