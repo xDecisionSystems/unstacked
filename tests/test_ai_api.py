@@ -163,6 +163,59 @@ def test_llm_md_is_available_from_the_app(client):
     assert "### user" in response.text
 
 
+def test_page_history_diff_and_restore_are_git_backed(client, app_env):
+    app, settings, _admin, token = app_env
+    headers = bearer(token)
+    book = client.post("/api/ai/books", json={"title": "Handbook"}, headers=headers)
+    assert book.status_code == 201
+    created = client.post(
+        "/api/ai/books/handbook/pages",
+        json={"title": "Welcome", "markdown": "first version"},
+        headers=headers,
+    )
+    assert created.status_code == 201
+    path = created.json()["path"]
+    initial_revision = created.json()["commit"]
+
+    page = settings.content_repo_path / "docs" / path
+    original = page.read_text(encoding="utf-8")
+    page.write_text(original.replace("first version", "second version"), encoding="utf-8")
+    updated_revision = app.state.content.git.commit_paths(
+        [page],
+        name="Admin Agent",
+        email="admin@example.com",
+        message="Update page: handbook/welcome.md",
+    )
+
+    history = client.get(f"/api/ai/history/{path}", headers=headers)
+    assert history.status_code == 200
+    assert [entry["sha"] for entry in history.json()] == [updated_revision, initial_revision]
+
+    diff = client.get(
+        f"/api/ai/history/{path}/diff",
+        params={"from_revision": initial_revision, "to_revision": updated_revision},
+        headers=headers,
+    )
+    assert diff.status_code == 200
+    assert "-first version" in diff.json()["diff"]
+    assert "+second version" in diff.json()["diff"]
+
+    restored = client.post(
+        f"/api/ai/history/{path}/restore",
+        json={"revision": initial_revision},
+        headers=headers,
+    )
+    assert restored.status_code == 200
+    assert restored.json()["commit"] not in {initial_revision, updated_revision}
+    page_after_restore = client.get(f"/api/ai/content/{path}", headers=headers)
+    assert "first version" in page_after_restore.json()["markdown"]
+
+    restored_history = client.get(f"/api/ai/history/{path}", headers=headers).json()
+    assert restored_history[0]["sha"] == restored.json()["commit"]
+    assert restored_history[0]["message"].startswith("Restore page:")
+    assert Repo(settings.content_repo_path).head.commit.parents[0].hexsha == updated_revision
+
+
 def test_password_exchange_is_rate_limited(client):
     for _ in range(5):
         response = client.post(

@@ -45,6 +45,31 @@ class CreatedResponse(BaseModel):
     commit: str
 
 
+class RevisionResponse(BaseModel):
+    sha: str
+    message: str
+    author_name: str
+    author_email: str
+    authored_at: str
+
+
+class DiffResponse(BaseModel):
+    path: str
+    from_revision: str
+    to_revision: str
+    diff: str
+
+
+class RestoreRequest(BaseModel):
+    revision: str = Field(min_length=7, max_length=64, pattern=r"^[0-9a-fA-F]+$")
+
+
+class RestoreResponse(BaseModel):
+    path: str
+    restored_revision: str
+    commit: str
+
+
 def _created(value: CreatedContent) -> CreatedResponse:
     return CreatedResponse(**value.__dict__)
 
@@ -90,6 +115,62 @@ def download_export(request: Request, user: Annotated[User, Depends(get_current_
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="unstacked-content.zip"'},
     )
+
+
+@router.get("/ai/history/{content_path:path}/diff", response_model=DiffResponse)
+def get_page_diff(
+    content_path: str,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    from_revision: str = Query(min_length=7, max_length=64, pattern=r"^[0-9a-fA-F]+$"),
+    to_revision: str = Query(min_length=7, max_length=64, pattern=r"^[0-9a-fA-F]+$"),
+):
+    try:
+        path = normalize_relative_path(content_path)
+        with Session(request.app.state.engine) as session:
+            diff = request.app.state.ai_service.page_diff(
+                session, user, path, from_revision, to_revision
+            )
+    except (AccessDenied, ContentError, UnsafePath) as exc:
+        raise _content_error(exc) from exc
+    return DiffResponse(
+        path=path,
+        from_revision=from_revision,
+        to_revision=to_revision,
+        diff=diff,
+    )
+
+
+@router.post("/ai/history/{content_path:path}/restore", response_model=RestoreResponse)
+def restore_page_revision(
+    content_path: str,
+    payload: RestoreRequest,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    try:
+        path = normalize_relative_path(content_path)
+        with Session(request.app.state.engine) as session:
+            commit = request.app.state.ai_service.restore_page(
+                session, user, path, payload.revision
+            )
+    except (AccessDenied, ContentError, UnsafePath) as exc:
+        raise _content_error(exc) from exc
+    return RestoreResponse(path=path, restored_revision=payload.revision, commit=commit)
+
+
+@router.get("/ai/history/{content_path:path}", response_model=list[RevisionResponse])
+def get_page_history(
+    content_path: str,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    try:
+        path = normalize_relative_path(content_path)
+        with Session(request.app.state.engine) as session:
+            return request.app.state.ai_service.page_history(session, user, path)
+    except (AccessDenied, ContentError, UnsafePath) as exc:
+        raise _content_error(exc) from exc
 
 
 @router.get("/ai/content/{content_path:path}")

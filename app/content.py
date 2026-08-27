@@ -9,14 +9,14 @@ from pathlib import Path
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
-import frontmatter
 import yaml
 from git import Actor, Repo
 from sqlmodel import Session
 
 from app.acl import resolve_access
 from app.config import Settings
-from app.git_backend import GitBackend
+from app.frontmatter_io import new_page, parse_page
+from app.git_backend import GitBackend, Revision, RevisionNotFound
 from app.models import User
 from app.paths import make_slug, normalize_relative_path, safe_join
 
@@ -239,17 +239,18 @@ class ContentRepository:
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
             raise ContentError("page exceeds configured size limit")
         now = datetime.now(timezone.utc).isoformat()
-        post = frontmatter.Post(
+        serialized = new_page(
             markdown,
-            id=str(uuid4()),
-            title=title,
-            created_at=now,
-            updated_at=now,
-            author=actor.email,
-            tags=tags,
-            draft=draft,
+            {
+                "id": str(uuid4()),
+                "title": title,
+                "created_at": now,
+                "updated_at": now,
+                "author": actor.email,
+                "tags": tags,
+                "draft": draft,
+            },
         )
-        serialized = frontmatter.dumps(post) + "\n"
         with self.git.lock:
             if not parent_path.is_dir():
                 raise ContentMissing("parent book or chapter not found")
@@ -269,17 +270,39 @@ class ContentRepository:
         return CreatedContent("page", page_relative, slug, commit)
 
     def read_page(self, relative: str) -> tuple[dict, str, str]:
-        relative = normalize_relative_path(relative)
-        if not relative.endswith(".md"):
-            raise ContentMissing("page not found")
-        page = safe_join(self.docs, relative)
-        if not page.is_file():
-            raise ContentMissing("page not found")
+        page = self._page_path(relative)
         if page.stat().st_size > self.settings.max_page_bytes:
             raise ContentError("page exceeds configured size limit")
         raw = page.read_text(encoding="utf-8")
-        post = frontmatter.loads(raw)
-        return dict(post.metadata), post.content, raw
+        document = parse_page(raw, default_title=page.stem)
+        return document.metadata, document.content, raw
+
+    def page_history(self, relative: str) -> list[Revision]:
+        return self.git.log(self._page_path(relative))
+
+    def page_diff(self, relative: str, from_revision: str, to_revision: str) -> str:
+        try:
+            return self.git.diff(from_revision, to_revision, self._page_path(relative))
+        except RevisionNotFound as exc:
+            raise ContentMissing("revision not found") from exc
+
+    def restore_page(
+        self, relative: str, revision: str, actor: User
+    ) -> str:
+        page = self._page_path(relative)
+        with self.git.lock:
+            try:
+                return self.git.restore_as_new_commit(
+                    page,
+                    revision,
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=(
+                        f"Restore page: {normalize_relative_path(relative)} from {revision[:12]}"
+                    ),
+                )
+            except RevisionNotFound as exc:
+                raise ContentMissing("revision not found") from exc
 
     def authorized_pages(self, session: Session, user: User) -> list[str]:
         pages = []
@@ -355,6 +378,15 @@ class ContentRepository:
 
     def _write_nav(self, path: Path, title: str) -> None:
         self._atomic_write(path, yaml.safe_dump({"title": title, "nav": ["*"]}, sort_keys=False))
+
+    def _page_path(self, relative: str) -> Path:
+        relative = normalize_relative_path(relative)
+        if not relative.endswith(".md"):
+            raise ContentMissing("page not found")
+        page = safe_join(self.docs, relative)
+        if not page.is_file():
+            raise ContentMissing("page not found")
+        return page
 
     def _ensure_llm_md(self) -> None:
         workflow = self.docs / "llm.md"

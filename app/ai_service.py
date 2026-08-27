@@ -2,6 +2,7 @@ from sqlmodel import Session
 
 from app.acl import resolve_access
 from app.content import ContentRepository, CreatedContent
+from app.git_backend import Revision
 from app.models import User
 from app.paths import normalize_relative_path
 
@@ -71,6 +72,31 @@ class AIContentService:
             draft,
             user,
         )
+
+    def page_history(self, session: Session, user: User, path: str) -> list[Revision]:
+        path = normalize_relative_path(path)
+        if not resolve_access(session, user, path).can_read:
+            raise AccessDenied
+        return self.content.page_history(path)
+
+    def page_diff(
+        self,
+        session: Session,
+        user: User,
+        path: str,
+        from_revision: str,
+        to_revision: str,
+    ) -> str:
+        path = normalize_relative_path(path)
+        if not resolve_access(session, user, path).can_read:
+            raise AccessDenied
+        return self.content.page_diff(path, from_revision, to_revision)
+
+    def restore_page(self, session: Session, user: User, path: str, revision: str) -> str:
+        path = normalize_relative_path(path)
+        if not resolve_access(session, user, path).can_write:
+            raise AccessDenied
+        return self.content.restore_page(path, revision, user)
 
     @staticmethod
     def _require_admin(user: User) -> None:
