@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 03:49 UTC — Codex
+Completed three unblocked plan foundations: database-level authorization
+constraints with migration coverage, atomic awesome-nav `.pages` management,
+and deterministic ACL container visibility/diagnostics. Updated the plan to
+mark T1.1, T2.4, and T4.1 complete; the full validation suite follows.
+- Files: `app/models.py`, `app/migrations/versions/20260827_0002_database_constraints.py`,
+  `tests/test_models.py`, `app/nav.py`, `app/content.py`, `tests/test_nav.py`,
+  `app/acl.py`, `tests/test_acl.py`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 03:20 UTC — Codex
 Kept the Docker application listener and health checks on internal port 8000,
 while making the external Compose host port configurable through
@@ -177,16 +186,3 @@ and is provisioned for existing repositories only when absent so local edits
 are preserved. Documented the contract and added endpoint/build verification.
 - Files: `app/content.py`, `app/main.py`, `tests/test_content_build.py`,
   `tests/test_ai_api.py`, `README.md`, `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 00:27 UTC — Codex
-Implemented the first secure application slice for AI-authored wiki content.
-Added the FastAPI app, locked Python project, initial Alembic schema, Argon2
-login and signed bearer tokens, login throttling, deterministic path ACLs,
-safe filesystem/Git content services, portable MkDocs bootstrap, and shared
-AI service plus REST endpoints for filtered tree/page/ZIP downloads and
-book/chapter/page creation. Added integration and security tests, including
-a real strict MkDocs build proving drafts stay out of output/search, and
-updated the plan and contributor/operator documentation for AI writes.
-- Files: `.env.example`, `.gitignore`, `pyproject.toml`, `uv.lock`, `app/*.py`,
-  `app/migrations/**`, `tests/*.py`, `README.md`, `AGENTS.md`,
-  `plans/plan_initial.md`, `LOG.md`

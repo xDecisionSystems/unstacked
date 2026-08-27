@@ -172,11 +172,10 @@ named module before writing anything new. No marker means nothing is built.
 
 ### Phase 1 — Data layer & auth
 
-#### [~] T1.1 — Database schema
+#### [x] T1.1 — Database schema
 `sonnet` / `terra` · **M** · **high** · depends: T0.1, T0.2
 `app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
 **Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, and tests can insert a user, group, membership, and normalized permission.
-**Remaining:** `app/models.py` + Alembic initial migration cover all four tables, FK cascades and `normalize_path_prefix`. Remaining: unique/check constraints beyond email/name, and constraint-behaviour tests.
 
 #### T1.2 — Password auth & sessions
 `opus` / `sol` · **M** · **high** · depends: T1.1
@@ -217,11 +216,10 @@ Make it idempotent and non-interactive-capable without accepting passwords in pr
 **Done when:** every successful operation leaves a clean index and a tree that `mkdocs build --strict` accepts; injected failures restore the pre-operation bytes; and rename preserves `git log --follow` history.
 **Remaining:** `app/content.py` implements create/read for books, chapters and pages plus tree/export and the two-level depth limit. Remaining: update, delete, move and slug-rename — including `git mv` so `--follow` keeps history.
 
-#### T2.4 — Nav (`.pages`) management
+#### [x] T2.4 — Nav (`.pages`) management
 `sonnet` / `terra` · **M** · **medium** · depends: T0.1, T2.1
 `app/nav.py`: parse and write awesome-nav v3 `.pages` files; explicit ordering and display titles; preserve unknown supported keys; reject malformed files without clobbering them; remove stale entries on delete. Writes are atomic and are orchestrated by T2.3 rather than committed independently.
 **Done when:** reorder changes only `.pages`; operator-added supported keys survive round trips; malformed YAML remains untouched with an actionable error; and `mkdocs build --strict` reflects the order.
-> Note: a minimal `_write_nav` currently lives inside `app/content.py` and only writes `{title, nav: ["*"]}` for a new container. This task extracts it into `app/nav.py` and adds parsing, reordering and stale-entry removal; until then `nav` in the module table is aspirational.
 
 #### T2.5 — Assets & uploads
 `opus` / `sol` · **M** · **high** · depends: T2.1, T2.3
@@ -258,11 +256,10 @@ Routes for per-page history list, diff between revisions, and restore-to-revisio
 
 ### Phase 4 — Access control
 
-#### [~] T4.1 — ACL resolution engine
+#### [x] T4.1 — ACL resolution engine
 `opus` / `sol` · **M** · **max** · depends: T1.1, T2.1
 `app/acl.py`: given a user and validated `docs/`-relative path, resolve read/write. A prefix matches whole path segments only. Across all memberships, select only rules at the greatest matching segment depth; at that depth, explicit deny wins over allow for each capability. `can_write=true` requires `can_read=true` at validation time. Admins bypass; inactive users never do; default deny. Ancestor containers are visible only when needed to reach a readable descendant, without granting access to their page bodies. Keep the resolver pure and return an explanation object for admin diagnostics without exposing it to unauthorized callers.
 **Done when:** a truth table covers inherited allow, more-specific allow/deny, equal-specificity cross-group conflict, sibling-prefix confusion (`chapter` vs `chapter-old`), write/read invariants, ancestor visibility, inactive users, default deny, and admin bypass.
-**Remaining:** `app/acl.py` is a pure resolver with segment-aware matching, greatest-specificity selection, deny-wins ties, write-implies-read, admin bypass and inactive denial; `AccessPolicy` loads rules once per request. Remaining: ancestor container visibility, and the explanation object for admin diagnostics.
 > Security-critical: every other module trusts this answer.
 
 #### T4.2 — ACL enforcement dependencies
@@ -378,7 +375,7 @@ MCP server exposing search/list/get/download and create-book/chapter/page tools 
 #### [~] T10.1 — ACL & path-safety test suites
 `opus` / `sol` · **L** · **high** · depends: T4.2, T2.1
 Consolidate the task-level ACL/path tests into exhaustive security regression suites, including segment-aware matching, conflicting equal-depth rules, inactive users, ancestor visibility, Unicode/case behavior, URL decoding, symlinks, and route/service authorization coverage. Add property-based tests where they improve boundary coverage.
-**Remaining:** `tests/test_acl.py` (truth table) and `tests/test_paths.py` (adversarial) are in place. Remaining: ancestor-visibility and explanation-object cases once T4.1 adds them, route/service authorization coverage (needs T4.2), and property-based boundary tests.
+**Remaining:** `tests/test_acl.py` (truth table) and `tests/test_paths.py` (adversarial) cover the current pure resolver and path boundary. Remaining: route/service authorization coverage (needs T4.2), and property-based boundary tests.
 
 #### [x] T10.2 — Content round-trip integration test **[P]**
 `sonnet` / `terra` · **L** · **high** · depends: T2.3, T3.2, T4.2
