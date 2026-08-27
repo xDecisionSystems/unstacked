@@ -27,9 +27,14 @@ from app.nav import (
 )
 from app.paths import (
     RESERVED_ROOT_NAMES,
+    ConfinedFileTooLarge,
+    UnsafePath,
+    atomic_write_confined,
+    is_confined_directory,
     make_slug,
     normalize_relative_path,
     path_depth,
+    read_confined_text,
     safe_join,
 )
 
@@ -379,7 +384,6 @@ class ContentRepository:
     ) -> CreatedContent:
         parent = self._validate_page_parent(parent)
         slug = make_slug(title, requested_slug)
-        parent_path = safe_join(self.docs, parent)
         page_relative = f"{parent}/{slug}.md"
         page = safe_join(self.docs, page_relative)
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
@@ -398,18 +402,18 @@ class ContentRepository:
             },
         )
         with self.git.lock:
-            if not parent_path.is_dir():
+            if not is_confined_directory(self.docs, parent):
                 raise ContentMissing("parent book or chapter not found")
-            if page.exists():
-                raise ContentExists("page already exists")
             try:
-                self._atomic_write(page, serialized)
+                atomic_write_confined(self.docs, page_relative, serialized, overwrite=False)
                 commit = self.git.commit_paths(
                     [page],
                     name=actor.display_name,
                     email=actor.email,
                     message=f"Create page: {page_relative}",
                 )
+            except FileExistsError:
+                raise ContentExists("page already exists") from None
             except Exception:
                 page.unlink(missing_ok=True)
                 raise
@@ -417,9 +421,14 @@ class ContentRepository:
 
     def read_page(self, relative: str) -> tuple[dict, str, str]:
         page = self._page_path(relative)
-        if page.stat().st_size > self.settings.max_page_bytes:
-            raise ContentError("page exceeds configured size limit")
-        raw = page.read_text(encoding="utf-8")
+        try:
+            raw = read_confined_text(self.docs, relative, max_bytes=self.settings.max_page_bytes)
+        except ConfinedFileTooLarge as exc:
+            raise ContentError("page exceeds configured size limit") from exc
+        except UnsafePath as exc:
+            # Preserve the service's indistinguishable missing-path behavior;
+            # callers must never learn whether a denied name is a symlink.
+            raise ContentMissing("page not found") from exc
         document = parse_page(raw, default_title=page.stem)
         return document.metadata, document.content, raw
 
