@@ -45,12 +45,18 @@ class GitBackend:
         return Repo(self.repo_path)
 
     def commit_paths(self, paths: list[Path], *, name: str, email: str, message: str) -> str:
-        """Commit exactly ``paths`` on top of HEAD.
+        """Commit exactly ``paths`` on top of HEAD, present or already removed.
 
         The index is reset to HEAD first, so content an operator (or a crashed
         earlier operation) left staged cannot be swept into this commit and
         misattributed to ``name``.  Only staging is discarded; working-tree
         files are never modified.
+
+        Callers declare every path a logical operation touched, including the
+        source half of a rename and the pages of a deleted book.  Both halves
+        of a rename therefore land in one commit, which is what lets Git's own
+        similarity detection — and so ``git log --follow`` — carry a page's
+        history across a slug change.
         """
 
         relative = [self._relative_path(path) for path in paths]
@@ -61,10 +67,20 @@ class GitBackend:
             # only their staging is dropped, which is far better than silently
             # committing their work under this user's name.
             repo.index.reset(repo.head.commit)
+        present, removed = [], []
+        for item in relative:
+            (present if (self.repo_path / item).exists() else removed).append(item)
         try:
-            # Plain `git add` also records removals, so this same path serves
-            # deletions once they exist.
-            repo.index.add(relative)
+            if removed and repo.head.is_valid():
+                # `git add` raises on a path that is gone, so a deletion has to
+                # be staged explicitly.  ``--cached`` only: the working tree is
+                # already in its post-operation state and must not be touched.
+                # ``--ignore-unmatch`` keeps a declared-but-untracked path (an
+                # operator's scratch file inside a deleted book) from failing
+                # the whole operation; it was never in history to remove.
+                repo.index.remove(removed, r=True, ignore_unmatch=True)
+            if present:
+                repo.index.add(present)
             actor = Actor(name, email)
             commit = repo.index.commit(message, author=actor, committer=actor)
             return commit.hexsha
