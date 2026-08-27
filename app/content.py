@@ -143,6 +143,30 @@ CONTENT_REQUIREMENTS = """mkdocs==1.6.1
 mkdocs-awesome-nav==3.3.0
 """
 
+CONTENT_CI_WORKFLOW = """name: Validate content
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Install content build dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Build the static site strictly
+        run: python -m mkdocs build --strict
+"""
+
 DRAFT_HOOK = """from pathlib import Path
 
 import shutil
@@ -221,6 +245,7 @@ class ContentRepository:
             if (self.root / ".git").is_dir():
                 self.docs.mkdir(parents=True, exist_ok=True)
                 self._ensure_llm_md()
+                self._ensure_content_ci_workflow()
             else:
                 self._bootstrap_repository()
             # Configure the backup remote once, at startup, so every later
@@ -252,8 +277,12 @@ class ContentRepository:
         self.root.mkdir(parents=True, exist_ok=True)
         self.docs.mkdir(parents=True, exist_ok=True)
         (self.root / "hooks").mkdir(exist_ok=True)
+        (self.root / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
         self._atomic_write(self.root / "mkdocs.yml", MKDOCS_YML)
         self._atomic_write(self.root / "requirements.txt", CONTENT_REQUIREMENTS)
+        self._atomic_write(
+            self.root / ".github" / "workflows" / "validate-content.yml", CONTENT_CI_WORKFLOW
+        )
         self._atomic_write(self.root / "hooks" / "drafts.py", DRAFT_HOOK)
         self._atomic_write(self.root / ".gitignore", "site/\n")
         self._atomic_write(self.docs / ".pages", 'nav:\n  - index.md\n  - "*"\n')
@@ -264,6 +293,7 @@ class ContentRepository:
             [
                 "mkdocs.yml",
                 "requirements.txt",
+                ".github/workflows/validate-content.yml",
                 "hooks/drafts.py",
                 ".gitignore",
                 "docs/.pages",
@@ -953,4 +983,25 @@ class ContentRepository:
             name="Unstacked",
             email="system@unstacked.local",
             message="Add managed LLM workflow",
+        )
+
+    def _ensure_content_ci_workflow(self) -> None:
+        """Seed portable validation CI without taking over an existing workflow.
+
+        This lives in the content repository because that repository must stay
+        independently buildable after the application and database are gone.
+        A local maintainer may replace the workflow with a stricter one, so
+        bootstrap only creates this exact managed path when it is absent.
+        """
+
+        workflow = self.root / ".github" / "workflows" / "validate-content.yml"
+        if workflow.exists():
+            return
+        workflow.parent.mkdir(parents=True, exist_ok=True)
+        self._atomic_write(workflow, CONTENT_CI_WORKFLOW)
+        self.git.commit_paths(
+            [workflow],
+            name="Unstacked",
+            email="system@unstacked.local",
+            message="Add content validation workflow",
         )
