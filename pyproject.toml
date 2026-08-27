@@ -16,6 +16,7 @@ dependencies = [
   "fastapi>=0.128,<1",
   "filelock>=3.20,<4",
   "GitPython>=3.1.45,<4",
+  "itsdangerous>=2.2,<3",
   "Jinja2>=3.1,<4",
   "mkdocs==1.6.1",
   "mkdocs-awesome-nav==3.3.0",

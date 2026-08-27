@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     api_token_secret_path: Path = Path("data/api_token_secret")
     api_token_audience: str = "unstacked-ai"
     api_token_ttl_seconds: int = 3600
+    # Lifetime of a browser session cookie.  Signed and verified with the same
+    # secret as API tokens but under a separate itsdangerous salt, so the two
+    # token families cannot be swapped for one another.
+    session_ttl_seconds: int = 43_200
     login_attempts_per_minute: int = 5
     # Number of trusted reverse proxies in front of the app.  0 means the
     # socket peer is the client; behind a proxy this must be set or every
@@ -54,6 +58,8 @@ class Settings(BaseSettings):
     def resolve_and_validate_secrets(self) -> "Settings":
         if self.api_token_ttl_seconds < 60:
             raise ValueError("API token lifetime must be at least 60 seconds")
+        if self.session_ttl_seconds < 60:
+            raise ValueError("session lifetime must be at least 60 seconds")
         if self.login_attempts_per_minute < 1:
             raise ValueError("login rate limit must be positive")
         if self.trusted_proxy_hops < 0:
