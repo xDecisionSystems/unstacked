@@ -11,3 +11,4 @@ dist/
 content/
 data/
 site/
+.claude/
