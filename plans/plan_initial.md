@@ -138,7 +138,7 @@ Tasks marked **[P]** in the same phase are parallelizable — no shared files, n
 
 ### Phase 0 — Scaffolding
 
-#### T0.1 — Project scaffolding **[P]**
+#### [x] T0.1 — Project scaffolding **[P]**
 `sonnet` / `terra` · **S** · **medium** · depends: —
 `pyproject.toml` with a supported Python floor and bounded direct dependencies (FastAPI, uvicorn, SQLModel/SQLAlchemy, Alembic, GitPython, python-frontmatter, python-slugify, `pwdlib[argon2]`, itsdangerous, Jinja2, filelock, mkdocs, mkdocs-material, mkdocs-awesome-nav, HTML sanitizer, pytest, ruff); a reproducible lock file; `.gitignore` (must ignore `content/`, `data/`, `site/`, `.venv`); lint config; empty `app/` and `tests/` packages; README dev setup.
 **Done when:** a clean locked install succeeds, `ruff check` passes, and dependency versions used by app CI and the generated content-repo `requirements.txt` are intentionally compatible.
@@ -222,7 +222,7 @@ Initialize `content/` if absent: `git init` with an explicit initial branch; ope
 Repository-scoped inter-process lock around validation → mutation → exact staging → commit, with a bounded acquisition timeout. Save requests carry both path and base blob SHA; re-check both after acquiring the lock. Snapshot affected paths/index state and roll back on any pre-commit failure. Committed history is never reset to conceal an error.
 **Done when:** concurrent saves from separate processes produce one commit plus one conflict; unrelated dirty state is preserved; injected write/stage/commit failures restore affected files and index; and no request can wait forever.
 
-#### T3.4 — Page history API
+#### [x] T3.4 — Page history API
 `sonnet` / `terra` · **M** · **high** · depends: T3.1, T2.3
 Routes for per-page history list, diff between revisions, and restore-to-revision (restore = a new commit, never a rewrite).
 **Done when:** a restored page's content matches the chosen revision and history shows the restore as a new commit.
@@ -353,7 +353,7 @@ Consolidate the task-level ACL/path tests into exhaustive security regression su
 `sonnet` / `terra` · **L** · **high** · depends: T2.3, T3.2, T4.2
 Create book → chapter → page via the API, assert exact on-disk/front-matter/nav/git layout, then run `mkdocs build --strict`. Include title edit, reorder, move, delete, failed-operation rollback, and an unrelated dirty file.
 
-#### T10.3 — Worst-case drill script **[P]**
+#### [x] T10.3 — Worst-case drill script **[P]**
 `sonnet` / `terra` · **M** · **high** · depends: T3.2
 `scripts/worstcase_drill.sh`: copy only `content/` (including its dependency manifest and hooks, excluding any existing build output) to a temporary directory, create a clean venv, install only `content/requirements.txt`, run `mkdocs build --strict`, and assert a seeded draft is absent from both generated HTML and the search index. The script must not import the app or access its database. **This is the project's defining guarantee and runs in CI.**
 
@@ -361,7 +361,7 @@ Create book → chapter → page via the API, assert exact on-disk/front-matter/
 `opus` / `sol` · **L** · **high** · depends: T6.3
 Push to a local bare scratch remote, remove the disposable local checkout, restore, and assert identical refs/history/tree. Separately exercise dirty/divergent refusal, verified recovery-copy behavior, interrupted replacement, and credential redaction without depending on a real GitHub account.
 
-#### T10.5 — App CI workflow **[P]**
+#### [x] T10.5 — App CI workflow **[P]**
 `sonnet` / `terra` · **M** · **medium** · depends: T0.1, T10.3
 GitHub Action for the app repo: locked dependency install, ruff, tests with coverage, migration check, package build, and the worst-case drill. Pin third-party actions to immutable commit SHAs and grant minimum token permissions.
 

@@ -11,6 +11,22 @@ how long any entry is.
 ---
 
 ## 2026-08-27 00:38 UTC — Codex
+Added ACL-enforced AI page-history endpoints for Git commit lists, unified
+revision diffs, and restore-as-a-new-commit. Validated revision input and
+path containment, and covered the complete restore history flow in tests.
+- Files: `app/git_backend.py`, `app/content.py`, `app/ai_service.py`,
+  `app/ai_api.py`, `tests/test_ai_api.py`, `plans/plan_initial.md`, `LOG.md`
+
+## 2026-08-27 00:38 UTC — Codex
+Added the app CI workflow and the portable worst-case recovery drill. The
+drill copies only the content repository into a temporary directory, builds
+with a clean supported-Python environment and its own manifest, and proves a
+seeded draft is absent from HTML and static search. CI runs locked setup,
+linting, tests with coverage, migration upgrade, packaging, and that drill.
+- Files: `.github/workflows/ci.yml`, `scripts/worstcase_drill.sh`,
+  `plans/plan_initial.md`, `LOG.md`
+
+## 2026-08-27 00:38 UTC — Codex
 Added a tolerant front-matter I/O module so hand-authored pages without valid
 metadata remain readable, while atomic writes retain operator-defined metadata
 keys. Wired page creation and reads through the module and added focused
