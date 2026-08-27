@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 05:44 UTC — Codex
+Specified the web-home routing contract: unauthenticated visitors to `/` go to
+the login page, authenticated users land on their ACL-filtered tree, and a
+first-password-change session is limited to its password-change flow.
+- Files: `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 05:41 UTC — Codex
 Updated Docker/Coolify configuration for the implemented write-lock, session,
 static-export, and optional backup-sync settings. The static export path is
@@ -214,22 +220,5 @@ SQLite database and nested Git content repository on persistent volumes.
 Added the exact local test/bootstrap commands and recorded the Docker/Coolify
 state-persistence decision in the plan.
 - Files: `README.md`, `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 02:57 UTC — Claude Code
-User installed Docker Desktop, so I could finally test-build instead of
-reasoning from logs alone. Confirmed the README.md fix resolved the build
-failure, but found a second, more serious bug the build alone wouldn't
-have caught: the runtime image (python:3.12-slim) has no `git` binary, so
-GitPython raised ImportError at process startup and the container
-crash-looped on every run — Coolify would have deployed a Dockerfile that
-built cleanly and then never actually served traffic. Added `git` via
-apt-get to the runtime stage. Verified end-to-end this time: built the
-image, ran the container, confirmed Docker's own HEALTHCHECK reports
-healthy, hit /healthz, /llm.md and /docs successfully, and inspected
-/app/content and /app/data inside the container — running as non-root
-uid 999, content repo initialized with real git history, generated
-api_token_secret correctly mode 0600.
-- Files: `Dockerfile`, `LOG.md`
-
 
 

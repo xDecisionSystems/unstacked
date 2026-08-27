@@ -306,8 +306,14 @@ CRUD for users, groups, memberships, per-path grants, and admin-set password res
 
 #### T5.2 — Base layout & tree browser
 `sonnet` / `terra` · **L** · **high** · depends: T4.2, T5.1
-Jinja2 base template, sidebar tree (ACL-filtered), breadcrumbs, page view. No SPA framework.
-**Done when:** two users with different grants see different trees on the same instance.
+Jinja2 base template, sidebar tree (ACL-filtered), breadcrumbs, page view, and
+login page. No SPA framework. The root route (`/`) redirects an unauthenticated
+visitor to the login page; an authenticated user lands on their ACL-filtered
+tree. A user in the mandatory first-password-change state is routed only to
+that change-password flow.
+**Done when:** an unauthenticated `/` request redirects to login, a
+first-password-change session cannot reach the tree, and two users with
+different grants see different trees on the same instance.
 
 #### T5.3 — Editor & save flow **[P]**
 `sonnet` / `terra` · **L** · **high** · depends: T5.2, T3.3
