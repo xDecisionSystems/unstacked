@@ -10,6 +10,17 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 05:54 UTC — Codex
+Integrated three more plan tasks: sanitized MkDocs-aligned preview rendering,
+guarded optional manual backup/restore, and the shared ACL-aware bounded AI
+search service. Each agent passed focused tests and an isolated Compose health
+check on ports 18041–18043; integrated lint and tests passed before completion
+was recorded.
+- Files: `app/render.py`, `app/manual_backup.py`, `app/backup_api.py`,
+  `app/ai_service.py`, `app/main.py`, `tests/test_render.py`,
+  `tests/test_manual_backup.py`, `tests/test_ai_service.py`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 05:44 UTC — Codex
 Specified the web-home routing contract: unauthenticated visitors to `/` go to
 the login page, authenticated users land on their ACL-filtered tree, and a
@@ -211,14 +222,4 @@ while making the external Compose host port configurable through
 `UNSTACKED_HOST_PORT` (default 8001) to avoid the occupied Coolify host port.
 Updated the deployment instructions with the host-to-container port mapping.
 - Files: `Dockerfile`, `docker-compose.yaml`, `README.md`, `LOG.md`
-
-## 2026-08-27 03:06 UTC — Codex
-Validated the committed production Docker Compose deployment locally. Built
-the multi-stage image, started it with a generated non-committed signing
-secret, confirmed `/healthz` and Docker health, and verified the initialized
-SQLite database and nested Git content repository on persistent volumes.
-Added the exact local test/bootstrap commands and recorded the Docker/Coolify
-state-persistence decision in the plan.
-- Files: `README.md`, `plans/plan_initial.md`, `LOG.md`
-
 

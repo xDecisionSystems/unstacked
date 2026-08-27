@@ -299,7 +299,7 @@ CRUD for users, groups, memberships, per-path grants, and admin-set password res
 
 ### Phase 5 — Rendering & web UI
 
-#### T5.1 — Markdown renderer
+#### [x] T5.1 — Markdown renderer
 `opus` / `sol` · **M** · **high** · depends: T3.2
 `app/render.py`: use MkDocs/Python-Markdown configuration loading rather than hand-parsing only `markdown_extensions`; render the supported Markdown semantics, rewrite links/assets in context, then sanitize with an explicit allowlist because content is user-supplied. Document that the app preview is semantically aligned but not theme/HTML-byte-identical to the final site.
 **Done when:** admonitions, fenced code, tables, relative links, and assets behave consistently in preview and build; unsupported plugins fail clearly; and active HTML/unsafe URLs cannot execute.
@@ -353,7 +353,7 @@ Despite GitHub-flavored settings names (`github_remote_url`, `github_token`, …
 Background task coalescing rapid saves into a periodic sync to whichever backup target is configured (today: git-remote push via T6.1); retry transient failures with bounded exponential backoff and jitter; never block a save on network I/O. For the git-remote target, derive durable pending state from local-vs-upstream refs, so startup resumes an unpushed branch without a queue table. Serialize with the repository lock and stop retrying non-fast-forward/auth/configuration errors until admin action. Surface ahead count, last success, and sanitized failure in the admin UI. Do nothing at all — no background task, no admin-UI status — when no backup target is configured; this must never be on the startup-required path.
 **Done when:** ten rapid saves produce ten commits but fewer pushes; restart/offline periods recover automatically; divergence never triggers merge/force; worker/admin git operations cannot race content commits; and the app starts and runs normally with no backup target configured at all.
 
-#### T6.3 — Manual backup & restore **[P]**
+#### [x] T6.3 — Manual backup & restore **[P]**
 `opus` / `sol` · **L** · **high** · depends: T6.1
 "Back up now" (sync to whichever target is configured — today, git-remote push) and guarded restore. For the git-remote target: clone only into a validated absent/empty destination; permit fast-forward only from a clean checkout. For dirty/divergent state, first copy the entire local repo (including `.git`) to a timestamped recovery directory outside the target, verify that copy, show the divergence, and require a second explicit confirmation before any replacement. Never use force-push or destructive reset. An operator relying on rsync/S3 instead needs no admin-UI support here at all — restoring is copying files back and pointing the app at them, entirely outside this task.
 **Done when:** empty and fast-forward restores work; dirty/divergent restores cannot proceed without a verified recovery copy and confirmation; invalid remotes cannot escape the configured destination; interrupted replacement leaves either the old or restored repo recoverable; and none of this is reachable or required when no backup target is configured.
@@ -399,11 +399,10 @@ Search box, results page with snippets and breadcrumbs.
 
 ### Phase 9 — AI integration
 
-#### [~] T9.1 — Shared AI service layer
+#### [x] T9.1 — Shared AI service layer
 `opus` / `sol` · **L** · **high** · depends: T8.1, T4.2, T2.3
 `app/ai_service.py`: one permission-aware implementation of search, tree/list, get/download page, filtered export, create book, create chapter, and create page. Return structured results with deterministic item/character limits (do not depend on a model tokenizer). Treat wiki text as untrusted data, not tool instructions. Book/chapter creation is admin-only; page creation requires write access on the parent. Both transports call only this service and its ACL-aware content/search modules.
 **Done when:** direct service contract tests prove read/export and create operations apply the same ACL and limits expected by both transports, including missing/unreadable equivalence and Git author attribution.
-**Remaining:** `app/ai_service.py` is the single ACL-checked entry point for tree/get/export/create/history used by the REST transport. Remaining: search, and the token-budget-aware truncation contract.
 
 #### T9.2 — MCP server (Claude) **[P]**
 `opus` / `sol` · **L** · **high** · depends: T9.1, T1.3
