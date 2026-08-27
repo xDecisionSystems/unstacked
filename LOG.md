@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 00:33 UTC — Codex
+Audited every planned task’s model tier, context level, and reasoning effort.
+Raised scaffolding/configuration, bootstrap, migrations, history, export, CI,
+and recovery verification where their contracts exceed mechanical work; moved
+uploads, rendering, admin permission changes, push/restore, search isolation,
+and MCP transport to the frontier tier because failures can silently leak,
+corrupt, or destroy data. Added the risk-based assignment rule to the plan.
+- Files: `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 00:32 UTC — Codex
 Added a managed provider-neutral `llm.md` workflow to the portable content
 repository. It explains authenticated AI API use without secrets or content
