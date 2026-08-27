@@ -10,6 +10,22 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 02:57 UTC — Claude Code
+User installed Docker Desktop, so I could finally test-build instead of
+reasoning from logs alone. Confirmed the README.md fix resolved the build
+failure, but found a second, more serious bug the build alone wouldn't
+have caught: the runtime image (python:3.12-slim) has no `git` binary, so
+GitPython raised ImportError at process startup and the container
+crash-looped on every run — Coolify would have deployed a Dockerfile that
+built cleanly and then never actually served traffic. Added `git` via
+apt-get to the runtime stage. Verified end-to-end this time: built the
+image, ran the container, confirmed Docker's own HEALTHCHECK reports
+healthy, hit /healthz, /llm.md and /docs successfully, and inspected
+/app/content and /app/data inside the container — running as non-root
+uid 999, content repo initialized with real git history, generated
+api_token_secret correctly mode 0600.
+- Files: `Dockerfile`, `LOG.md`
+
 ## 2026-08-27 02:46 UTC — Claude Code
 Fixed a Coolify Docker Compose build failure: `RUN uv sync --locked
 --no-dev` (the step that installs the project itself, not just
@@ -181,11 +197,5 @@ now asserts drafts produce no output), and replaced "Open questions" with
 a settled-decisions table.
 - Files: `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-26 23:58 UTC — Claude Code
-Resolved the auth open question: local passwords only, no SSO/LDAP. Added
-it to confirmed scope and tightened task T1.2 to require an
-`authenticate()` seam plus login rate limiting, so an external provider
-could be added later without touching every route.
-- Files: `plans/plan_initial.md`, `LOG.md`
 
 
