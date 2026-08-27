@@ -1,12 +1,21 @@
-from app.acl import AuthorizationContext
-from app.content import ContentRepository, CreatedContent, MovedContent
+from app.acl import AccessDenied, AuthorizationContext
+from app.content import ContentMissing, ContentRepository, CreatedContent, MovedContent
 from app.git_backend import Revision
 from app.paths import make_slug, normalize_relative_path
+from app.search import ContentSearch, SearchPage
 
 
 class AIContentService:
-    def __init__(self, content: ContentRepository):
+    """The shared, bounded AI-facing content contract.
+
+    Transports deliberately receive only this service.  In particular, search
+    keeps using :class:`ContentSearch` rather than reproducing its ACL-first
+    filesystem walk or its deterministic item/snippet budgets in each client.
+    """
+
+    def __init__(self, content: ContentRepository, *, search: ContentSearch | None = None):
         self.content = content
+        self.search_engine = search or ContentSearch(content)
 
     def tree(self, authorization: AuthorizationContext) -> list[dict]:
         return self.content.tree(authorization.session, authorization.user)
@@ -15,8 +24,41 @@ class AIContentService:
         return self.content.export_zip(authorization.session, authorization.user)
 
     def get_page(self, authorization: AuthorizationContext, path: str) -> tuple[dict, str, str]:
-        path = authorization.require_read(path)
+        # The service contract is intentionally no more informative than a
+        # missing page.  Transports therefore cannot accidentally expose an
+        # authorization oracle by treating these two failures differently.
+        try:
+            path = authorization.require_read(path)
+        except AccessDenied as exc:
+            raise ContentMissing("page not found") from exc
         return self.content.read_page(path)
+
+    def search(
+        self,
+        authorization: AuthorizationContext,
+        query: str,
+        *,
+        page: int = 1,
+        page_size: int | None = None,
+    ) -> SearchPage:
+        """Search only content readable by ``authorization``.
+
+        ``ContentSearch`` validates all inputs and applies the configured
+        fixed item, file, byte, timeout, and snippet-character budgets.  The
+        structured ``SearchPage`` is returned unchanged so every future
+        transport sees identical pagination and truncation semantics.
+        """
+
+        # Keep the transport-neutral default usable when an operator lowers
+        # the global item cap below the normal 20-item page size.
+        effective_page_size = min(20, self.content.settings.max_search_results)
+        return self.search_engine.search(
+            authorization.session,
+            authorization.user,
+            query,
+            page=page,
+            page_size=effective_page_size if page_size is None else page_size,
+        )
 
     def create_book(
         self,
