@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 05:02 UTC — Codex
+Added a mandatory local Docker Compose deployment check for application and
+deployment changes, including a generated non-committed secret, an unused host
+port, health verification, behavior checks where practical, and safe teardown
+that preserves the persistent volumes.
+- Files: `AGENTS.md`, `LOG.md`
+
 ## 2026-08-27 04:54 UTC — Codex
 Updated the authentication and bootstrap plan for the required first account:
 `admin:admin` is a one-time administrator with a server-enforced mandatory
@@ -260,11 +267,6 @@ passes against a fresh bootstrap.
   `tests/test_git_backend.py`, `tests/test_rate_limit.py`,
   `tests/test_content_structure.py`, `tests/test_content_build.py`,
   `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 00:43 UTC — Codex
-Ignored the generated coverage data file so the CI-equivalent verification
-command leaves no local test artifact in the application worktree.
-- Files: `.gitignore`, `LOG.md`
 
 
 

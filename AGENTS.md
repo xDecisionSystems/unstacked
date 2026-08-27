@@ -129,3 +129,17 @@ are absent from HTML and the static search index. For broader content-layer
 changes, also run the standalone "worst case" drill described in the plan
 once that script is implemented. Don't consider a content-layer change done
 unless the strict build still passes.
+
+### Local Docker deployment verification
+
+Before handing off any application, dependency, startup, bootstrap, or
+deployment change, verify it through the production Compose configuration on
+the local machine. Use a generated, non-committed
+`UNSTACKED_API_TOKEN_SECRET`, set `UNSTACKED_HOST_PORT` to an unused local
+port, run `docker compose -f docker-compose.yaml up --build -d`, and confirm
+the container becomes healthy and `GET /healthz` succeeds. Exercise the
+changed behavior through that deployed container when practical (especially
+bootstrap and authentication changes). Inspect container logs if startup fails.
+When finished, use `docker compose -f docker-compose.yaml down` without `-v`:
+the named content and data volumes are persistent state and must not be deleted
+as part of testing. Report the selected port and verification result.
