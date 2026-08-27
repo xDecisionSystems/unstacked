@@ -5,8 +5,10 @@ from app.ai_api import router as ai_router
 from app.ai_service import AIContentService
 from app.auth import LoginRateLimiter
 from app.backup import BackupSyncWorker
+from app.backup_api import router as backup_router
 from app.config import Settings
 from app.content import ContentRepository
+from app.manual_backup import ManualBackupService
 from app.models import create_db_engine, migrate_schema
 from app.web_auth import router as web_auth_router
 
@@ -34,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # A remote is optional.  Do not construct (or start) a worker when none
     # was configured: local disk remains the complete application state.
     if settings.github_remote_url:
+        app.state.manual_backup = ManualBackupService(content.git)
         worker = BackupSyncWorker(
             content.git,
             debounce_seconds=settings.backup_sync_debounce_seconds,
@@ -48,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @app.on_event("shutdown")
         def stop_backup_sync_worker() -> None:
             worker.stop()
+        app.include_router(backup_router)
     app.include_router(ai_router)
     app.include_router(web_auth_router)
 
