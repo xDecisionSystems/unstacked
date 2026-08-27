@@ -5,8 +5,8 @@ A file-based alternative to [BookStack](https://www.bookstackapp.com/).
 Instead of storing books/chapters/pages in a database, `unstacked` keeps
 them as plain markdown files in a git repo, laid out exactly the way
 [mkdocs](https://www.mkdocs.org/) expects. Worst case, if the app and its
-database disappear entirely, the content folder alone can be dropped into
-any mkdocs install and built into a working static site.
+database disappear entirely, the content repo carries its build dependency
+manifest and can be built into a working static site on its own.
 
 A small database is still used, but only for users, groups, and
 permissions — never for content.
@@ -24,6 +24,9 @@ permissions — never for content.
 - **AI-ready search.** Search and page-read are exposed through a shared
   module reused by the web app, an MCP server (Claude), and a REST/OpenAPI
   surface (ChatGPT) — all filtered by the same permissions.
+- **Static recovery is not authenticated.** A mkdocs export contains every
+  non-draft page, so content remotes and build artifacts stay private and
+  public deployment is outside the MVP.
 
 ## Status
 

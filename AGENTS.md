@@ -24,8 +24,9 @@ don't work around them without checking with the user first.
 - **The content tree must stay a valid, buildable mkdocs project at all
   times.** Any change to books/chapters/pages must leave `mkdocs build`
   working from `content/` alone, with no app code or database involved.
-  Use `.pages` files (mkdocs-awesome-pages) for nav/ordering, not a
-  hand-maintained `nav:` in `mkdocs.yml`.
+  Use `.pages` files (`mkdocs-awesome-nav` v3 configured with
+  `filename: .pages`) for nav/ordering, not a hand-maintained `nav:` in
+  `mkdocs.yml`.
 - **Git is the revision history — don't add a revisions table.** Every
   content save is one git commit in the `content/` repo, authored as the
   editing user. Page history = `git log`/`git diff`/`git checkout` on that
@@ -35,7 +36,8 @@ don't work around them without checking with the user first.
   history into the app repo's history.
 - **Permissions are path-prefix based**, not tied to content rows (there
   are none). A `permissions` row maps `(group, path_prefix) -> read/write`;
-  most-specific-prefix wins; `is_admin` bypasses checks. Every content
+  matching is segment-aware, greatest specificity wins, and explicit deny
+  wins equal-specificity ties; `is_admin` bypasses checks. Every content
   route must enforce this — don't add a route that reads/writes files
   without going through the ACL check.
 - **No dedicated search index.** Search is grep-style over the filesystem,
@@ -61,7 +63,8 @@ unstacked/
 ## Working conventions
 
 - Stack: Python, FastAPI, SQLModel/SQLAlchemy (SQLite), GitPython,
-  `python-frontmatter`, mkdocs + `mkdocs-awesome-pages-plugin`.
+  `python-frontmatter`, mkdocs + `mkdocs-awesome-nav` (configured to retain
+  the `.pages` filename convention).
 - Front matter on every page (`id`, `title`, `created_at`, `updated_at`,
   `author`, `tags`, `draft`) is app metadata only — mkdocs ignores it.
   Don't repurpose it for anything mkdocs needs to read.
