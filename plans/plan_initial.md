@@ -210,11 +210,11 @@ Make it idempotent and non-interactive-capable without accepting passwords in pr
 `app/frontmatter_io.py`: read/write page files via `python-frontmatter`; schema for `id`/`title`/`created_at`/`updated_at`/`author`/`tags`/`draft`; tolerate missing/malformed front matter (hand-written or pasted-in files must not crash the app); preserve unknown keys on round-trip.
 **Done when:** round-trip tests preserve every field including unknown keys, and a file with no front matter still loads with sane defaults.
 
-#### [~] T2.3 — Content repository
+#### [x] T2.3 — Content repository
 `opus` / `sol` · **L** · **high** · depends: T2.1, T2.2, T2.4, T3.1
 `app/content.py`: the core tree API — list/get/create/update/delete/move/rename for books, chapters, and pages (no shelves; books live at the `docs/` root); tree walker producing the nav model; slug rename via the git wrapper so history follows the file; title change updates front matter *and* `.pages` without moving the file (URLs stay stable); enforce the two-level depth limit. All page writes use same-directory temporary files plus atomic replace. Each logical operation declares every affected content/nav/asset path and is committed once through the locked git mutation API; direct ad-hoc filesystem writes are forbidden.
 **Done when:** every successful operation leaves a clean index and a tree that `mkdocs build --strict` accepts; injected failures restore the pre-operation bytes; and rename preserves `git log --follow` history.
-**Remaining:** `app/content.py` implements create/read for books, chapters and pages plus tree/export and the two-level depth limit. Remaining: update, delete, move and slug-rename — including `git mv` so `--follow` keeps history.
+**Note:** `update_page`/`set_page_title`/`set_container_title`/`delete_page`/`delete_chapter`/`delete_book`/`move_page`/`rename_book`/`rename_chapter` are implemented on `ContentRepository`, each via the shared `_Rollback` snapshot/undo helper and one `GitBackend.commit_paths` call. Fixed a real latent bug in the process: `commit_paths` assumed plain `git add` stages deletions — it doesn't (GitPython raises `FileNotFoundError`); it now partitions declared paths into present/absent and stages absent ones via `index.remove(..., ignore_unmatch=True)`. No route/service wiring yet — that's T4.2 (ACL-guarded mutation endpoints) and T9.1/T9.3 (AI transport surface); exposing these methods unguarded would violate the ACL-everywhere rule.
 
 #### [x] T2.4 — Nav (`.pages`) management
 `sonnet` / `terra` · **M** · **medium** · depends: T0.1, T2.1
@@ -234,6 +234,7 @@ Image/attachment upload into `docs/assets/<book>/`, request and decompressed-siz
 `opus` / `sol` · **M** · **high** · depends: T0.1, T0.2
 `app/git_backend.py`: GitPython wrapper — exact-path staging and `commit_as(user, paths, message)`, `log(path)`, `diff(sha_a, sha_b, path)`, `show(sha, path)`, restore-as-a-new-commit, `push()`, and guarded fetch/fast-forward. Validate SHAs/ref names and paths; never invoke a shell with interpolated input; never stage unrelated working-tree changes; scrub credentials and local sensitive paths from typed errors.
 **Done when:** two users produce distinct authors; history follows a rename; restore adds a commit; unrelated dirty files remain untouched; and adversarial refs/paths cannot become command options or escape the repo.
+**Fixed post-hoc (2026-08-27):** `commit_paths` assumed a plain `git add` on a missing path stages its deletion — GitPython actually raises `FileNotFoundError`. Discovered while building T2.3, since every delete/rename calls `commit_paths` with an already-removed source path. Now partitions paths into present/absent and stages absent ones via `index.remove(..., ignore_unmatch=True)`.
 
 #### [~] T3.2 — Content repo bootstrap
 `sonnet` / `terra` · **M** · **medium** · depends: T3.1

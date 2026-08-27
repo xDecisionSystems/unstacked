@@ -10,6 +10,36 @@ how long any entry is.
 
 ---
 
+## 2026-08-27 04:19 UTC — Claude Code
+T2.3 (content repository update/delete/move/rename) landed from the second
+parallel subagent. This was the highest-risk of the three — content
+mutation contracts everything else builds on — so reviewed harder than
+usual: read the full diff, and independently reproduced the subagent's
+central bug-fix claim before trusting it (GitPython's `index.add` does
+*not* stage a missing path as a deletion, contrary to a comment I myself
+wrote in an earlier commit — verified with a throwaway repo, confirmed
+`FileNotFoundError`). That bug had been latent since my own T1.1 fix and
+would have blocked every delete/rename `commit_paths` call; `git_backend.py`
+now partitions declared paths into present/absent and stages absent ones
+via `index.remove(..., ignore_unmatch=True)`.
+
+Also independently mutation-tested the rollback claim rather than taking
+"7 injected-failure tests pass" at face value: neutered `_Rollback.undo()`
+to a no-op and reran — all 7 parametrized cases failed as expected,
+confirming the tests actually exercise rollback rather than passing
+vacuously. Restored the file, reran clean. New methods
+(`update_page`/`set_page_title`/`set_container_title`/`delete_page`/
+`delete_chapter`/`delete_book`/`move_page`/`rename_book`/`rename_chapter`)
+correctly declare both halves of a rename per-file (not just the directory)
+so `git log --follow` survives renaming a whole chapter's contents, not
+only top-level moves — a subtlety a naive implementation would miss.
+Merged cleanly (different files than T1.2's merge, no conflicts); full
+suite 173 passing, ruff clean. Marked T2.3 `[x]` and added a post-hoc note
+to T3.1 documenting the git_backend.py fix.
+- Files: `app/content.py`, `app/git_backend.py`,
+  `tests/test_content_lifecycle.py` (merged from subagent);
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 04:13 UTC — Claude Code
 Dispatched three parallel subagents (isolated git worktrees, opus tier) to
 coordinate plan implementation: T2.3 finish (update/delete/move/rename),
@@ -193,12 +223,4 @@ linting, tests with coverage, migration upgrade, packaging, and that drill.
 - Files: `.github/workflows/ci.yml`, `scripts/worstcase_drill.sh`,
   `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-27 00:33 UTC — Codex
-Audited every planned task’s model tier, context level, and reasoning effort.
-Raised scaffolding/configuration, bootstrap, migrations, history, export, CI,
-and recovery verification where their contracts exceed mechanical work; moved
-uploads, rendering, admin permission changes, push/restore, search isolation,
-and MCP transport to the frontier tier because failures can silently leak,
-corrupt, or destroy data. Added the risk-based assignment rule to the plan.
-- Files: `plans/plan_initial.md`, `LOG.md`
 
