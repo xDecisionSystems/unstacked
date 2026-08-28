@@ -25,7 +25,8 @@ it with a central dependency; keeping the check in one helper
 
 import logging
 import re
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
@@ -35,9 +36,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
+from app import backup_config, backup_runtime
 from app.acl import Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
+from app.backup_config import GIT_REMOTE, BackupTarget
 from app.content import ContentRepository
+from app.git_backend import GitSyncError, scrub_git_output
 from app.models import Group, Permission, User, UserGroup, normalize_path_prefix
 from app.paths import (
     RESERVED_ROOT_NAMES,
@@ -147,6 +151,59 @@ class AccessExplanationResponse(BaseModel):
     reason: str
     matching_rules: list[RuleResponse]
     decisive_rules: list[RuleResponse]
+
+
+class BackupConfigUpdate(BaseModel):
+    """A backup target as an administrator supplies it.
+
+    Deliberately not length- or pattern-constrained on ``token``: a 422 body
+    echoes the offending input, which for a credential is exactly the wrong
+    place for it to appear.  The value is checked by ``configure_remote``,
+    whose errors never contain it.
+    """
+
+    # Target-typed from the start, so an rsync or S3 variant is a new literal
+    # rather than a redesign of the route.
+    type: Literal["git-remote"] = GIT_REMOTE
+    url: str = Field(min_length=1, max_length=2000)
+    # A `content/` backup is the whole wiki, drafts included, with no per-user
+    # ACL.  Nothing here can check privacy over the network, so the operator
+    # affirms it and `configure_remote` refuses the target without it.
+    confirmed_private: bool = False
+    # HTTPS: either an inline token (stored by the app in its own owner-only
+    # file) or the path of a token file the operator manages themselves.
+    token: str | None = None
+    token_path: str | None = Field(default=None, max_length=4096)
+    # SSH: a deploy key plus the known_hosts entry its host key is pinned to.
+    ssh_key_path: str | None = Field(default=None, max_length=4096)
+    ssh_known_hosts_path: str | None = Field(default=None, max_length=4096)
+
+
+class BackupConfigResponse(BaseModel):
+    """Backup status for the admin UI: never a token, key, or its content."""
+
+    configured: bool
+    type: str
+    url: str | None
+    confirmed_private: bool
+    # Which kind of credential is in place, not the credential.  Paths are
+    # reported because a path is configuration, not a secret.
+    credential: str
+    token_path: str | None
+    ssh_key_path: str | None
+    ssh_known_hosts_path: str | None
+    # "file" once saved through this API, "environment" while the deployment's
+    # variables are still the only source, "unset" when there is no target.
+    source: str
+    updated_at: str | None
+    # Whether the sync worker and manual backup routes are live in this
+    # process.  A saved target activates them without a restart.
+    active: bool
+    ahead_count: int | None = None
+    last_success_at: str | None = None
+    last_error: str | None = None
+    retry_at: str | None = None
+    requires_admin_action: bool = False
 
 
 class DetailResponse(BaseModel):
@@ -778,3 +835,192 @@ def explain_user_access(
         matching_rules=[_rule_response(rule) for rule in explanation.matching_rules],
         decisive_rules=[_rule_response(rule) for rule in explanation.decisive_rules],
     )
+
+
+# --------------------------------------------------------------------------
+# Backup target configuration
+# --------------------------------------------------------------------------
+#
+# A backup target is optional and stays optional: none of these routes is on
+# any startup or request path, and "not configured" is a first-class answer
+# rather than an error.  The record lives in a file under `data/` (see
+# app/backup_config.py) rather than in a table, and the persisted record wins
+# over the deployment's environment variables once it exists.
+#
+# A saved credential is never rendered back.  An inline token is written to its
+# own owner-only file and only its *path* is stored, so there is no code path
+# that could return the value even by accident.
+
+
+# The credential protocol is line-oriented and `configure_remote` caps a token
+# at this length anyway; refusing earlier avoids writing a large body to disk
+# just to have it rejected.  The value never appears in the error.
+MAX_BACKUP_TOKEN_CHARS = 512
+
+
+def _backup_status_response(request: Request) -> BackupConfigResponse:
+    settings = request.app.state.settings
+    target = backup_config.effective_target(settings)
+    worker = backup_runtime.status(request.app)
+    # A target saved through this API but not wirable at the last startup (a
+    # token file that has since been removed, say) is reported here rather than
+    # having stopped the application from booting.
+    startup_error = getattr(request.app.state.content, "backup_config_error", None)
+    return BackupConfigResponse(
+        configured=target.configured,
+        type=target.type,
+        url=target.url,
+        confirmed_private=target.confirmed_private,
+        credential=target.credential,
+        token_path=str(target.token_path) if target.token_path else None,
+        ssh_key_path=str(target.ssh_key_path) if target.ssh_key_path else None,
+        ssh_known_hosts_path=(
+            str(target.ssh_known_hosts_path) if target.ssh_known_hosts_path else None
+        ),
+        source=target.source,
+        updated_at=target.updated_at,
+        active=backup_runtime.is_active(request.app),
+        ahead_count=worker.ahead_count if worker else None,
+        last_success_at=worker.last_success_at if worker else None,
+        last_error=(worker.last_error if worker else None) or startup_error,
+        retry_at=worker.retry_at if worker else None,
+        requires_admin_action=worker.requires_admin_action if worker else False,
+    )
+
+
+@router.get("/backup/config", response_model=BackupConfigResponse)
+def read_backup_config(request: Request, actor: AdminActor) -> BackupConfigResponse:
+    """Report the current backup target and its sync state, credentials aside."""
+
+    return _backup_status_response(request)
+
+
+@router.put("/backup/config", response_model=BackupConfigResponse, dependencies=CsrfGuard)
+def update_backup_config(
+    payload: BackupConfigUpdate,
+    request: Request,
+    actor: AdminActor,
+) -> BackupConfigResponse:
+    """Validate a backup target against the real repository, then persist it.
+
+    ``configure_remote`` is the validation: it is re-run immediately against
+    the actual content checkout, so a malformed URL, a missing "confirmed
+    private" affirmation, an unreadable token file or an unpinned SSH host is
+    refused at save time rather than discovered at the next restart.  Only then
+    is anything written.
+
+    A failure leaves the previous configuration in effect: both files are
+    snapshotted before the attempt and restored afterwards, and the previously
+    effective target is re-applied to the repository.  (When there was no
+    previous target, ``configure_remote`` has nothing to re-apply, so the
+    repository can keep the refused URL as ``origin`` with no credential --
+    inert, because no worker, no manual-backup service and no persisted record
+    exist for it, and the next successful save replaces it.)
+
+    Supplying a filesystem path for a token or deploy key is deliberately
+    allowed: it is the same capability the deployment's environment variables
+    already grant, and it is available only to administrators, who are trusted
+    operators in this application's model.
+    """
+
+    settings = request.app.state.settings
+    content = _content(request)
+    config_path = settings.backup_config_path
+    managed_token = backup_config.managed_token_path(settings)
+
+    if payload.token and payload.token_path:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Supply either a token value or a token file path, not both",
+        )
+    if payload.token and len(payload.token) > MAX_BACKUP_TOKEN_CHARS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"A backup token must be at most {MAX_BACKUP_TOKEN_CHARS} characters",
+        )
+
+    previous = backup_config.effective_target(settings)
+    snapshot = backup_config.FileSnapshot(config_path, managed_token)
+    try:
+        if payload.token:
+            backup_config.write_managed_token(managed_token, payload.token)
+            token_path: Path | None = managed_token
+        else:
+            token_path = Path(payload.token_path) if payload.token_path else None
+        target = BackupTarget(
+            type=GIT_REMOTE,
+            url=payload.url.strip(),
+            confirmed_private=payload.confirmed_private,
+            token_path=token_path,
+            ssh_key_path=Path(payload.ssh_key_path) if payload.ssh_key_path else None,
+            ssh_known_hosts_path=(
+                Path(payload.ssh_known_hosts_path) if payload.ssh_known_hosts_path else None
+            ),
+        )
+        content.git.configure_remote(target.remote_config())
+        stored = backup_config.save(config_path, target)
+    except GitSyncError as exc:
+        _restore_backup_configuration(request, snapshot, previous)
+        # These messages are written to be operator-actionable and are
+        # credential-free by construction; scrubbed again in case a transport
+        # echoed something back through them.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, scrub_git_output(str(exc))
+        ) from None
+    except Exception:
+        _restore_backup_configuration(request, snapshot, previous)
+        raise
+
+    if token_path != managed_token:
+        # The target no longer uses the app-managed token file; do not leave a
+        # credential on disk that nothing reads.
+        backup_config.forget_managed_token(managed_token)
+    content.backup_config_error = None
+    # Lazy wiring: the worker, the manual-backup service and the
+    # /api/admin/backup/* routes come up now, on an app that started with no
+    # target configured.  No restart is required.
+    backup_runtime.activate(request.app)
+    _audit(
+        "admin.backup.configure",
+        actor,
+        target_type=stored.type,
+        url=scrub_git_output(stored.url or ""),
+        confirmed_private=stored.confirmed_private,
+        auth_method=stored.credential,
+    )
+    return _backup_status_response(request)
+
+
+@router.delete("/backup/config", response_model=BackupConfigResponse, dependencies=CsrfGuard)
+def clear_backup_config(request: Request, actor: AdminActor) -> BackupConfigResponse:
+    """Return the app to the fully supported "no backup target" state.
+
+    Idempotent: clearing a target that was never configured is a success.  A
+    "no target" record is written rather than the file being deleted, so that
+    an administrator's decision outranks a variable left set in the deployment
+    instead of being undone by it at the next restart.  Removing
+    ``data/backup_config.json`` by hand is how control goes back to the
+    environment.
+    """
+
+    settings = request.app.state.settings
+    stored = backup_config.clear(settings.backup_config_path)
+    backup_config.forget_managed_token(backup_config.managed_token_path(settings))
+    backup_runtime.deactivate(request.app)
+    _content(request).backup_config_error = None
+    _audit("admin.backup.clear", actor, target_type=stored.type)
+    return _backup_status_response(request)
+
+
+def _restore_backup_configuration(
+    request: Request, snapshot: backup_config.FileSnapshot, previous: BackupTarget
+) -> None:
+    """Put the files and the repository back the way a failed save found them."""
+
+    snapshot.undo()
+    try:
+        _content(request).git.configure_remote(previous.remote_config())
+    except GitSyncError:
+        # The previous configuration was already broken; the save that just
+        # failed did not make it worse, and the state on disk is unchanged.
+        audit_log.warning("admin.backup.restore_previous_failed")

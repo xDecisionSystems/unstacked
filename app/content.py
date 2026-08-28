@@ -13,14 +13,16 @@ from git import Actor, Repo
 from sqlmodel import Session
 
 from app.acl import load_policy
+from app.backup_config import effective_target
 from app.config import Settings
 from app.frontmatter_io import PageDocument, new_page, parse_page, write_page
 from app.git_backend import (
     GitBackend,
+    GitSyncError,
     GitWriteLockTimeout,
-    RemoteConfig,
     Revision,
     RevisionNotFound,
+    scrub_git_output,
 )
 from app.models import User
 from app.nav import (
@@ -262,6 +264,10 @@ class ContentRepository:
             settings.content_lock_path,
             lock_timeout_seconds=settings.content_lock_timeout_seconds,
         )
+        # Why the last startup could not wire the persisted backup target, if
+        # it could not.  Sanitized, and surfaced by the admin API rather than
+        # raised: see initialize().
+        self.backup_config_error: str | None = None
 
     def initialize(self) -> None:
         with self.git.write_lock():
@@ -276,23 +282,26 @@ class ContentRepository:
             # already authenticated.  Failing here rather than at the first
             # backup means a misconfigured credential surfaces immediately
             # instead of silently leaving content unbacked-up.
-            self.git.configure_remote(self._remote_config())
-
-    def _remote_config(self) -> RemoteConfig:
-        """Map settings onto the backup remote description.
-
-        Kept here rather than in ``git_backend`` so the git wrapper stays
-        independent of the app's settings model.
-        """
-
-        return RemoteConfig(
-            url=self.settings.github_remote_url,
-            confirmed_private=self.settings.github_remote_confirmed_private,
-            token=self.settings.github_token,
-            token_path=self.settings.github_token_path,
-            ssh_key_path=self.settings.github_ssh_key_path,
-            ssh_known_hosts_path=self.settings.github_ssh_known_hosts_path,
-        )
+            #
+            # The persisted `data/backup_config.json` wins when it exists; the
+            # environment settings are the initial value until an administrator
+            # saves one through the admin API.
+            target = effective_target(self.settings)
+            try:
+                self.git.configure_remote(target.remote_config())
+                self.backup_config_error = None
+            except GitSyncError as exc:
+                if target.source != "file":
+                    # An environment-provided target is part of the deployment:
+                    # a broken one is an operator error to fix before the app
+                    # runs, which is the behaviour this project already had.
+                    raise
+                # A runtime-saved target is different.  It was written through
+                # the admin API and can be repaired through it, so a stale
+                # token file must never make the application unbootable --
+                # backup is optional, and local disk is the whole state.  Start
+                # without a remote and let the admin API report why.
+                self.backup_config_error = scrub_git_output(str(exc))
 
     def _bootstrap_repository(self) -> None:
         if self.root.exists() and any(self.root.iterdir()):
