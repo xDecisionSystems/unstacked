@@ -1,5 +1,7 @@
 import stat
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
@@ -97,3 +99,47 @@ def test_only_administrators_can_build_static_exports(app_env):
 
     with pytest.raises(ExportAccessDenied):
         StaticExportRunner(settings, app.state.content).build_for(user)
+
+
+def test_admin_can_package_completed_export_without_server_paths(app_env, tmp_path: Path):
+    app, settings, admin, _token = app_env
+    destination = settings.static_export_path
+    (destination / "nested").mkdir(parents=True)
+    (destination / "index.html").write_text("home", encoding="utf-8")
+    (destination / "nested" / "page.html").write_text("page", encoding="utf-8")
+
+    archive = StaticExportRunner(settings, app.state.content).package_for(admin)
+
+    with ZipFile(BytesIO(archive)) as zip_file:
+        assert zip_file.namelist() == [
+            "unstacked-static-export/index.html",
+            "unstacked-static-export/nested/page.html",
+        ]
+        assert zip_file.read("unstacked-static-export/nested/page.html") == b"page"
+    assert str(tmp_path) not in archive.decode("latin-1")
+
+
+def test_packaging_rejects_non_admins_and_excludes_symlinked_files(app_env, tmp_path: Path):
+    app, settings, _admin, _token = app_env
+    destination = settings.static_export_path
+    destination.mkdir(parents=True)
+    (destination / "safe.html").write_text("safe", encoding="utf-8")
+    outside = tmp_path / "outside-secret.txt"
+    outside.write_text("must not escape", encoding="utf-8")
+    (destination / "outside.html").symlink_to(outside)
+    user = User(username="reader", email="reader@example.com", password_hash="not-used")
+    runner = StaticExportRunner(settings, app.state.content)
+
+    with pytest.raises(ExportAccessDenied):
+        runner.package_for(user)
+
+    with ZipFile(BytesIO(runner.package_for(_admin))) as zip_file:
+        assert zip_file.namelist() == ["unstacked-static-export/safe.html"]
+        assert b"must not escape" not in zip_file.read("unstacked-static-export/safe.html")
+
+
+def test_packaging_requires_a_completed_export(app_env):
+    app, settings, admin, _token = app_env
+
+    with pytest.raises(ExportError, match="No completed static export"):
+        StaticExportRunner(settings, app.state.content).package_for(admin)

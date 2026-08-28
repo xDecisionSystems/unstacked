@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:42 UTC — Codex
+Integrated safe static-export packaging for the forthcoming admin download:
+admin-only, lock-protected, synthetic archive paths, and no symlinks or server
+paths in the ZIP.
+- Files: `app/export.py`, `tests/test_export.py`, `LOG.md`
+
 ## 2026-08-28 22:35 UTC — Codex
 Integrated exhaustive ACL boundary tests for segment matching, deepest-rule
 resolution, write-implies-read, equal-depth denial, order independence, and

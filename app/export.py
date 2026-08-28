@@ -13,7 +13,9 @@ import signal
 import subprocess
 import tempfile
 import time
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from app.config import Settings
 from app.content import ContentRepository
@@ -50,6 +52,19 @@ class StaticExportRunner:
             raise ExportAccessDenied("Administrator access required")
         return self.build()
 
+    def package_for(self, user: User) -> bytes:
+        """Return the last completed static export as an administrator-only ZIP.
+
+        The archive deliberately has a stable, synthetic top-level directory
+        rather than preserving the local export path.  In particular, neither
+        absolute paths nor symlinks from the server filesystem can enter a
+        download artifact.
+        """
+
+        if not user.is_admin:
+            raise ExportAccessDenied("Administrator access required")
+        return self._package()
+
     def build(self) -> Path:
         """Build and atomically publish the new artifact, preserving the old one.
 
@@ -78,6 +93,41 @@ class StaticExportRunner:
                     raise ExportError("Static export failed: MkDocs produced no site directory")
                 self._publish(candidate)
         return self.destination
+
+    def _package(self) -> bytes:
+        """Archive a published export while excluding links outside of it.
+
+        Publication and packaging take the same lock, so an archive observes
+        either the complete prior site or the complete replacement site, never
+        a directory while ``_publish`` is swapping it.
+        """
+
+        with self.content.git.lock:
+            if not self.destination.is_dir() or self.destination.is_symlink():
+                raise ExportError("No completed static export is available")
+
+            output = BytesIO()
+            try:
+                with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
+                    for current, directories, filenames in os.walk(
+                        self.destination, followlinks=False
+                    ):
+                        current_path = Path(current)
+                        # A directory link is not followed by os.walk, but reject it
+                        # instead of silently representing something ambiguous.
+                        directories[:] = [
+                            name for name in directories if not (current_path / name).is_symlink()
+                        ]
+                        for filename in filenames:
+                            source = current_path / filename
+                            if source.is_symlink() or not source.is_file():
+                                continue
+                            relative = source.relative_to(self.destination)
+                            archive_name = (Path("unstacked-static-export") / relative).as_posix()
+                            archive.write(source, archive_name)
+            except (OSError, ValueError) as exc:
+                raise ExportError("Static export could not be packaged") from exc
+        return output.getvalue()
 
     def _run(self, command: list[str]) -> tuple[str, str | None]:
         """Run MkDocs with a bounded pipe, timeout, and deliberately small env."""
