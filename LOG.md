@@ -10,6 +10,21 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 21:55 UTC — Codex
+Completed T5.4's browser history UI. The ACL-filtered revision page displays
+Git commits and an escaped side-by-side source diff; selecting a historical
+revision and restoring it creates a new commit through the existing service.
+Restore controls are not rendered to read-only users, and a deleted page can
+be recovered through its still-reachable Git history.
+
+Browser history tests: 18 passing; API/Git history tests: 47 passing; ruff
+clean. Production Compose rebuilt and became healthy on port 18055, where
+`/healthz` returned `{"status":"ok"}`; stopped without `-v`.
+- Files: `app/content.py`, `app/ai_service.py`, `app/web.py`,
+  `app/templates/page.html`, `app/templates/history.html`,
+  `app/static/style.css`, `tests/test_web.py`, `plans/plan_initial.md`,
+  `LOG.md`
+
 ## 2026-08-28 20:53 UTC — Codex
 Completed T5.3's server-rendered editor and content-management browser flow.
 The EasyMDE editor previews through the same sanitized Markdown renderer as
@@ -236,31 +251,3 @@ password change. Reopened the affected completed tasks to cover username and
 flag migrations, restricted first-login sessions, token/content blocking, and
 the idempotent fixed-credential bootstrap.
 - Files: `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 04:42 UTC — Claude Code
-User-directed architecture change: GitHub backup is no longer required or
-special-cased — everything must run purely on local disk, with off-site
-backup as optional and pluggable (git remote, rsync, S3, all equally
-valid). Rewrote the plan's context/scope, the "Version history" backup
-description, and the settled-decisions table accordingly; renamed Phase 6
-"GitHub backup" → "Backup & disaster recovery (optional)" and reframed
-T6.1 (already-built) as one interchangeable target implementation rather
-than a requirement, T6.2/T6.3 as generic "sync to whichever target is
-configured" with "no target configured" as an explicitly done-when-tested
-state. No code changed — T6.1's existing implementation already works
-against any git host despite GitHub-flavored settings names; noted that
-as a future optional rename, not required now.
-
-Also fixed AGENTS.md, which stated a GitHub remote as a non-negotiable
-design rule — that's now factually wrong and would have misled the next
-agent (Codex included) reading it as a hard rule; corrected it to match.
-
-Mid-turn, the user added a further requirement: an admin UI page to set
-up the backup target, rather than env-var-only configuration requiring a
-redeploy. Added a new task, T6.4, for runtime-editable backup
-configuration (persisted to a `data/` file, not the DB, keeping the
-settled four-table scope intact; save immediately re-validates via
-`configure_remote`; a saved credential is never rendered back, matching
-the API-token screen's precedent) and referenced it from T5.5's admin UI
-card. Plan is now 40 tasks (was 39).
-- Files: `plans/plan_initial.md`, `AGENTS.md`, `LOG.md`

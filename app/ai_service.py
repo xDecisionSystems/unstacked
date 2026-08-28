@@ -178,6 +178,11 @@ class AIContentService:
         path = authorization.require_read(path)
         return self.content.page_diff(path, from_revision, to_revision)
 
+    def page_revision_source(
+        self, authorization: AuthorizationContext, path: str, revision: str
+    ) -> str:
+        return self.content.page_revision_source(authorization.require_read(path), revision)
+
     def restore_page(self, authorization: AuthorizationContext, path: str, revision: str) -> str:
         path = authorization.require_write(path)
         return self.content.restore_page(path, revision, authorization.user)
@@ -217,9 +222,7 @@ class AIContentService:
         authorization.require_admin()
         source = normalize_relative_path(path)
         authorization.require_ungranted_subtree(source)
-        parent = (
-            normalize_relative_path(new_parent) if new_parent else source.rsplit("/", 1)[0]
-        )
+        parent = normalize_relative_path(new_parent) if new_parent else source.rsplit("/", 1)[0]
         old_slug = source.rsplit("/", 1)[-1].removesuffix(".md")
         target = f"{parent}/{make_slug(old_slug, new_slug or old_slug)}.md"
         authorization.reject_orphaned_exact_grant(target)

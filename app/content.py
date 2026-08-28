@@ -789,9 +789,7 @@ class ContentRepository:
                     affected.extend(rollback.tree(asset_container))
             try:
                 affected = list(affected)
-                affected.extend(
-                    self._changed_nav(rollback, container.parent, old=container.name)
-                )
+                affected.extend(self._changed_nav(rollback, container.parent, old=container.name))
                 shutil.rmtree(container)
                 if asset_container is not None:
                     shutil.rmtree(asset_container)
@@ -833,9 +831,7 @@ class ContentRepository:
                     asset_source = safe_join(self.docs, asset_relative)
                     asset_target = safe_join(self.docs, f"{ASSETS_ROOT}/{slug}")
                     if asset_target.exists():
-                        raise ContentExists(
-                            "assets already exist for the destination book slug"
-                        )
+                        raise ContentExists("assets already exist for the destination book slug")
                     sources.extend(rollback.tree(asset_source))
                     rollback.created_directory(asset_target)
             try:
@@ -851,9 +847,7 @@ class ContentRepository:
                         for source in sources
                         if source.is_relative_to(asset_source)
                     )
-                affected.extend(
-                    self._changed_nav(rollback, parent, old=container.name, new=slug)
-                )
+                affected.extend(self._changed_nav(rollback, parent, old=container.name, new=slug))
                 # An in-place directory rename keeps every blob byte-identical,
                 # so Git records renames and `--follow` still reaches the pages'
                 # earlier history.
@@ -893,9 +887,21 @@ class ContentRepository:
         except RevisionNotFound as exc:
             raise ContentMissing("revision not found") from exc
 
-    def restore_page(
-        self, relative: str, revision: str, actor: User
-    ) -> str:
+    def page_revision_source(self, relative: str, revision: str) -> str:
+        """Return one historical source version for the browser diff view.
+
+        A revision which deleted the page has no blob at that path.  Treat it
+        as an empty source so the UI can show a deletion side-by-side; callers
+        first constrain revisions to this page's own Git history, so this does
+        not turn an arbitrary unknown revision into a valid result.
+        """
+
+        try:
+            return self.git.show(revision, self._page_ref(relative))
+        except RevisionNotFound:
+            return ""
+
+    def restore_page(self, relative: str, revision: str, actor: User) -> str:
         page = self._deleted_or_existing_page_path(relative)
         with self.git.write_lock():
             try:
@@ -973,9 +979,7 @@ class ContentRepository:
 
     # --- Assets --------------------------------------------------------------
 
-    def store_asset(
-        self, book_slug: str, filename: str, data: bytes, actor: User
-    ) -> StoredAsset:
+    def store_asset(self, book_slug: str, filename: str, data: bytes, actor: User) -> StoredAsset:
         """Commit one uploaded image into ``docs/assets/<book>/``.
 
         The stored name is derived, never accepted: the client's stem is put

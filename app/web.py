@@ -22,6 +22,7 @@ forced password change cannot be bypassed by simply not following the
 redirect from ``/``.
 """
 
+import difflib
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import parse_qsl
@@ -339,6 +340,119 @@ def _editor_context(
         }
     context.update({"form": form or {}, "error": error, "editing_path": path})
     return templates.TemplateResponse(request, "editor.html", context, status_code=status_code)
+
+
+def _history_context(
+    request: Request,
+    session: Session,
+    user: User,
+    path: str,
+    *,
+    from_revision: str | None = None,
+    to_revision: str | None = None,
+    error: str | None = None,
+) -> dict:
+    """Build a history view solely from the ACL-aware service contract."""
+
+    authorization = _authorization(session, user)
+    revisions = request.app.state.ai_service.page_history(authorization, path)
+    known = {revision.sha for revision in revisions}
+    if from_revision is not None and from_revision not in known:
+        raise ContentMissing("revision not found")
+    if to_revision is not None and to_revision not in known:
+        raise ContentMissing("revision not found")
+    if to_revision is None:
+        to_revision = revisions[0].sha
+    if from_revision is None:
+        from_revision = revisions[1].sha if len(revisions) > 1 else revisions[0].sha
+    before = request.app.state.ai_service.page_revision_source(authorization, path, from_revision)
+    after = request.app.state.ai_service.page_revision_source(authorization, path, to_revision)
+    context = _base_context(request, session, user)
+    context.update(
+        {
+            "history_path": path.removesuffix(".md"),
+            "revisions": revisions,
+            "from_revision": from_revision,
+            "to_revision": to_revision,
+            # HtmlDiff escapes source lines before creating its table.  The
+            # template may therefore render this one generated fragment safe.
+            "diff_table": difflib.HtmlDiff(wrapcolumn=100).make_table(
+                before.splitlines(),
+                after.splitlines(),
+                fromdesc=from_revision[:12],
+                todesc=to_revision[:12],
+                context=True,
+                numlines=3,
+            ),
+            "can_restore": authorization.policy.decide(path).can_write,
+            "error": error,
+        }
+    )
+    return context
+
+
+@router.get("/pages/{page_path:path}/history", response_class=HTMLResponse, include_in_schema=False)
+def page_history_view(
+    request: Request,
+    page_path: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+    from_revision: str | None = None,
+    to_revision: str | None = None,
+) -> Response:
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        try:
+            context = _history_context(
+                request,
+                session,
+                user,
+                target,
+                from_revision=from_revision,
+                to_revision=to_revision,
+            )
+        except (AccessDenied, ContentError, UnsafePath):
+            context = _base_context(request, session, user)
+            return templates.TemplateResponse(request, "404.html", context, status_code=404)
+    return templates.TemplateResponse(request, "history.html", context)
+
+
+@router.post(
+    "/pages/{page_path:path}/history/restore",
+    include_in_schema=False,
+    dependencies=[Depends(require_csrf)],
+)
+async def restore_page_revision_submit(
+    request: Request,
+    page_path: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    form = await _read_form(request)
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    revision = form.get("revision", "")
+    with Session(request.app.state.engine) as session:
+        try:
+            # Only a revision which actually touched this page may be restored
+            # through this form.  Besides making the UI predictable, this
+            # avoids using Git's path lookup as a cross-page revision oracle.
+            history = request.app.state.ai_service.page_history(
+                _authorization(session, user), target
+            )
+            if revision not in {entry.sha for entry in history}:
+                raise ContentMissing("revision not found")
+            request.app.state.ai_service.restore_page(
+                _authorization(session, user), target, revision
+            )
+        except AccessDenied:
+            context = _base_context(request, session, user)
+            return templates.TemplateResponse(request, "404.html", context, status_code=404)
+        except (ContentError, UnsafePath) as exc:
+            try:
+                context = _history_context(request, session, user, target, error=_web_error(exc))
+            except (AccessDenied, ContentError, UnsafePath):
+                context = _base_context(request, session, user)
+                return templates.TemplateResponse(request, "404.html", context, status_code=404)
+            return templates.TemplateResponse(request, "history.html", context, status_code=422)
+    return RedirectResponse(f"/pages/{target.removesuffix('.md')}", status_code=303)
 
 
 @router.get("/pages/{page_path:path}/edit", response_class=HTMLResponse, include_in_schema=False)

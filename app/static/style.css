@@ -260,3 +260,21 @@ button.danger { background: var(--danger); border-color: var(--danger); }
 .manage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.25rem; }
 .manage-grid form { border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
 .manage-grid h2 { margin-top: 0; font-size: 1.05rem; }
+
+.history-picker { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; }
+.history-picker label { display: flex; flex-direction: column; gap: 0.25rem; }
+.history-picker select { max-width: 21rem; padding: 0.4rem; }
+.history-layout { display: grid; grid-template-columns: minmax(220px, 0.4fr) minmax(0, 1fr); gap: 1.5rem; }
+.revision-list { padding-left: 1.3rem; }
+.revision-list li { margin-bottom: 0.85rem; }
+.revision-list strong, .revision-list span { display: block; font-size: 0.9rem; }
+.revision-list span { color: var(--muted); }
+.revision-list form { margin-top: 0.35rem; }
+.diff-panel { overflow-x: auto; }
+.diff-table table { border-collapse: collapse; width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
+.diff-table td, .diff-table th { padding: 0.2rem 0.35rem; vertical-align: top; white-space: pre-wrap; }
+.diff-table .diff_header { color: var(--muted); background: var(--bg-alt); }
+.diff-table .diff_add { background: #d9f5df; }
+.diff-table .diff_sub { background: #ffe2e0; }
+.diff-table .diff_chg { background: #fff0c2; }
+@media (max-width: 750px) { .history-layout { grid-template-columns: 1fr; } }

@@ -338,9 +338,10 @@ EasyMDE editor, live preview via `render`, save posting the base SHA for conflic
 **Done when:** an edit saves, commits, and re-renders; a stale save shows a conflict screen instead of overwriting; toggling draft is reflected in the badge and keeps the page out of the next build.
 **Note:** Browser routes in `app/web.py` use the existing `AIContentService` mutation methods, preserving ACL checks, Git commits, and optimistic blob-SHA conflict detection. EasyMDE uses the server's `MarkdownRenderer` preview route; create, move/slug rename, delete, and admin-only book/chapter management are server-rendered forms with CSRF protection. Drafts visibly badge both the page and tree. Focused web tests: 32 passing; ruff clean; production Compose healthy on port 18054.
 
-#### T5.4 — History UI **[P]**
+#### [x] T5.4 — History UI
 `sonnet` / `terra` · **M** · **medium** · depends: T3.4, T5.2
 Revision list, side-by-side diff, restore button with confirmation.
+**Note:** `/pages/{path}/history` is ACL-filtered through `AIContentService`; it compares selected Git revisions using escaped `HtmlDiff` output and renders restore controls only for writers. Restoring creates a new Git commit and works even after a page was deleted. Browser history tests: 18 passing; API/Git history tests: 47 passing; clean ruff; production Compose healthy on port 18055.
 
 #### T5.5 — Admin UI
 `sonnet` / `terra` · **L** · **high** · depends: T4.3, T5.2, T1.3, T6.3, T6.4, T7.1

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}History · Unstacked{% endblock %}
+{% block content %}
+<h1>Page history</h1>
+<p><a href="/pages/{{ history_path }}">Back to page</a></p>
+{% if error %}<p class="error-message">{{ error }}</p>{% endif %}
+<form class="history-picker" method="get" action="/pages/{{ history_path }}/history">
+  <label>From revision
+    <select name="from_revision">
+      {% for revision in revisions %}<option value="{{ revision.sha }}" {% if revision.sha == from_revision %}selected{% endif %}>{{ revision.sha[:12] }} — {{ revision.message.split('\n')[0] }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>To revision
+    <select name="to_revision">
+      {% for revision in revisions %}<option value="{{ revision.sha }}" {% if revision.sha == to_revision %}selected{% endif %}>{{ revision.sha[:12] }} — {{ revision.message.split('\n')[0] }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Compare</button>
+</form>
+<div class="history-layout">
+  <section>
+    <h2>Revisions</h2>
+    <ol class="revision-list">
+      {% for revision in revisions %}
+      <li>
+        <code>{{ revision.sha[:12] }}</code>
+        <strong>{{ revision.message.split('\n')[0] }}</strong>
+        <span>{{ revision.author_name }} · {{ revision.authored_at }}</span>
+        {% if can_restore %}
+        <form method="post" action="/pages/{{ history_path }}/history/restore" onsubmit="return confirm('Restore this revision as a new Git commit?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="revision" value="{{ revision.sha }}">
+          <button type="submit">Restore</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  <section class="diff-panel">
+    <h2>Side-by-side diff</h2>
+    <div class="diff-table">{{ diff_table | safe }}</div>
+  </section>
+</div>
+{% endblock %}

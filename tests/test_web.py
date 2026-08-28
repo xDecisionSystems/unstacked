@@ -371,3 +371,83 @@ def test_manage_content_is_admin_only_and_csrf_protected(app_env, client):
     _login(client, "editor")
     assert client.get("/manage").status_code == 404
     assert client.post("/manage/book", data={"title": "Nope"}).status_code == 403
+
+
+# --------------------------------------------------------------------------
+# History UI
+# --------------------------------------------------------------------------
+
+
+def test_history_ui_renders_escaped_side_by_side_diff_and_restores(app_env, client):
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Handbook", "handbook", admin)
+    repository.create_page(
+        "handbook", "Leave", "leave", "first <img src=x onerror=alert(1)>", [], False, admin
+    )
+    initial = repository.page_history("handbook/leave.md")[0].sha
+    repository.update_page(
+        "handbook/leave.md",
+        "second version",
+        [],
+        False,
+        admin,
+        base_blob_sha=repository.page_blob_sha("handbook/leave.md"),
+    )
+    _login(client, "admin")
+
+    page = client.get("/pages/handbook/leave")
+    assert "/pages/handbook/leave/history" in page.text
+    history = client.get("/pages/handbook/leave/history")
+    assert history.status_code == 200
+    assert "Side-by-side diff" in history.text
+    assert "&lt;img" in history.text
+    assert "onerror=alert" in history.text
+    assert "<img src=x" not in history.text
+
+    restored = client.post(
+        "/pages/handbook/leave/history/restore",
+        data={"csrf_token": _csrf_from(history.text), "revision": initial},
+        follow_redirects=False,
+    )
+    assert restored.status_code == 303
+    assert restored.headers["location"] == "/pages/handbook/leave"
+    assert "first <img" in repository.read_page("handbook/leave.md")[1]
+
+
+def test_read_only_user_can_view_history_but_cannot_restore(app_env, client, content):
+    app, _settings, _admin, _token = app_env
+    reader = _make_user(app, "reader")
+    _grant(app, reader.id, "alice-book", group_name="reader-group")
+    _login(client, "reader")
+
+    history = client.get("/pages/alice-book/secret/history")
+    assert history.status_code == 200
+    assert "Side-by-side diff" in history.text
+    assert ">Restore<" not in history.text
+    revision = app.state.content.page_history("alice-book/secret.md")[0].sha
+    denied = client.post(
+        "/pages/alice-book/secret/history/restore",
+        data={"csrf_token": _csrf_from(history.text), "revision": revision},
+    )
+    assert denied.status_code == 404
+
+
+def test_history_ui_can_restore_a_deleted_page(app_env, client):
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Handbook", "handbook", admin)
+    repository.create_page("handbook", "Leave", "leave", "recover me", [], False, admin)
+    original = repository.page_history("handbook/leave.md")[0].sha
+    repository.delete_page("handbook/leave.md", admin)
+    _login(client, "admin")
+
+    history = client.get("/pages/handbook/leave/history")
+    assert history.status_code == 200
+    restored = client.post(
+        "/pages/handbook/leave/history/restore",
+        data={"csrf_token": _csrf_from(history.text), "revision": original},
+        follow_redirects=False,
+    )
+    assert restored.headers["location"] == "/pages/handbook/leave"
+    assert repository.read_page("handbook/leave.md")[1] == "recover me"

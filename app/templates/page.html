@@ -7,6 +7,7 @@
 {% if draft %}<p class="error-message">Draft &mdash; not included in the published site.</p>{% endif %}
 <div class="page-actions">
   <a class="button" href="/pages/{{ current_path }}/edit">Edit</a>
+  <a class="button" href="/pages/{{ current_path }}/history">History</a>
   {% if is_admin %}<a class="button" href="/pages/{{ current_path }}/move">Move or rename</a>{% endif %}
   <form method="post" action="/pages/{{ current_path }}/delete" onsubmit="return confirm('Delete this page? Git history will retain it.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
