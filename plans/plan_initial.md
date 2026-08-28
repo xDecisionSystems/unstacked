@@ -29,7 +29,7 @@ Confirmed scope (from user):
 
 The backend is substantially complete: scaffolding, schema/migrations, both auth transports (bearer tokens and cookie sessions, username-based login, forced password change on admin-issued credentials), path safety, the full content CRUD lifecycle (create/read/update/delete/move/rename, all through one locked git-mutation path), optimistic concurrency (blob-sha conflict detection), the ACL resolver plus its central enforcement (`AuthorizationContext`), the admin API (users/groups/grants/last-admin protection), pluggable/optional backup (runtime-editable git-remote target, debounced sync worker, manual backup/restore), static export, grep-based search, and the shared AI service behind the REST/OpenAPI surface. Real `mkdocs build --strict` runs are exercised in tests throughout, including after full lifecycle sequences (create → edit → move → rename → delete).
 
-Remaining: descriptor-confined lifecycle migration (T2.1), the MCP transport (T9.2), and the remaining REST/OpenAPI and property-based security coverage (T9.3/T10.1). The browser UI, browser search, backup console, and operator documentation are complete.
+Remaining: descriptor-confined lifecycle migration (T2.1) and final REST/OpenAPI validation (T9.3). The browser UI, browser search, backup console, operator documentation, and ACL/path test suite are complete. MCP is deliberately out of scope: the REST API is the only AI transport.
 
 Per-task status is tracked with `[x]`/`[~]` markers below; a `[~]` task names what already exists so nobody rebuilds it.
 
@@ -137,7 +137,6 @@ ordinary reset process if this initial credential is lost.
 | `search` | Permission-filtered grep over markdown bodies |
 | `export` | Private full-wiki `mkdocs build` runner |
 | `ai_service` | Shared permission-aware read/export and create-book/chapter/page operations used by AI transports |
-| `ai_mcp` | MCP server (Claude) over `ai_service` |
 | `ai_api` | REST + OpenAPI surface (ChatGPT Actions) over `ai_service` |
 | `web` | Jinja2 templates, tree browser, EasyMDE editor, admin screens |
 
@@ -439,16 +438,14 @@ Search box, results page with snippets and breadcrumbs.
 `app/ai_service.py`: one permission-aware implementation of search, tree/list, get/download page, filtered export, create book, create chapter, and create page. Return structured results with deterministic item/character limits (do not depend on a model tokenizer). Treat wiki text as untrusted data, not tool instructions. Book/chapter creation is admin-only; page creation requires write access on the parent. Both transports call only this service and its ACL-aware content/search modules.
 **Done when:** direct service contract tests prove read/export and create operations apply the same ACL and limits expected by both transports, including missing/unreadable equivalence and Git author attribution.
 
-#### T9.2 — MCP server (Claude) **[P]**
-`opus` / `sol` · **L** · **high** · depends: T9.1, T1.3
-MCP server exposing search/list/get/download and create-book/chapter/page tools over a documented transport, authenticated by the signed bearer token from T1.3 so calls run as an active user with current permissions. Validate origin/transport security as applicable; expose bounded schemas and neutral tool descriptions.
-**Done when:** a supported MCP client reads and creates only authorized content; expired/revoked tokens fail; oversized/malformed calls are bounded; and wiki content cannot alter tool authorization or response envelopes.
+#### [not planned] T9.2 — MCP server (Claude)
+Removed from MVP scope by the user on 2026-08-28. The bearer-authenticated REST/OpenAPI API in T9.3 is the sole AI transport; do not add an MCP server or its dependency.
 
 #### [~] T9.3 — REST + OpenAPI surface (ChatGPT) **[P]**
 `sonnet` / `terra` · **M** · **high** · depends: T9.1, T1.3
 `/api/ai/*` endpoints with a provider-neutral OpenAPI schema for ACL-filtered tree/page/ZIP downloads and create-book/chapter/page operations; signed bearer-token auth, request/response limits, and rate limiting. Keep the REST contract provider-neutral even if a ChatGPT Action is the first client.
-**Done when:** the generated OpenAPI validates against the target action client; unauthenticated/expired/revoked calls fail; response limits are enforced; create operations produce one correctly authored Git commit; and REST/MCP authorization results match.
-**Remaining:** `app/ai_api.py` exposes auth, tree, search, content, export, history, diff, restore and create endpoints with bearer auth; page requests and diffs are bounded. Remaining: dedicated AI rate limiting and OpenAPI validation against a real action client.
+**Done when:** the generated OpenAPI validates against the target action client; unauthenticated/expired/revoked calls fail; response limits are enforced; and create operations produce one correctly authored Git commit.
+**Remaining:** `app/ai_api.py` exposes auth, tree, search, content, export, history, diff, restore and create endpoints with bearer auth; page requests and diffs are bounded, and authenticated AI requests have a dedicated per-user rate limit. Remaining: OpenAPI validation against a real action client.
 
 ---
 

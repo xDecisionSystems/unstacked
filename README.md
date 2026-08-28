@@ -21,9 +21,9 @@ permissions — never for content.
   is built in, while volume snapshots, rsync, or S3 sync work independently.
 - **Database = users/groups/permissions only.** Groups are granted
   read/write access to specific chapters/pages via path-based rules.
-- **AI-ready search.** Search and page-read are exposed through a shared
-  module reused by the web app, an MCP server (Claude), and a REST/OpenAPI
-  surface (ChatGPT) — all filtered by the same permissions.
+- **AI-ready API.** Search and page-read are exposed through a shared module
+  reused by the web app and a bearer-authenticated REST/OpenAPI surface — all
+  filtered by the same permissions.
 - **Static recovery is not authenticated.** A mkdocs export contains every
   non-draft page, so content remotes and build artifacts stay private and
   public deployment is outside the MVP.

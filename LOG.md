@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 23:31 UTC — Codex
+Removed MCP from the MVP at the user's request. The existing signed-bearer
+REST/OpenAPI surface is now the sole AI transport, avoiding a second protocol
+and its client-context overhead.
+- Files: `README.md`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 23:10 UTC — Codex
 Added a bounded, lock-protected per-user throttle for authenticated AI content
 requests and exhaustive finite-domain ACL regression coverage. Token rotation
@@ -116,22 +122,3 @@ clean. Production Compose rebuilt and became healthy on port 18055, where
   `app/templates/page.html`, `app/templates/history.html`,
   `app/static/style.css`, `tests/test_web.py`, `plans/plan_initial.md`,
   `LOG.md`
-
-## 2026-08-28 20:53 UTC — Codex
-Completed T5.3's server-rendered editor and content-management browser flow.
-The EasyMDE editor previews through the same sanitized Markdown renderer as
-page display, and saves use the existing ACL-aware content service with the
-loaded blob SHA, so a stale submission returns a conflict page rather than
-overwriting a newer Git commit. Added browser forms for page creation, moves/
-slug renames and deletion, plus admin-only book/chapter management; all
-state-changing forms require the session CSRF token. Drafts now have visible
-badges in both the page view and ACL-filtered tree.
-
-Focused web tests: 32 passing; ruff clean. Production Compose rebuilt and
-became healthy on port 18054; `/healthz` returned `{"status":"ok"}` and the
-stack was stopped without `-v`.
-- Files: `app/web.py`, `app/web_auth.py`, `app/templates/base.html`,
-  `app/templates/_tree.html`, `app/templates/page.html`,
-  `app/templates/editor.html`, `app/templates/move_page.html`,
-  `app/templates/manage.html`, `app/static/style.css`, `tests/test_web.py`,
-  `plans/plan_initial.md`, `LOG.md`
