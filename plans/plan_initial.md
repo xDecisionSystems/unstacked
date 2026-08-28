@@ -465,9 +465,10 @@ Create book → chapter → page via the API, assert exact on-disk/front-matter/
 `sonnet` / `terra` · **M** · **high** · depends: T3.2
 `scripts/worstcase_drill.sh`: copy only `content/` (including its dependency manifest and hooks, excluding any existing build output) to a temporary directory, create a clean venv, install only `content/requirements.txt`, run `mkdocs build --strict`, and assert a seeded draft is absent from both generated HTML and the search index. The script must not import the app or access its database. **This is the project's defining guarantee and runs in CI.**
 
-#### T10.4 — Backup round-trip test **[P]**
+#### [x] T10.4 — Backup round-trip test
 `opus` / `sol` · **L** · **high** · depends: T6.3
 Push to a local bare scratch remote, remove the disposable local checkout, restore, and assert identical refs/history/tree. Separately exercise dirty/divergent refusal, verified recovery-copy behavior, interrupted replacement, and credential redaction without depending on a real GitHub account.
+**Note:** `tests/test_backup_roundtrip.py` covers the bare-remote round trip, guarded dirty/divergent recovery, simulated interrupted replacement rollback, and secret-redacted transport failure. Focused suite: 4 passing; backup/Git suite: 50 passing; ruff clean.
 
 #### [x] T10.5 — App CI workflow **[P]**
 `sonnet` / `terra` · **M** · **medium** · depends: T0.1, T10.3

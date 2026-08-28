@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:13 UTC — Codex
+Reviewed and integrated T10.4 backup round-trip coverage. The tests prove an
+identical bare-remote restore, verified recovery before divergent replacement,
+safe interruption rollback, and credential redaction on transport failure.
+- Files: `tests/test_backup_roundtrip.py`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 22:10 UTC — Codex
 Made manual backup/restore compatible with the browser admin console: these
 admin endpoints now accept either bearer tokens or authenticated cookies, and
@@ -237,24 +243,3 @@ lint and tests then passed.
   `app/export.py`, `app/git_backend.py`, `tests/test_ai_api.py`,
   `tests/test_export.py`, `tests/test_content_lifecycle.py`,
   `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 05:09 UTC — Codex
-Integrated three parallel plan streams: first-admin `admin:admin` credentials
-with server-enforced forced password change, portable content-repository
-validation CI, and descriptor-confined page reads/creation. Verified lint and
-the full suite, then deployed Compose locally on port 18001: health passed,
-the restricted first login was denied normal access, password change succeeded,
-and the renewed session was accepted. The stack was stopped without volume
-deletion.
-- Files: `app/models.py`, `app/auth.py`, `app/web_auth.py`, `app/bootstrap.py`,
-  `app/ai_api.py`, `app/content.py`, `app/paths.py`, `app/migrations/versions/20260827_0003_first_admin_credentials.py`,
-  `tests/test_models.py`, `tests/test_web_auth.py`, `tests/test_bootstrap.py`,
-  `tests/test_ai_api.py`, `tests/test_content_bootstrap.py`, `tests/test_paths.py`,
-  `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 05:02 UTC — Codex
-Added a mandatory local Docker Compose deployment check for application and
-deployment changes, including a generated non-committed secret, an unused host
-port, health verification, behavior checks where practical, and safe teardown
-that preserves the persistent volumes.
-- Files: `AGENTS.md`, `LOG.md`
