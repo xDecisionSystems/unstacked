@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title or "Page" }} · Unstacked{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  {% for crumb in breadcrumbs %}{% if not loop.first %}<span class="sep">/</span>{% endif %}<span>{{ crumb }}</span>{% endfor %}
+</nav>
+{% if draft %}<p class="error-message">Draft &mdash; not included in the published site.</p>{% endif %}
+<article class="page-body">
+  {{ body | safe }}
+</article>
+{% endblock %}
