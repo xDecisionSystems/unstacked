@@ -1,0 +1,232 @@
+"""The server-rendered browser UI must gate itself exactly like the JSON API.
+
+The cases here are the ones a plausible implementation gets wrong: an
+unauthenticated visitor reaching a real page instead of being bounced to
+login, a forced-password-change session finding a way around the tree, two
+users with different grants somehow seeing the same content, a bad path
+leaking whether it exists via a 403 instead of a 404, and unsanitized page
+content escaping into the rendered HTML.
+"""
+
+import re
+
+import pytest
+from sqlmodel import Session
+
+from app.auth import hash_password
+from app.models import Group, Permission, User, UserGroup
+
+PASSWORD = "correct horse battery staple"
+
+
+@pytest.fixture
+def content(app_env):
+    """A small real content tree with two independent books."""
+
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Alice Book", "alice-book", admin)
+    repository.create_page(
+        "alice-book", "Secret", "secret", "# Secret\n\nAlice-only body.", [], False, admin
+    )
+    repository.create_book("Bob Book", "bob-book", admin)
+    repository.create_page(
+        "bob-book", "Other", "other", "# Other\n\nBob-only body.", [], False, admin
+    )
+    return repository
+
+
+def _make_user(app, username, *, password=PASSWORD, must_change_password=False) -> User:
+    with Session(app.state.engine) as session:
+        user = User(
+            username=username,
+            email=f"{username}@example.com",
+            password_hash=hash_password(password),
+            display_name=username.title(),
+            must_change_password=must_change_password,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.expunge(user)
+        return user
+
+
+def _grant(app, user_id: int, path_prefix: str, *, group_name: str) -> None:
+    with Session(app.state.engine) as session:
+        group = Group(name=group_name)
+        session.add(group)
+        session.commit()
+        session.refresh(group)
+        session.add(UserGroup(user_id=user_id, group_id=group.id))
+        session.add(Permission(group_id=group.id, path_prefix=path_prefix, can_read=True))
+        session.commit()
+
+
+def _login(client, username, password=PASSWORD):
+    return client.post(
+        "/login", data={"username": username, "password": password}, follow_redirects=False
+    )
+
+
+def _csrf_from(html: str) -> str:
+    match = re.search(r'name="csrf_token" value="([^"]+)"', html)
+    assert match, "expected a csrf_token hidden field in the rendered form"
+    return match.group(1)
+
+
+# --------------------------------------------------------------------------
+# Root route and login
+# --------------------------------------------------------------------------
+
+
+def test_unauthenticated_root_redirects_to_login(client):
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_login_page_renders_a_form_for_an_unauthenticated_visitor(client):
+    response = client.get("/login")
+    assert response.status_code == 200
+    assert 'name="username"' in response.text
+    assert 'name="password"' in response.text
+
+
+def test_successful_login_reaches_the_tree(client):
+    """Logging in via the HTML form sets a cookie and lands on the tree."""
+
+    login = _login(client, "admin")
+    assert login.status_code == 303
+    assert login.headers["location"] == "/tree"
+
+    root = client.get("/", follow_redirects=False)
+    assert root.headers["location"] == "/tree"
+
+    tree = client.get("/tree")
+    assert tree.status_code == 200
+    assert "Admin Agent" in tree.text
+
+
+def test_failed_login_shows_an_inline_error_without_a_redirect(client):
+    response = _login(client, "admin", password="not the right password")
+    assert response.status_code == 401
+    assert "Invalid username or password" in response.text
+    # No session was established.
+    assert client.get("/", follow_redirects=False).headers["location"] == "/login"
+
+
+# --------------------------------------------------------------------------
+# Mandatory first password change
+# --------------------------------------------------------------------------
+
+
+def test_forced_password_change_session_cannot_reach_the_tree(app_env, client):
+    app, _settings, _admin, _token = app_env
+    _make_user(app, "newhire", must_change_password=True)
+
+    login = _login(client, "newhire")
+    assert login.headers["location"] == "/change-password"
+
+    assert client.get("/tree", follow_redirects=False).status_code == 403
+    assert client.get("/", follow_redirects=False).headers["location"] == "/change-password"
+
+
+def test_change_password_flow_unblocks_the_tree(app_env, client):
+    app, _settings, _admin, _token = app_env
+    _make_user(app, "newhire", must_change_password=True)
+    _login(client, "newhire")
+
+    form_page = client.get("/change-password")
+    assert form_page.status_code == 200
+    csrf_token = _csrf_from(form_page.text)
+
+    wrong = client.post(
+        "/change-password",
+        data={
+            "csrf_token": csrf_token,
+            "current_password": "definitely wrong",
+            "new_password": "a whole new passphrase",
+        },
+    )
+    assert wrong.status_code == 400
+    assert "incorrect" in wrong.text
+
+    changed = client.post(
+        "/change-password",
+        data={
+            "csrf_token": csrf_token,
+            "current_password": PASSWORD,
+            "new_password": "a whole new passphrase",
+        },
+        follow_redirects=False,
+    )
+    assert changed.status_code == 303
+    assert changed.headers["location"] == "/tree"
+    assert client.get("/tree").status_code == 200
+
+
+# --------------------------------------------------------------------------
+# ACL-filtered tree and page view
+# --------------------------------------------------------------------------
+
+
+def test_two_users_with_different_grants_see_different_trees(app_env, client, content):
+    app, _settings, _admin, _token = app_env
+    alice = _make_user(app, "alice")
+    bob = _make_user(app, "bob")
+    _grant(app, alice.id, "alice-book", group_name="alice-group")
+    _grant(app, bob.id, "bob-book", group_name="bob-group")
+
+    _login(client, "alice")
+    alice_tree = client.get("/tree")
+    assert "Alice Book" in alice_tree.text
+    assert "Bob Book" not in alice_tree.text
+    client.cookies.clear()
+
+    _login(client, "bob")
+    bob_tree = client.get("/tree")
+    assert "Bob Book" in bob_tree.text
+    assert "Alice Book" not in bob_tree.text
+
+
+def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, client):
+    app, _settings, admin, _token = app_env
+    app.state.content.create_book("Handbook", "handbook", admin)
+    app.state.content.create_page(
+        "handbook",
+        "Leave policy",
+        "leave",
+        "# Body\n\nSafe text. <script>alert('xss')</script>",
+        [],
+        False,
+        admin,
+    )
+    _login(client, "admin")
+
+    response = client.get("/pages/handbook/leave")
+    assert response.status_code == 200
+    assert "Leave policy" in response.text
+    assert "Safe text." in response.text
+    assert "<script>" not in response.text
+    assert "handbook" in response.text.lower()
+
+
+def test_page_view_404s_for_a_missing_or_unreadable_path_never_403(app_env, client, content):
+    app, _settings, _admin, _token = app_env
+    reader = _make_user(app, "reader")
+    _grant(app, reader.id, "alice-book", group_name="reader-group")
+    _login(client, "reader")
+
+    missing = client.get("/pages/alice-book/does-not-exist")
+    assert missing.status_code == 404
+
+    unreadable = client.get("/pages/bob-book/other")
+    assert unreadable.status_code == 404
+
+
+def test_web_routes_require_a_session(client):
+    """The bare cookie dependency, not just the normal one, still gates access."""
+
+    assert client.get("/tree", follow_redirects=False).status_code == 401
+    assert client.get("/pages/alice-book/secret", follow_redirects=False).status_code == 401

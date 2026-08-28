@@ -1,0 +1,34 @@
+{% macro render_pages(pages) %}
+{% if pages %}
+<ul class="pages">
+  {% for page in pages %}
+  <li>
+    <a href="/pages/{{ page.path }}"{% if current_path is defined and current_path == page.path %} class="active"{% endif %}>{{ page.label }}</a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}
+
+{% if tree %}
+<ul class="tree">
+  {% for book in tree %}
+  <li>
+    <span class="book-title">{{ book.title }}</span>
+    {{ render_pages(book.pages) }}
+    {% if book.chapters %}
+    <ul class="chapters">
+      {% for chapter in book.chapters %}
+      <li>
+        <span class="chapter-title">{{ chapter.title }}</span>
+        {{ render_pages(chapter.pages) }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-state">Nothing here yet.</p>
+{% endif %}

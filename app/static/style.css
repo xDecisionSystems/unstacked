@@ -1,0 +1,203 @@
+/* Minimal, functional styling for the server-rendered wiki UI.
+ *
+ * Deliberately no build step, no framework: this is a single hand-written
+ * stylesheet shared by every page, kept small enough to review at a glance.
+ */
+
+:root {
+  color-scheme: light;
+  --border: #d7dbe0;
+  --muted: #5b6572;
+  --accent: #1b56d6;
+  --bg: #ffffff;
+  --bg-alt: #f5f6f8;
+  --text: #1c2127;
+  --danger: #b3261e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.topbar .brand {
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.topbar form {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.topbar .whoami {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.layout {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(100vh - 3rem);
+}
+
+.sidebar {
+  flex: 0 0 260px;
+  padding: 1rem;
+  border-right: 1px solid var(--border);
+  background: var(--bg-alt);
+  overflow-y: auto;
+}
+
+.sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 0.9rem;
+}
+
+.sidebar > ul {
+  padding-left: 0;
+}
+
+.sidebar li {
+  margin: 0.15rem 0;
+}
+
+.sidebar .book-title,
+.sidebar .chapter-title {
+  display: block;
+  font-weight: 600;
+  margin-top: 0.6rem;
+}
+
+.sidebar .chapter-title {
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.sidebar a {
+  text-decoration: none;
+}
+
+.sidebar a.active {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.sidebar a:hover {
+  text-decoration: underline;
+}
+
+.content {
+  flex: 1 1 auto;
+  padding: 1.5rem 2rem;
+  max-width: 900px;
+}
+
+.breadcrumbs {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.breadcrumbs .sep {
+  margin: 0 0.35rem;
+}
+
+.page-body img {
+  max-width: 100%;
+}
+
+.page-body pre {
+  background: var(--bg-alt);
+  padding: 0.75rem;
+  overflow-x: auto;
+  border-radius: 4px;
+}
+
+.auth-page {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-alt);
+}
+
+.auth-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 360px;
+}
+
+.auth-card h1 {
+  margin-top: 0;
+  font-size: 1.3rem;
+}
+
+.auth-card label {
+  display: block;
+  margin-bottom: 0.9rem;
+  font-size: 0.9rem;
+}
+
+.auth-card input {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.auth-card button {
+  width: 100%;
+  padding: 0.6rem;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.error-message {
+  color: var(--danger);
+  background: #fbeae9;
+  border: 1px solid #f2c6c3;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.empty-state {
+  color: var(--muted);
+}

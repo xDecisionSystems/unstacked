@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 
 from app.admin_api import router as admin_router
 from app.ai_api import router as ai_router
@@ -11,7 +14,10 @@ from app.config import Settings
 from app.content import ContentRepository
 from app.manual_backup import ManualBackupService
 from app.models import create_db_engine, migrate_schema
+from app.web import router as web_router
 from app.web_auth import router as web_auth_router
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -56,6 +62,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ai_router)
     app.include_router(web_auth_router)
     app.include_router(admin_router)
+    app.include_router(web_router)
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.get("/healthz", tags=["System"])
     def healthcheck():
