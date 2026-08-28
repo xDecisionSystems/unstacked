@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import Response
 
+from app.admin_api import router as admin_router
 from app.ai_api import router as ai_router
 from app.ai_service import AIContentService
 from app.auth import LoginRateLimiter
@@ -32,6 +33,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(ai_router)
     app.include_router(web_auth_router)
+    app.include_router(admin_router)
 
     @app.get("/healthz", tags=["System"])
     def healthcheck():
