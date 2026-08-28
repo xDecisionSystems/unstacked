@@ -48,17 +48,19 @@ don't work around them without checking with the user first.
 - **No dedicated search index.** Search is grep-style over the filesystem,
   filtered by the same permission check as everything else. Don't
   introduce a search database/index unless the user asks.
-- **AI-facing read/write (Claude MCP, REST/OpenAPI) reuses the same
-  content/search/acl modules** as the web app — it's a new transport, not
+- **AI-facing read/write is REST/OpenAPI only.** It reuses the same
+  content/search/acl modules as the web app — it's a new transport, not
   new logic or a permission bypass. Book/chapter creation is admin-only;
-  page creation requires write access on the parent path.
+  page creation requires write access on the parent path. An MCP server
+  was deliberately removed from scope (2026-08-28, user decision — too
+  token-heavy versus a plain API); don't add one or its dependency.
 
 ## Layout (see the plan for the authoritative version)
 
 ```
 unstacked/
   app/            # FastAPI app: auth, content, acl, git_backend, nav,
-                   #   render, search, export, ai_mcp, ai_api, templates/
+                   #   render, search, export, ai_api, templates/
   content/        # nested mkdocs git repo (docs/ + mkdocs.yml) — gitignored
                    #   from this repo, managed via GitPython
   data/           # app.db (SQLite: users/groups/permissions only)

@@ -10,6 +10,22 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 23:36 UTC — Claude Code
+User asked to remove the MCP server (T9.2) — too token-costly per call
+versus a plain API for the same operations, REST-only going forward.
+Found Codex had already made this exact change (`b0bf3dc`, "Keep AI
+integration REST-only") before I got to it — T9.2 marked `[not planned]`
+with reasoning recorded, checkpoint already says REST is the sole AI
+transport. Nothing left to do there.
+
+Fixed one thing Codex's change missed: `AGENTS.md` still described "Claude
+MCP" as a live AI transport and listed `ai_mcp` in the module layout
+diagram, contradicting the plan. Corrected both, and tidied two more
+stale MCP mentions in the plan itself (the top-of-file scope bullet and
+the settled-decisions table row) that still framed it as planned/dual-
+transport rather than explicitly dropped.
+- Files: `AGENTS.md`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 23:33 UTC — Codex
 Extended T2.1 confinement through page delete and move transactions, including
 navigation edits and rollback. Ancestor-symlink adversarial tests confirm that
@@ -106,11 +122,3 @@ admin endpoints now accept either bearer tokens or authenticated cookies, and
 cookie requests require the existing synchronizer CSRF token.
 - Files: `app/backup_api.py`, `LOG.md`
 
-## 2026-08-28 22:01 UTC — Codex
-Started T5.5 with an admin-only browser console wired to the established
-cookie/CSRF-protected APIs for users, groups, memberships, grants, API token
-issuance/revocation, and runtime backup configuration/manual backup. This is
-an incremental checkpoint; export actions and fuller management controls
-remain before T5.5 is complete.
-- Files: `app/web.py`, `app/templates/base.html`, `app/templates/admin.html`,
-  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
