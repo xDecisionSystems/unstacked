@@ -66,6 +66,9 @@ FORBIDDEN_AUDIT_FIELD = re.compile(
 
 
 class UserCreate(BaseModel):
+    # The login identifier `authenticate()` looks up (see app/auth.py) —
+    # distinct from email, which is contact/audit information only.
+    username: str = Field(min_length=1, max_length=200)
     email: EmailStr
     display_name: str = Field(min_length=1, max_length=200)
     # There is no mail transport in this deployment model, so an administrator
@@ -87,6 +90,7 @@ class PasswordReset(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
+    username: str
     email: str
     display_name: str
     is_admin: bool
@@ -323,6 +327,7 @@ def _content(request: Request) -> ContentRepository:
 def _user_response(user: User) -> UserResponse:
     return UserResponse(
         id=user.id,
+        username=user.username,
         email=user.email,
         display_name=user.display_name,
         is_admin=user.is_admin,
@@ -380,9 +385,14 @@ def _require_group(session: Session, group_id: int) -> Group:
     dependencies=CsrfGuard,
 )
 def create_user(payload: UserCreate, request: Request, actor: AdminActor) -> UserResponse:
+    # Exact match, not casefolded: authenticate() looks username up with a
+    # plain equality comparison, so normalizing it here would let an admin
+    # create an account the login form's own lookup could never find.
+    username = payload.username
     email = str(payload.email).casefold()
     with Session(request.app.state.engine) as session:
         user = User(
+            username=username,
             email=email,
             password_hash=hash_password(payload.password),
             display_name=payload.display_name,
@@ -399,10 +409,17 @@ def create_user(payload: UserCreate, request: Request, actor: AdminActor) -> Use
         except IntegrityError as exc:
             session.rollback()
             raise HTTPException(
-                status.HTTP_409_CONFLICT, "A user with that email already exists"
+                status.HTTP_409_CONFLICT, "A user with that username or email already exists"
             ) from exc
         session.refresh(user)
-        _audit("admin.user.create", actor, user_id=user.id, email=email, is_admin=user.is_admin)
+        _audit(
+            "admin.user.create",
+            actor,
+            user_id=user.id,
+            username=username,
+            email=email,
+            is_admin=user.is_admin,
+        )
         return _user_response(user)
 
 
@@ -708,7 +725,9 @@ def list_orphaned_permissions(
         ]
 
 
-@router.delete("/permissions/{permission_id}", response_model=DetailResponse, dependencies=CsrfGuard)
+@router.delete(
+    "/permissions/{permission_id}", response_model=DetailResponse, dependencies=CsrfGuard
+)
 def delete_permission(
     permission_id: int,
     request: Request,

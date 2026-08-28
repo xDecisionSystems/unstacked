@@ -52,6 +52,7 @@ def docs(app_env) -> Path:
 def _make_user(app, email, *, password=PASSWORD, is_admin=False, is_active=True) -> User:
     with Session(app.state.engine) as session:
         user = User(
+            username=email.split("@")[0],
             email=email,
             password_hash=hash_password(password),
             display_name=email.split("@")[0],
@@ -107,7 +108,7 @@ def test_cookie_authenticated_admin_still_needs_a_csrf_token(client):
     """The cookie alone is exactly what a cross-site form can already send."""
 
     csrf = client.post(
-        "/auth/login", json={"email": "admin@example.com", "password": PASSWORD}
+        "/auth/login", json={"username": "admin", "password": PASSWORD}
     ).json()["csrf_token"]
     payload = {"name": "via-browser"}
 
@@ -258,8 +259,10 @@ def test_duplicate_grant_on_the_same_prefix_is_a_conflict(app_env, client, conte
         "/api/admin/groups", json={"name": "editors"}, headers=bearer(token)
     ).json()["id"]
     body = {"group_id": group_id, "path_prefix": "handbook"}
-    assert client.post("/api/admin/permissions", json=body, headers=bearer(token)).status_code == 201
-    assert client.post("/api/admin/permissions", json=body, headers=bearer(token)).status_code == 409
+    first = client.post("/api/admin/permissions", json=body, headers=bearer(token))
+    assert first.status_code == 201
+    second = client.post("/api/admin/permissions", json=body, headers=bearer(token))
+    assert second.status_code == 409
 
 
 # --------------------------------------------------------------------------
@@ -301,9 +304,8 @@ def test_orphan_report_flags_a_deleted_target_and_spares_a_live_one(
     assert stranded in [
         row["id"] for row in client.get("/api/admin/permissions", headers=bearer(token)).json()
     ]
-    assert (
-        client.delete(f"/api/admin/permissions/{stranded}", headers=bearer(token)).status_code == 200
-    )
+    deleted = client.delete(f"/api/admin/permissions/{stranded}", headers=bearer(token))
+    assert deleted.status_code == 200
     assert client.get("/api/admin/permissions/orphaned", headers=bearer(token)).json() == []
 
 
@@ -342,7 +344,7 @@ def test_password_reset_revokes_the_cookie_and_the_bearer_token(app_env, client,
 
     with TestClient(app) as browser:
         login = browser.post(
-            "/auth/login", json={"email": "target@example.com", "password": PASSWORD}
+            "/auth/login", json={"username": "target", "password": PASSWORD}
         )
         assert login.status_code == 200
         assert browser.get("/auth/session").status_code == 200
@@ -360,7 +362,7 @@ def test_password_reset_revokes_the_cookie_and_the_bearer_token(app_env, client,
         assert client.get("/api/ai/tree", headers=bearer(target_token)).status_code == 401
         assert (
             browser.post(
-                "/auth/login", json={"email": "target@example.com", "password": NEW_PASSWORD}
+                "/auth/login", json={"username": "target", "password": NEW_PASSWORD}
             ).status_code
             == 200
         )
@@ -447,10 +449,18 @@ def test_concurrent_demotions_cannot_remove_the_last_admin(app_env, monkeypatch)
 
     original = admin_api._require_user
     barrier = threading.Barrier(2, timeout=10)
+    # update_user calls _require_user twice per request — once to confirm the
+    # target exists, again to build the response after the write. Only the
+    # first call is the pre-write read-then-decide moment the barrier needs to
+    # hold open; waiting on both would need 4 arrivals for 2 requests and the
+    # barrier would mispair them.
+    waited = threading.local()
 
     def stalled_require_user(session, user_id):
         user = original(session, user_id)
-        barrier.wait()
+        if not getattr(waited, "done", False):
+            waited.done = True
+            barrier.wait()
         return user
 
     monkeypatch.setattr(admin_api, "_require_user", stalled_require_user)
@@ -465,7 +475,9 @@ def test_concurrent_demotions_cannot_remove_the_last_admin(app_env, monkeypatch)
                 headers=bearer(token),
             ).status_code
 
-    threads = [threading.Thread(target=demote, args=(user_id,)) for user_id in (admin.id, second.id)]
+    threads = [
+        threading.Thread(target=demote, args=(uid,)) for uid in (admin.id, second.id)
+    ]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -502,7 +514,9 @@ def test_concurrent_deletions_cannot_remove_the_last_admin(app_env, monkeypatch)
                 f"/api/admin/users/{user_id}", headers=bearer(token)
             ).status_code
 
-    threads = [threading.Thread(target=remove, args=(user_id,)) for user_id in (admin.id, second.id)]
+    threads = [
+        threading.Thread(target=remove, args=(uid,)) for uid in (admin.id, second.id)
+    ]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -525,6 +539,7 @@ def test_created_user_can_authenticate_with_the_password_the_admin_set(app_env, 
     response = client.post(
         "/api/admin/users",
         json={
+            "username": "new-person",
             "email": "New.Person@Example.com",
             "display_name": "New Person",
             "password": NEW_PASSWORD,
@@ -535,7 +550,7 @@ def test_created_user_can_authenticate_with_the_password_the_admin_set(app_env, 
     assert response.json()["email"] == "new.person@example.com"
     with TestClient(app) as browser:
         login = browser.post(
-            "/auth/login", json={"email": "new.person@example.com", "password": NEW_PASSWORD}
+            "/auth/login", json={"username": "new-person", "password": NEW_PASSWORD}
         )
         assert login.status_code == 200
 
@@ -543,6 +558,7 @@ def test_created_user_can_authenticate_with_the_password_the_admin_set(app_env, 
 def test_duplicate_email_is_a_conflict(app_env, client):
     _app, _settings, _admin, token = app_env
     body = {
+        "username": "impostor",
         "email": "admin@example.com",
         "display_name": "Impostor",
         "password": NEW_PASSWORD,
