@@ -16,9 +16,9 @@ permissions — never for content.
 - **Content = files, not rows.** Books → folders, chapters → subfolders,
   pages → `.md` files under `content/docs/`, with a real `mkdocs.yml` next
   to them.
-- **History and backup = git, not a revisions table.** Every save is a
-  commit; a GitHub remote on the content repo serves as backup, and a
-  GitHub Action rebuilds the static site on every push.
+- **History = git, not a revisions table.** Every save is a commit in the
+  local content repository. Off-site backup is optional: a private git remote
+  is built in, while volume snapshots, rsync, or S3 sync work independently.
 - **Database = users/groups/permissions only.** Groups are granted
   read/write access to specific chapters/pages via path-based rules.
 - **AI-ready search.** Search and page-read are exposed through a shared
@@ -85,11 +85,11 @@ the signing secret. Do not use `docker compose -f docker-compose.yaml down -v`
 unless you intend to delete both the database and wiki content volumes.
 
 The same `Dockerfile` is suitable for a Coolify Dockerfile deployment. Mount
-persistent storage at `/app/data` and `/app/content`, expose the container
-port `8000`, set
-the production variables above, and configure one application replica. The
-current app does not yet push the nested content repository to GitHub, so back
-up both Coolify volumes independently.
+persistent storage at `/app/data` and `/app/content`, expose container port
+`8000`, set the production variables above, and configure one application
+replica. Local disk remains complete application state. Optionally configure a
+private git remote through the admin backup API, and independently snapshot
+both volumes so the SQLite users/permissions database is protected too.
 
 ## AI content API
 
@@ -202,12 +202,26 @@ safe — it leaves existing users untouched.
 
 ### Backing up the wiki
 
-Right now the content Git repository's only copy is inside the `content`
-volume — the automated push-to-GitHub backup described in
-[plans/plan_initial.md](plans/plan_initial.md) (Phase 6) isn't built yet.
-Until then, back up that volume the same way you'd back up any other
-Coolify persistent volume, or periodically shell in and `git push` the
-`content/` repo to a remote yourself.
+Local `content/` and `data/` storage is sufficient to run the app; backup is
+optional. The built-in target pushes the content repository to any private git
+host. An administrator can configure, inspect, replace, or clear it at runtime
+through `GET`/`PUT`/`DELETE /api/admin/backup/config`. Saving performs a
+read-only remote listing and dry-run push before persistence, so unreachable
+hosts, rejected credentials, and incompatible history fail immediately. A
+supplied token is written to an owner-only file under `data/` and is never
+returned by later reads. Once configured, `POST /api/admin/backup/now` triggers
+a manual push and the debounced worker handles later content commits.
+
+The browser form for these endpoints is part of the remaining admin UI work.
+Until it lands, use the authenticated admin API/OpenAPI page or initial
+environment variables from [.env.example](.env.example). A saved runtime
+record wins over those variables; clearing writes a tombstone so a stale
+variable cannot silently turn backup back on after restart.
+
+A git target protects content history, not `data/app.db`. Snapshot both
+persistent volumes through Coolify—or use rsync/S3 or another trusted external
+backup mechanism—when users, groups, and permissions also need off-site
+recovery.
 
 ### What's actually live right now
 

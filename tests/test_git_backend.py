@@ -420,6 +420,19 @@ def test_a_configured_remote_still_pushes_and_fast_forwards(tmp_path: Path):
     assert (Path(local.working_tree_dir) / "docs" / "from-peer.md").is_file()
 
 
+def test_remote_probe_verifies_write_access_without_updating_the_remote(tmp_path: Path):
+    remote_path = tmp_path / "remote.git"
+    remote = Repo.init(remote_path, bare=True)
+    _local, backend = _content_checkout(tmp_path)
+    backend.configure_remote(
+        RemoteConfig(url=remote_path.as_uri(), confirmed_private=True)
+    )
+
+    backend.test_remote()
+
+    assert not list(remote.references)
+
+
 def test_an_unconfirmed_remote_is_not_configured_at_all(tmp_path: Path):
     """A public backup would publish every page, drafts included."""
 
@@ -671,16 +684,18 @@ def test_no_code_path_can_force_push():
         for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
             assert not forbidden.search(line), f"{source.name}:{number} can force-push"
 
-    # Exactly one push exists, and its refspec comes from _push_refspec rather
-    # than from a caller who could supply a forcing one.
+    # Exactly one real push and one non-mutating configuration probe exist;
+    # both refspecs come from _push_refspec rather than a caller who could
+    # supply a forcing one.
     pushes = [
         line.strip()
         for source in app_dir.rglob("*.py")
         for line in source.read_text(encoding="utf-8").splitlines()
         if ".push(" in line
     ]
-    assert len(pushes) == 1
-    assert "refspec=_push_refspec(branch.name)" in pushes[0]
+    assert len(pushes) == 2
+    assert any("--dry-run" in push and "_push_refspec(branch.name)" in push for push in pushes)
+    assert any("refspec=_push_refspec(branch.name)" in push for push in pushes)
     assert "force" not in pushes[0]
 
     assert _push_refspec("main") == "main:main"

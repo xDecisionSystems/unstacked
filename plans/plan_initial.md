@@ -25,27 +25,11 @@ Confirmed scope (from user):
   to a bucket are equally valid and need no app support beyond the
   already-durable local directories to sync from.
 
-### ⚠ Pending handoff (2026-08-28) — read before starting T6.4
-
-Claude Code was dispatching a T6.4 subagent when the session had to stop
-(user hit their session limit). Its status marker has not been updated because
-the work is incomplete, but the work must not be redone from scratch:
-
-- **T6.4 (backup config backend)** — branch `pending/t6.4-backup-config-wip`.
-  This one is **genuinely incomplete** — committed as a WIP safety snapshot
-  only so it would not be lost, not because it was finished. Untested,
-  unreviewed, likely does not pass the suite as-is. Treat it as a starting
-  point to finish, not as done work to merge.
-
-If you are Codex (or a future Claude session) picking this up: `git fetch` and
-inspect that branch before touching T6.4 again. Do not silently duplicate the
-effort by dispatching fresh work without first looking.
-
 ### Implementation checkpoint (2026-08-27, updated)
 
-The backend is substantially complete: scaffolding, schema/migrations, both auth transports (bearer tokens and cookie sessions, username-based login, forced password change on admin-issued credentials), path safety, the full content CRUD lifecycle (create/read/update/delete/move/rename, all through one locked git-mutation path), optimistic concurrency (blob-sha conflict detection), the ACL resolver plus its central enforcement (`AuthorizationContext`), the admin API (users/groups/grants/last-admin protection), pluggable/optional backup (git-remote target, debounced sync worker, manual backup/restore), static export, grep-based search, and the shared AI service behind the REST/OpenAPI surface. Real `mkdocs build --strict` runs are exercised in tests throughout, including after full lifecycle sequences (create → edit → move → rename → delete).
+The backend is substantially complete: scaffolding, schema/migrations, both auth transports (bearer tokens and cookie sessions, username-based login, forced password change on admin-issued credentials), path safety, the full content CRUD lifecycle (create/read/update/delete/move/rename, all through one locked git-mutation path), optimistic concurrency (blob-sha conflict detection), the ACL resolver plus its central enforcement (`AuthorizationContext`), the admin API (users/groups/grants/last-admin protection), pluggable/optional backup (runtime-editable git-remote target, debounced sync worker, manual backup/restore), static export, grep-based search, and the shared AI service behind the REST/OpenAPI surface. Real `mkdocs build --strict` runs are exercised in tests throughout, including after full lifecycle sequences (create → edit → move → rename → delete).
 
-Remaining: the web UI (T5.3–T5.5, including the T6.4 backup setup page), search's own UI (T8.2), the MCP transport (T9.2), a few partial-completion notes (T1.3/T2.1/T9.3/T10.1), and documentation/round-trip-test polish (T10.4, T10.6).
+Remaining: the web UI (T5.3–T5.5, including the browser form for the completed backup-config backend), search's own UI (T8.2), the MCP transport (T9.2), a few partial-completion notes (T1.3/T2.1/T9.3/T10.1), and documentation/round-trip-test polish (T10.4, T10.6).
 
 Per-task status is tracked with `[x]`/`[~]` markers below; a `[~]` task names what already exists so nobody rebuilds it.
 
@@ -391,13 +375,27 @@ Background task coalescing rapid saves into a periodic sync to whichever backup 
 "Back up now" (sync to whichever target is configured — today, git-remote push) and guarded restore. For the git-remote target: clone only into a validated absent/empty destination; permit fast-forward only from a clean checkout. For dirty/divergent state, first copy the entire local repo (including `.git`) to a timestamped recovery directory outside the target, verify that copy, show the divergence, and require a second explicit confirmation before any replacement. Never use force-push or destructive reset. An operator relying on rsync/S3 instead needs no admin-UI support here at all — restoring is copying files back and pointing the app at them, entirely outside this task.
 **Done when:** empty and fast-forward restores work; dirty/divergent restores cannot proceed without a verified recovery copy and confirmation; invalid remotes cannot escape the configured destination; interrupted replacement leaves either the old or restored repo recoverable; and none of this is reachable or required when no backup target is configured.
 
-#### T6.4 — Backup setup page & runtime-editable configuration
+#### [x] T6.4 — Backup setup page & runtime-editable configuration
 `opus` / `sol` · **M** · **high** · depends: T6.1, T4.3
 Today the backup target is env-var-only, wired once at startup via `ContentRepository.initialize()` → `GitBackend.configure_remote`. An operator wants a page to set this up rather than editing `.env`/Coolify env vars and redeploying — so this task makes it admin-UI-configurable at runtime:
 - Persist target configuration to a local file under `data/` (e.g. `data/backup_config.json`), following the same file-based-secret precedent already used for `api_token_secret_path` — **not** a new table, so the settled "four tables" database-scope decision stays intact. The stored record is target-typed (`type: "git-remote" | ...`) so a future S3/rsync implementation is another variant of the same record, not a redesign.
 - Admin-only read/update routes. Reading back the config **never** re-renders a saved token or key — same "shown once" precedent as the API-token screen — it shows target type, URL, and status only. Saving a new configuration re-runs `configure_remote` immediately (so a bad credential or unreachable host is caught the moment it's saved, not at the next restart) and only persists on success.
 - The admin UI page itself (folded into T5.5, not a separate screen): current status (configured / not configured, target type, last successful sync from T6.2, last sanitized error), a form to set/change the git-remote target (URL, the "confirmed private" affirmation checkbox, token *or* deploy-key-path + known-hosts-path), a "Back up now" button (T6.3), and a "Clear configuration" action that returns the app to the fully-supported "no backup target" state.
-**Done when:** an admin configures, tests (via the immediate `configure_remote` re-run), and clears a git-remote backup target entirely through the UI with no env var edit or redeploy; a saved credential is never rendered back in any subsequent read; and a failed save leaves the previous working configuration (or no configuration) in effect rather than a half-applied one.
+**Backend done when:** an admin configures, tests, and clears a git-remote
+target through the admin API with no env edit or redeploy; a credential is
+never rendered back; and a failed update leaves the exact previous working
+configuration (or no configuration) in effect. The browser form remains part
+of T5.5, which consumes this completed backend.
+**Note:** The target-typed record and any app-managed token live owner-only
+under `data/`, with a persisted `none` tombstone that outranks stale
+environment settings after clear. Save validates local URL/credential shape,
+then runs `git ls-remote` plus a non-mutating dry-run push to prove reachability,
+authentication, write permission, and fast-forward compatibility before
+persistence. Git config, helper bytes, managed-token bytes, and environment
+state are transactionally restored on failure. Runtime activation/deactivation
+uses the application lifespan; a broken persisted credential never prevents
+the optional-backup-free app from starting. Verified with 370 passing tests,
+58 focused backup/Git tests, clean ruff, and healthy production Compose.
 
 ---
 

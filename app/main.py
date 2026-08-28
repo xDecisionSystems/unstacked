@@ -4,16 +4,14 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
+from app import backup_runtime
 from app.admin_api import router as admin_router
 from app.ai_api import asset_router
 from app.ai_api import router as ai_router
 from app.ai_service import AIContentService
 from app.auth import LoginRateLimiter
-from app.backup import BackupSyncWorker
-from app.backup_api import router as backup_router
 from app.config import Settings
 from app.content import ContentRepository
-from app.manual_backup import ManualBackupService
 from app.models import create_db_engine, migrate_schema
 from app.upload_limit import UploadSizeLimitMiddleware
 from app.web import router as web_router
@@ -33,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="Unstacked AI Content API",
         version="0.1.0",
         description="Permission-aware read and create access to a Git-backed Markdown wiki.",
+        lifespan=backup_runtime.lifespan,
     )
     # Registered before any router so it wraps the whole application: an
     # oversized upload has to be refused above the framework, not inside a
@@ -46,25 +45,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.login_attempts_per_minute,
         max_keys=settings.max_rate_limit_keys,
     )
-    # A remote is optional.  Do not construct (or start) a worker when none
-    # was configured: local disk remains the complete application state.
-    if settings.github_remote_url:
-        app.state.manual_backup = ManualBackupService(content.git)
-        worker = BackupSyncWorker(
-            content.git,
-            debounce_seconds=settings.backup_sync_debounce_seconds,
-            max_backoff_seconds=settings.backup_sync_max_backoff_seconds,
-        )
-        app.state.backup_sync_worker = worker
-
-        @app.on_event("startup")
-        def start_backup_sync_worker() -> None:
-            worker.start()
-
-        @app.on_event("shutdown")
-        def stop_backup_sync_worker() -> None:
-            worker.stop()
-        app.include_router(backup_router)
+    # A backup target is optional, and now also runtime-editable: it may be
+    # configured here from an already-persisted record (or the environment), or
+    # later by an administrator through `PUT /api/admin/backup/config`.  No
+    # worker, service or route exists until one is -- local disk remains the
+    # complete application state on its own.
+    backup_runtime.install(app)
     app.include_router(ai_router)
     app.include_router(asset_router)
     app.include_router(web_auth_router)

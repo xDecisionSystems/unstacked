@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     # required together; an unpinned host key is not accepted.
     github_ssh_key_path: Path | None = None
     github_ssh_known_hosts_path: Path | None = None
+    # Runtime-editable backup configuration (see app/backup_config.py).  The
+    # variables above are the *initial* value only: once an administrator saves
+    # a target through the admin API, this file holds it and wins over them, so
+    # a backup target can be set up without editing the deployment.  A file
+    # under `data/`, not a table -- the same precedent as the token secret.
+    backup_config_path: Path = Path("data/backup_config.json")
     # A backup is deliberately off the request path.  This is the shortest
     # delay before a worker coalesces a burst of local commits into one push.
     backup_sync_debounce_seconds: float = 10.0

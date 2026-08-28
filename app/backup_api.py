@@ -1,4 +1,11 @@
-"""Administrator-only transport for optional manual backup operations."""
+"""Administrator-only transport for optional manual backup operations.
+
+These routes exist only once a backup target has been configured -- at startup
+or later, through ``PUT /api/admin/backup/config``.  Because a target can also
+be *cleared* at runtime, they can outlive the service they call: routes cannot
+be un-mounted, so :func:`_manual_backup` reports the "no backup configured"
+state as a conflict instead of failing on a missing attribute.
+"""
 
 from typing import Annotated
 
@@ -7,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
 from app.git_backend import GitSyncError
-from app.manual_backup import RestoreResult
+from app.manual_backup import ManualBackupService, RestoreResult
 from app.models import User
 
 router = APIRouter(prefix="/api/admin/backup", tags=["Backup"])
@@ -35,6 +42,15 @@ def _admin(user: Annotated[User, Depends(get_current_user)]) -> User:
     return user
 
 
+def _manual_backup(request: Request) -> ManualBackupService:
+    service = getattr(request.app.state, "manual_backup", None)
+    if service is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "No content backup target is configured"
+        )
+    return service
+
+
 def _restore_response(value: RestoreResult) -> RestoreResponse:
     return RestoreResponse(
         action=value.action,
@@ -48,7 +64,7 @@ def _restore_response(value: RestoreResult) -> RestoreResponse:
 @router.post("/now", response_model=BackupResponse)
 def backup_now(request: Request, _user: Annotated[User, Depends(_admin)]) -> BackupResponse:
     try:
-        return BackupResponse(pushed_commits=request.app.state.manual_backup.backup_now())
+        return BackupResponse(pushed_commits=_manual_backup(request).backup_now())
     except GitSyncError as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Content backup could not be completed"
@@ -63,7 +79,7 @@ def restore_backup(
 ) -> RestoreResponse:
     try:
         return _restore_response(
-            request.app.state.manual_backup.restore(confirmation_id=payload.confirmation_id)
+            _manual_backup(request).restore(confirmation_id=payload.confirmation_id)
         )
     except GitSyncError as exc:
         raise HTTPException(

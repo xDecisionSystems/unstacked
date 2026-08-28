@@ -143,6 +143,43 @@ class RemoteConfig:
 
 
 @dataclass(frozen=True)
+class _RemoteConfigurationSnapshot:
+    config_bytes: bytes
+    config_mode: int
+    helper_bytes: bytes | None
+    helper_mode: int | None
+    token_environment_was_set: bool
+    token_environment_value: str | None
+
+    @classmethod
+    def capture(cls, config_path: Path, helper_path: Path) -> "_RemoteConfigurationSnapshot":
+        helper_exists = helper_path.is_file()
+        return cls(
+            config_bytes=config_path.read_bytes(),
+            config_mode=stat.S_IMODE(config_path.stat().st_mode),
+            helper_bytes=helper_path.read_bytes() if helper_exists else None,
+            helper_mode=(stat.S_IMODE(helper_path.stat().st_mode) if helper_exists else None),
+            token_environment_was_set=_TOKEN_ENV_VAR in os.environ,
+            token_environment_value=os.environ.get(_TOKEN_ENV_VAR),
+        )
+
+    def restore(self, config_path: Path, helper_path: Path) -> None:
+        GitBackend._atomic_write_bytes(config_path, self.config_bytes)
+        os.chmod(config_path, self.config_mode)
+        if self.helper_bytes is None:
+            helper_path.unlink(missing_ok=True)
+        else:
+            GitBackend._atomic_write_bytes(helper_path, self.helper_bytes)
+            assert self.helper_mode is not None
+            os.chmod(helper_path, self.helper_mode)
+        if self.token_environment_was_set:
+            assert self.token_environment_value is not None
+            os.environ[_TOKEN_ENV_VAR] = self.token_environment_value
+        else:
+            os.environ.pop(_TOKEN_ENV_VAR, None)
+
+
+@dataclass(frozen=True)
 class Revision:
     sha: str
     message: str
@@ -229,6 +266,59 @@ class GitBackend:
                 self._configure_ssh_credential(repo, config)
             # A `file://` backup needs no credential: it is reachable only by a
             # process that already has filesystem access to it.
+
+    @contextmanager
+    def remote_configuration_transaction(self):
+        """Restore Git's exact remote/auth configuration if the block fails.
+
+        Runtime backup setup changes the remote URL, credential-helper entries,
+        SSH command, and generated helper file as one logical operation.  The
+        admin API also probes the remote and persists its own record before
+        committing that operation.  If either later step fails, restoring the
+        previous target by calling :meth:`configure_remote` is insufficient:
+        an unconfigured target is deliberately a no-op, and operator-owned
+        config entries could be lost.  Snapshot the actual bytes instead.
+        """
+
+        with self.write_lock():
+            repo = self.repo
+            config_path = Path(repo.git_dir) / "config"
+            helper_path = Path(repo.git_dir) / _CREDENTIAL_HELPER_NAME
+            snapshot = _RemoteConfigurationSnapshot.capture(config_path, helper_path)
+            try:
+                yield
+            except BaseException:
+                snapshot.restore(config_path, helper_path)
+                raise
+
+    def test_remote(self) -> None:
+        """Probe read and write access without fetching or changing any refs."""
+
+        with self.write_lock():
+            repo = self.repo
+            remote = self._origin(repo)
+            try:
+                # ``ls-remote`` authenticates and reaches the host, but unlike
+                # fetch it writes no remote-tracking refs.  An empty bare
+                # repository is a valid new backup and returns success here.
+                repo.git.ls_remote(remote.name)
+                # Read access alone is not enough for a backup credential.
+                # A dry-run invokes the remote's receive-pack authorization
+                # and fast-forward checks without updating its branch.
+                branch = self._active_branch(repo)
+                repo.git.push("--dry-run", remote.name, _push_refspec(branch.name))
+            except GitCommandError as exc:
+                raise _sync_error(exc, "content backup target could not be reached") from None
+
+    def clear_configured_remote(self) -> None:
+        """Remove the app-managed origin and credential wiring after admin clear."""
+
+        with self.write_lock():
+            repo = self.repo
+            self._clear_remote_auth_config(repo)
+            if hasattr(repo.remotes, "origin"):
+                repo.delete_remote(repo.remotes.origin)
+            os.environ.pop(_TOKEN_ENV_VAR, None)
 
     def commit_paths(self, paths: list[Path], *, name: str, email: str, message: str) -> str:
         """Commit exactly ``paths`` on top of HEAD, present or already removed.

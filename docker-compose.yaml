@@ -30,6 +30,7 @@ services:
       UNSTACKED_STATIC_EXPORT_OUTPUT_LIMIT_BYTES: ${UNSTACKED_STATIC_EXPORT_OUTPUT_LIMIT_BYTES:-65536}
       UNSTACKED_BACKUP_SYNC_DEBOUNCE_SECONDS: ${UNSTACKED_BACKUP_SYNC_DEBOUNCE_SECONDS:-10}
       UNSTACKED_BACKUP_SYNC_MAX_BACKOFF_SECONDS: ${UNSTACKED_BACKUP_SYNC_MAX_BACKOFF_SECONDS:-300}
+      UNSTACKED_BACKUP_CONFIG_PATH: /app/data/backup_config.json
       # Content backup remote. The repository MUST be private: the backup is a
       # complete, unfiltered copy of the wiki including drafts, with no
       # per-user permissions. Nothing verifies that over the network, so the
