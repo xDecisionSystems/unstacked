@@ -387,6 +387,11 @@ def create_user(payload: UserCreate, request: Request, actor: AdminActor) -> Use
             password_hash=hash_password(payload.password),
             display_name=payload.display_name,
             is_admin=payload.is_admin,
+            # The administrator sets this password and hands it to the
+            # recipient out of band; forcing a change on first login matches
+            # bootstrap's own admin account and means the admin-chosen value
+            # is never the account's long-term credential.
+            must_change_password=True,
         )
         session.add(user)
         try:
@@ -455,6 +460,9 @@ def reset_password(
         user = _require_user(session, user_id)
         user.password_hash = hash_password(payload.password)
         user.api_token_generation += 1
+        # An admin-set password is a temporary credential communicated out of
+        # band, same as at account creation — force the user to replace it.
+        user.must_change_password = True
         session.add(user)
         session.commit()
         invalidate_web_sessions(session, user)
