@@ -212,6 +212,46 @@ def test_confined_tree_write_and_rename_are_atomic_no_clobber(tmp_path: Path):
     assert tree.read_text("book/destination.md") == "destination"
 
 
+def test_confined_tree_internal_navigation_file_is_fixed_and_confined(tmp_path: Path):
+    docs = tmp_path / "docs"
+    (docs / "book").mkdir(parents=True)
+    tree = ConfinedTree(docs)
+
+    tree.write_internal_text("book", "nav:\n  - page.md\n")
+    assert tree.read_internal_text("book") == "nav:\n  - page.md\n"
+    tree.write_internal_text("book", "nav:\n  - renamed.md\n", overwrite=True)
+    assert tree.read_internal_text("book") == "nav:\n  - renamed.md\n"
+
+    with pytest.raises(FileExistsError):
+        tree.write_internal_text("book", "nav: []\n")
+    with pytest.raises(UnsafePath):
+        tree.write_internal_text("book/.pages", "nav: []\n")
+
+
+def test_confined_tree_internal_navigation_rejects_symlinked_parent_or_file(tmp_path: Path):
+    docs = tmp_path / "docs"
+    outside = tmp_path / "outside"
+    docs.mkdir()
+    outside.mkdir()
+    tree = ConfinedTree(docs)
+    (docs / "book").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(UnsafePath):
+        tree.read_internal_text("book")
+    with pytest.raises(UnsafePath):
+        tree.write_internal_text("book", "nav: []\n")
+
+    (docs / "book").unlink()
+    (docs / "book").mkdir()
+    secret = tmp_path / "secret.pages"
+    secret.write_text("secret", encoding="utf-8")
+    (docs / "book" / ".pages").symlink_to(secret)
+
+    with pytest.raises(UnsafePath):
+        tree.read_internal_text("book")
+    assert secret.read_text(encoding="utf-8") == "secret"
+
+
 @pytest.mark.parametrize(
     "operation", ["read", "write", "unlink", "mkdir", "rename", "list", "delete"]
 )

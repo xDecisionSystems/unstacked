@@ -29,7 +29,7 @@ Confirmed scope (from user):
 
 The backend is substantially complete: scaffolding, schema/migrations, both auth transports (bearer tokens and cookie sessions, username-based login, forced password change on admin-issued credentials), path safety, the full content CRUD lifecycle (create/read/update/delete/move/rename, all through one locked git-mutation path), optimistic concurrency (blob-sha conflict detection), the ACL resolver plus its central enforcement (`AuthorizationContext`), the admin API (users/groups/grants/last-admin protection), pluggable/optional backup (runtime-editable git-remote target, debounced sync worker, manual backup/restore), static export, grep-based search, and the shared AI service behind the REST/OpenAPI surface. Real `mkdocs build --strict` runs are exercised in tests throughout, including after full lifecycle sequences (create → edit → move → rename → delete).
 
-Remaining: the web UI (T5.5, including the browser form for the completed backup-config backend), search's own UI (T8.2), the MCP transport (T9.2), a few partial-completion notes (T1.3/T2.1/T9.3/T10.1), and documentation polish (T10.6).
+Remaining: descriptor-confined lifecycle migration (T2.1), the MCP transport (T9.2), and the remaining REST/OpenAPI and property-based security coverage (T9.3/T10.1). The browser UI, browser search, backup console, and operator documentation are complete.
 
 Per-task status is tracked with `[x]`/`[~]` markers below; a `[~]` task names what already exists so nobody rebuilds it.
 
@@ -230,7 +230,7 @@ Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, a
 `opus` / `sol` · **S** · **high** · depends: T0.1, T0.2
 `app/paths.py`: slugify titles; canonicalize URL paths exactly once; reject double encoding; and provide a `safe_join(docs_root, *parts)` that resolves the existing nearest parent and **rejects anything escaping `docs/`**, including symlink escapes and case-fold collisions on case-insensitive filesystems. Handle reserved/internal names (`assets`, `.pages`, dotfiles), bounded lengths, collisions, null bytes, separators, Windows-reserved names, and Unicode normalization. Every filesystem module uses typed validated relative paths from here, never raw request strings.
 **Done when:** an adversarial cross-platform suite covers traversal, encoding, symlink races/escapes, reserved names, collisions, and Unicode normalization without rejecting ordinary international titles.
-**Remaining:** Descriptor-confined read and no-clobber create helpers now protect page reads/creation from symlink races, alongside canonical form, traversal/symlink escape, reserved/Windows device names, and NFKC normalization. Remaining: update/move/delete/nav lifecycle operations still need a transaction-wide descriptor-based I/O refactor before this task can be complete.
+**Remaining:** Descriptor-confined read/no-clobber creation helpers and confined `.pages` control-file I/O now protect creation, page updates, and page/container title edits from symlink races, including their rollback paths. Remaining: move/delete/rename and their navigation rewrites still need a transaction-wide descriptor-based I/O refactor before this task can be complete.
 > Security-critical: this is the single control preventing arbitrary filesystem read/write in a file-backed app.
 
 #### [x] T2.2 — Front-matter I/O **[P]**
@@ -448,7 +448,7 @@ MCP server exposing search/list/get/download and create-book/chapter/page tools 
 `sonnet` / `terra` · **M** · **high** · depends: T9.1, T1.3
 `/api/ai/*` endpoints with a provider-neutral OpenAPI schema for ACL-filtered tree/page/ZIP downloads and create-book/chapter/page operations; signed bearer-token auth, request/response limits, and rate limiting. Keep the REST contract provider-neutral even if a ChatGPT Action is the first client.
 **Done when:** the generated OpenAPI validates against the target action client; unauthenticated/expired/revoked calls fail; response limits are enforced; create operations produce one correctly authored Git commit; and REST/MCP authorization results match.
-**Remaining:** `app/ai_api.py` exposes auth, tree, search, content, export, history, diff, restore and create endpoints with bearer auth. Remaining: response size limits, rate limiting beyond login, and OpenAPI validation against a real action client.
+**Remaining:** `app/ai_api.py` exposes auth, tree, search, content, export, history, diff, restore and create endpoints with bearer auth; page requests and diffs are bounded. Remaining: dedicated AI rate limiting and OpenAPI validation against a real action client.
 
 ---
 

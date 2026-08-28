@@ -336,6 +336,85 @@ class ConfinedTree:
     def write_text(self, relative: str, content: str, *, overwrite: bool = False) -> None:
         atomic_write_confined(self.root, relative, content, overwrite=overwrite)
 
+    def read_internal_text(self, parent: str | None, *, max_bytes: int | None = None) -> str:
+        """Read only the ``.pages`` control file inside one confined directory.
+
+        ``.pages`` is intentionally not accepted by :func:`normalize_relative_path`:
+        it is application-owned control metadata, never an addressable content
+        resource.  Keeping the filename fixed here avoids creating a second,
+        less restricted path API just for navigation maintenance.
+        """
+
+        try:
+            with self._directory(parent) as parent_fd:
+                descriptor = os.open(
+                    ".pages", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
+                )
+        except (OSError, UnsafePath) as exc:
+            if isinstance(exc, UnsafePath):
+                raise
+            raise UnsafePath("internal control file is missing or unsafe") from exc
+        try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode):
+                raise UnsafePath("internal control file is not regular")
+            limit = max_bytes + 1 if max_bytes is not None else -1
+            chunks: list[bytes] = []
+            remaining = limit
+            while remaining != 0:
+                chunk = os.read(descriptor, 65_536 if remaining < 0 else min(65_536, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                if remaining > 0:
+                    remaining -= len(chunk)
+            content = b"".join(chunks)
+            if max_bytes is not None and len(content) > max_bytes:
+                raise ConfinedFileTooLarge("file exceeds configured size limit")
+            return content.decode("utf-8")
+        finally:
+            os.close(descriptor)
+
+    def write_internal_text(
+        self, parent: str | None, content: str, *, overwrite: bool = False
+    ) -> None:
+        """Atomically write only ``.pages`` inside one confined directory."""
+
+        temporary = f".{uuid4().hex}.unstacked-tmp"
+        try:
+            with self._directory(parent) as parent_fd:
+                descriptor = os.open(
+                    temporary,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    stat.S_IRUSR | stat.S_IWUSR,
+                    dir_fd=parent_fd,
+                )
+                try:
+                    with os.fdopen(descriptor, "wb") as handle:
+                        handle.write(content.encode("utf-8"))
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    if overwrite:
+                        # Replacing a final symlink changes the entry itself;
+                        # it never follows the link to write outside the tree.
+                        os.replace(temporary, ".pages", src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                    else:
+                        os.link(temporary, ".pages", src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                        os.unlink(temporary, dir_fd=parent_fd)
+                    os.fsync(parent_fd)
+                except Exception:
+                    try:
+                        os.unlink(temporary, dir_fd=parent_fd)
+                    except FileNotFoundError:
+                        pass
+                    raise
+        except FileExistsError:
+            raise
+        except UnsafePath:
+            raise
+        except OSError as exc:
+            raise UnsafePath("internal control file is missing or unsafe") from exc
+
     def unlink(self, relative: str) -> None:
         """Remove a regular file; a final symlink is rejected, not followed."""
 

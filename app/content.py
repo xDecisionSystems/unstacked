@@ -16,7 +16,7 @@ from app.acl import load_policy
 from app.assets import AssetTooLarge, DetectedImage, UnsupportedAsset, detect_image
 from app.backup_config import effective_target
 from app.config import Settings
-from app.frontmatter_io import PageDocument, new_page, parse_page, write_page
+from app.frontmatter_io import PageDocument, new_page, parse_page, serialize_page
 from app.git_backend import (
     GitBackend,
     GitSyncError,
@@ -27,16 +27,19 @@ from app.git_backend import (
 )
 from app.models import User
 from app.nav import (
+    Navigation,
     NavigationError,
     create_navigation,
+    parse_navigation,
     read_navigation,
     remove_stale_entry,
+    serialize_navigation,
     set_order,
-    set_title,
 )
 from app.paths import (
     RESERVED_ROOT_NAMES,
     ConfinedFileTooLarge,
+    ConfinedTree,
     UnsafePath,
     atomic_write_confined,
     atomic_write_confined_bytes,
@@ -538,34 +541,43 @@ class ContentRepository:
 
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
             raise ContentError("page exceeds configured size limit")
-        rollback = _Rollback()
         try:
             with self.git.write_lock():
-                page = self._page_path(relative)
                 page_relative = normalize_relative_path(relative)
+                if not page_relative.endswith(".md") or path_depth(page_relative) not in {2, 3}:
+                    raise ContentMissing("page not found")
+                tree = ConfinedTree(self.docs)
                 try:
-                    current_blob_sha = self.git.blob_sha(page)
+                    original = tree.read_text(
+                        page_relative, max_bytes=self.settings.max_page_bytes
+                    )
+                except ConfinedFileTooLarge as exc:
+                    raise ContentError("page exceeds configured size limit") from exc
+                except UnsafePath as exc:
+                    raise ContentMissing("page not found") from exc
+                try:
+                    current_blob_sha = self.git.blob_sha(f"docs/{page_relative}")
                 except RevisionNotFound as exc:
                     raise ContentMissing("page not found") from exc
                 if current_blob_sha != base_blob_sha:
                     raise ContentConflict("page changed; reload it before saving")
-                document = self._read_document(page)
+                document = parse_page(original, default_title=Path(page_relative).stem)
                 now = datetime.now(timezone.utc).isoformat()
                 metadata = {"updated_at": now, "tags": list(tags), "draft": draft}
                 # Repair app metadata a hand-authored page never had, rather than
                 # serializing the nulls the tolerant reader substitutes for it.
                 metadata.update(self._repaired_metadata(document, actor, now))
-                rollback.file(page)
+                serialized = serialize_page(replace(document, content=markdown), metadata=metadata)
                 try:
-                    write_page(page, replace(document, content=markdown), metadata=metadata)
+                    tree.write_text(page_relative, serialized, overwrite=True)
                     return self.git.commit_paths(
-                        [page],
+                        [f"docs/{page_relative}"],
                         name=actor.display_name,
                         email=actor.email,
                         message=f"Update page: {page_relative}",
                     )
                 except Exception:
-                    rollback.undo()
+                    tree.write_text(page_relative, original, overwrite=True)
                     raise
         except GitWriteLockTimeout as exc:
             raise ContentLockTimeout(str(exc)) from exc
@@ -588,25 +600,32 @@ class ContentRepository:
         """
 
         title = self._validate_title(title)
-        rollback = _Rollback()
         with self.git.write_lock():
-            page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
-            document = self._read_document(page)
+            if not page_relative.endswith(".md") or path_depth(page_relative) not in {2, 3}:
+                raise ContentMissing("page not found")
+            tree = ConfinedTree(self.docs)
+            try:
+                original = tree.read_text(page_relative, max_bytes=self.settings.max_page_bytes)
+            except ConfinedFileTooLarge as exc:
+                raise ContentError("page exceeds configured size limit") from exc
+            except UnsafePath as exc:
+                raise ContentMissing("page not found") from exc
+            document = parse_page(original, default_title=Path(page_relative).stem)
             now = datetime.now(timezone.utc).isoformat()
             metadata = {"title": title, "updated_at": now}
             metadata.update(self._repaired_metadata(document, actor, now))
-            rollback.file(page)
+            serialized = serialize_page(document, metadata=metadata)
             try:
-                write_page(page, document, metadata=metadata)
+                tree.write_text(page_relative, serialized, overwrite=True)
                 return self.git.commit_paths(
-                    [page],
+                    [f"docs/{page_relative}"],
                     name=actor.display_name,
                     email=actor.email,
                     message=f"Retitle page: {page_relative}",
                 )
             except Exception:
-                rollback.undo()
+                tree.write_text(page_relative, original, overwrite=True)
                 raise
 
     def set_container_title(self, relative: str, title: str, actor: User) -> str:
@@ -618,26 +637,35 @@ class ContentRepository:
         """
 
         title = self._validate_title(title)
-        rollback = _Rollback()
         with self.git.write_lock():
-            container = self._container_path(relative)
-            navigation = container / ".pages"
-            if not navigation.is_file():
-                raise ContentMissing("navigation file not found")
-            rollback.file(navigation)
+            relative = normalize_relative_path(relative)
+            if path_depth(relative) not in {1, 2} or relative.split("/")[0] in RESERVED_ROOT_NAMES:
+                raise ContentError("only books and chapters are containers")
+            navigation_relative = f"{relative}/.pages"
+            tree = ConfinedTree(self.docs)
             try:
-                set_title(navigation, title)
+                original = tree.read_internal_text(relative)
+            except UnsafePath:
+                raise ContentMissing("navigation file not found")
+            try:
+                navigation = parse_navigation(original, source=".pages")
+                values = dict(navigation.values)
+                values["title"] = title
+                serialized = serialize_navigation(Navigation(values), source=".pages")
+            except NavigationError as exc:
+                raise ContentError("navigation file is malformed") from exc
+            try:
+                tree.write_internal_text(relative, serialized, overwrite=True)
                 return self.git.commit_paths(
-                    [navigation],
+                    [f"docs/{navigation_relative}"],
                     name=actor.display_name,
                     email=actor.email,
                     message=f"Retitle {self._kind(relative)}: {normalize_relative_path(relative)}",
                 )
             except NavigationError as exc:
-                rollback.undo()
                 raise ContentError("navigation file is malformed") from exc
             except Exception:
-                rollback.undo()
+                tree.write_internal_text(relative, original, overwrite=True)
                 raise
 
     def delete_page(self, relative: str, actor: User) -> str:

@@ -423,7 +423,7 @@ def test_a_failed_write_or_stage_restores_the_page_and_index(
     def explode(*args, **kwargs):
         raise RuntimeError("injected write failure")
 
-    monkeypatch.setattr("app.content.write_page", explode)
+    monkeypatch.setattr("app.content.ConfinedTree.write_text", explode)
     with pytest.raises(RuntimeError, match="injected write failure"):
         seeded.update_page(
             "ops/overview.md",
@@ -452,6 +452,27 @@ def test_a_failed_write_or_stage_restores_the_page_and_index(
         )
     assert (docs / "ops" / "overview.md").read_bytes() == before_page
     assert (Path(repo.git_dir) / "index").read_bytes() == before_index
+
+
+def test_a_failed_container_retitle_restores_confined_navigation(
+    seeded, docs, actor, repo, monkeypatch
+):
+    """A failed commit must restore `.pages` through its confined control-file API."""
+
+    navigation = docs / "ops" / ".pages"
+    before = navigation.read_bytes()
+    before_index = (Path(repo.git_dir) / "index").read_bytes()
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("injected commit failure")
+
+    monkeypatch.setattr(seeded.git, "commit_paths", explode)
+    with pytest.raises(RuntimeError, match="injected commit failure"):
+        seeded.set_container_title("ops", "Never committed", actor)
+
+    assert navigation.read_bytes() == before
+    assert (Path(repo.git_dir) / "index").read_bytes() == before_index
+    assert not repo.is_dirty()
 
 
 def test_a_failed_commit_restores_the_preexisting_index(seeded, docs, actor, repo, monkeypatch):
