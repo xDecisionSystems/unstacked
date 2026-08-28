@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:35 UTC — Codex
+Integrated exhaustive ACL boundary tests for segment matching, deepest-rule
+resolution, write-implies-read, equal-depth denial, order independence, and
+sibling non-leakage.
+- Files: `tests/test_acl_boundaries.py`, `LOG.md`
+
 ## 2026-08-28 22:30 UTC — Codex
 Made API-token revocation usable from the cookie-based admin console without
 weakening bearer support: browser requests now require the existing CSRF token.
