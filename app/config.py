@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     content_repo_path: Path = Path("content")
     db_path: Path = Path("data/app.db")
     content_lock_path: Path = Path("data/content.lock")
+    # Every content mutation holds this repository-wide inter-process lock.
+    # A finite timeout means a wedged peer cannot make a request wait forever.
+    content_lock_timeout_seconds: float = 15.0
     # No default secret: a shared constant would let anyone forge a token for
     # any user.  Development and test generate a private random secret on
     # first use; production must supply one explicitly.
@@ -65,6 +68,10 @@ class Settings(BaseSettings):
     # required together; an unpinned host key is not accepted.
     github_ssh_key_path: Path | None = None
     github_ssh_known_hosts_path: Path | None = None
+    # A backup is deliberately off the request path.  This is the shortest
+    # delay before a worker coalesces a burst of local commits into one push.
+    backup_sync_debounce_seconds: float = 10.0
+    backup_sync_max_backoff_seconds: float = 300.0
     login_attempts_per_minute: int = 5
     # Number of trusted reverse proxies in front of the app.  0 means the
     # socket peer is the client; behind a proxy this must be set or every
@@ -72,7 +79,22 @@ class Settings(BaseSettings):
     trusted_proxy_hops: int = 0
     max_page_bytes: int = 2_000_000
     max_export_bytes: int = 50_000_000
+    # Search deliberately has its own smaller budgets.  A page may be valid
+    # wiki content yet too expensive to inspect on every keystroke.
+    max_search_query_chars: int = 500
+    max_search_results: int = 100
+    max_search_files: int = 1_000
+    max_search_file_bytes: int = 512_000
+    max_search_snippet_chars: int = 400
+    search_timeout_seconds: float = 5.0
     max_rate_limit_keys: int = 10_000
+    # Static exports intentionally live outside the content checkout: MkDocs'
+    # output must never make the nested repository dirty, and the last good
+    # artifact needs to survive a later failed build.
+    static_export_path: Path = Path("data/static-export")
+    mkdocs_executable: str = "mkdocs"
+    static_export_timeout_seconds: int = 120
+    static_export_output_limit_bytes: int = 65_536
 
     @field_validator(
         "github_token_path",
@@ -103,6 +125,30 @@ class Settings(BaseSettings):
             raise ValueError("login rate limit must be positive")
         if self.trusted_proxy_hops < 0:
             raise ValueError("trusted proxy hops cannot be negative")
+        if not self.mkdocs_executable or "\x00" in self.mkdocs_executable:
+            raise ValueError("mkdocs executable must be a non-empty command path")
+        if self.static_export_timeout_seconds < 1:
+            raise ValueError("static export timeout must be positive")
+        if self.static_export_output_limit_bytes < 1:
+            raise ValueError("static export output limit must be positive")
+        if self.content_lock_timeout_seconds <= 0:
+            raise ValueError("content lock timeout must be positive")
+        if self.backup_sync_debounce_seconds <= 0:
+            raise ValueError("backup sync debounce must be positive")
+        if self.backup_sync_max_backoff_seconds < self.backup_sync_debounce_seconds:
+            raise ValueError("backup sync maximum backoff must be at least the debounce")
+        if self.max_search_query_chars < 1:
+            raise ValueError("search query limit must be positive")
+        if self.max_search_results < 1:
+            raise ValueError("search result limit must be positive")
+        if self.max_search_files < 1:
+            raise ValueError("search file limit must be positive")
+        if self.max_search_file_bytes < 1:
+            raise ValueError("search file size limit must be positive")
+        if self.max_search_snippet_chars < 20:
+            raise ValueError("search snippet limit must be at least 20 characters")
+        if self.search_timeout_seconds <= 0:
+            raise ValueError("search timeout must be positive")
 
         # An unset variable and an empty one mean the same thing here: no
         # backup remote.  Normalizing once keeps every consumer from having to

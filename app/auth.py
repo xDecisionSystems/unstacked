@@ -86,8 +86,15 @@ def hash_password(password: str) -> str:
     return password_hash.hash(password)
 
 
-def authenticate(session: Session, email: str, password: str) -> User | None:
-    user = session.exec(select(User).where(User.email == email.casefold())).first()
+def authenticate(session: Session, username: str, password: str) -> User | None:
+    """Check a local password without exposing account existence.
+
+    Usernames, rather than email addresses, are the login identifier.  The
+    dummy verification deliberately keeps an unknown username in the same
+    Argon2 timing class as a wrong password for a real account.
+    """
+
+    user = session.exec(select(User).where(User.username == username)).first()
     if user is None:
         password_hash.verify(password, DUMMY_PASSWORD_HASH)
         return None
@@ -99,6 +106,8 @@ def authenticate(session: Session, email: str, password: str) -> User | None:
 def create_api_token(user: User, settings: Settings) -> str:
     if user.id is None:
         raise ValueError("user must be persisted before issuing a token")
+    if user.must_change_password:
+        raise ValueError("password change required before issuing an API token")
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user.id),
@@ -147,6 +156,11 @@ def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired bearer token",
                 headers={"WWW-Authenticate": "Bearer"},
+            )
+        if user.must_change_password:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password change required",
             )
         session.expunge(user)
         return user

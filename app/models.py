@@ -9,6 +9,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine
 
 class User(SQLModel, table=True):
     __table_args__ = (
+        CheckConstraint("length(username) > 0", name="ck_user_username_nonempty"),
         CheckConstraint("session_generation >= 0", name="ck_user_session_generation_nonnegative"),
         CheckConstraint(
             "api_token_generation >= 0",
@@ -17,11 +18,13 @@ class User(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    username: str = Field(sa_column=Column(String, unique=True, index=True, nullable=False))
     email: str = Field(sa_column=Column(String, unique=True, index=True, nullable=False))
     password_hash: str
     display_name: str
     is_admin: bool = False
     is_active: bool = True
+    must_change_password: bool = False
     session_generation: int = 0
     api_token_generation: int = 0
 

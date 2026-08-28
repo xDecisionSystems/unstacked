@@ -5,17 +5,22 @@ history surviving a rename or a delete, URLs surviving a title edit, the index
 being clean after a failure, and the content folder still building on its own.
 """
 
+import multiprocessing
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from filelock import FileLock
 from git import Repo
+from git.index.base import IndexFile
 from sqlmodel import Session
 
 from app.content import (
+    ContentConflict,
     ContentError,
     ContentExists,
+    ContentLockTimeout,
     ContentMissing,
     ContentRepository,
 )
@@ -72,11 +77,46 @@ def _build(settings) -> subprocess.CompletedProcess:
     )
 
 
+def _concurrent_update(settings, base_blob_sha: str, body: str, start, results) -> None:
+    """Spawn-safe worker used to prove the file lock works across processes."""
+
+    actor = User(
+        username="concurrent-editor",
+        email="concurrent@example.com",
+        password_hash="not-used-by-content-service",
+        display_name="Concurrent Editor",
+    )
+    start.wait(10)
+    try:
+        ContentRepository(settings).update_page(
+            "ops/overview.md", body, [], False, actor, base_blob_sha=base_blob_sha
+        )
+    except ContentConflict:
+        results.put("conflict")
+    except Exception as exc:  # pragma: no cover - makes child failures visible
+        results.put(f"error: {type(exc).__name__}: {exc}")
+    else:
+        results.put("committed")
+
+
+def _hold_write_lock(lock_path: Path, ready, release) -> None:
+    with FileLock(lock_path):
+        ready.set()
+        release.wait(10)
+
+
 def test_update_replaces_the_body_without_losing_page_identity(seeded, docs, actor, repo):
     """A page's id and creation time outlive its body; only Git records who edited."""
 
     before = read_page(docs / "ops" / "overview.md").metadata
-    seeded.update_page("ops/overview.md", "rewritten body", ["intro", "ops"], True, actor)
+    seeded.update_page(
+        "ops/overview.md",
+        "rewritten body",
+        ["intro", "ops"],
+        True,
+        actor,
+        base_blob_sha=seeded.page_blob_sha("ops/overview.md"),
+    )
     after = read_page(docs / "ops" / "overview.md").metadata
 
     assert "rewritten body" in (docs / "ops" / "overview.md").read_text(encoding="utf-8")
@@ -95,7 +135,66 @@ def test_update_replaces_the_body_without_losing_page_identity(seeded, docs, act
 
 def test_update_rejects_a_page_that_is_not_in_the_tree(seeded, actor):
     with pytest.raises(ContentMissing):
-        seeded.update_page("ops/missing.md", "body", [], False, actor)
+        seeded.update_page("ops/missing.md", "body", [], False, actor, base_blob_sha="0" * 40)
+
+
+def test_concurrent_cross_process_saves_commit_once_and_conflict_once(seeded, app_env, repo):
+    """The stale writer must recheck its base after acquiring the file lock."""
+
+    _app, settings, _admin, _token = app_env
+    base_blob_sha = seeded.page_blob_sha("ops/overview.md")
+    before = repo.head.commit.hexsha
+    context = multiprocessing.get_context("spawn")
+    start = context.Event()
+    results = context.Queue()
+    workers = [
+        context.Process(
+            target=_concurrent_update,
+            args=(settings, base_blob_sha, f"body from writer {number}", start, results),
+        )
+        for number in (1, 2)
+    ]
+    for worker in workers:
+        worker.start()
+    start.set()
+    outcomes = sorted(results.get(timeout=15) for _ in workers)
+    for worker in workers:
+        worker.join(timeout=15)
+        assert worker.exitcode == 0
+
+    assert outcomes == ["committed", "conflict"]
+    assert repo.head.commit.hexsha != before
+    assert repo.head.commit.parents[0].hexsha == before
+    assert not repo.is_dirty()
+
+
+def test_write_lock_times_out_instead_of_waiting_forever(seeded, app_env, actor):
+    _app, settings, _admin, _token = app_env
+    short_wait_settings = settings.model_copy(update={"content_lock_timeout_seconds": 0.1})
+    content = ContentRepository(short_wait_settings)
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    release = context.Event()
+    holder = context.Process(
+        target=_hold_write_lock,
+        args=(settings.content_lock_path, ready, release),
+    )
+    holder.start()
+    assert ready.wait(10)
+    try:
+        with pytest.raises(ContentLockTimeout, match="busy"):
+            content.update_page(
+                "ops/overview.md",
+                "never committed",
+                [],
+                False,
+                actor,
+                base_blob_sha=content.page_blob_sha("ops/overview.md"),
+            )
+    finally:
+        release.set()
+        holder.join(timeout=15)
+    assert holder.exitcode == 0
 
 
 def test_title_edit_leaves_the_page_where_its_links_point(seeded, docs, actor):
@@ -248,7 +347,12 @@ def test_moving_into_a_pinned_parent_adds_the_page_to_its_order(seeded, docs, ac
     [
         pytest.param(
             lambda content, actor: content.update_page(
-                "ops/overview.md", "clobbered", [], False, actor
+                "ops/overview.md",
+                "clobbered",
+                [],
+                False,
+                actor,
+                base_blob_sha=content.page_blob_sha("ops/overview.md"),
             ),
             id="update",
         ),
@@ -308,12 +412,88 @@ def test_a_failed_commit_restores_the_pre_operation_bytes(
     assert repo.untracked_files == []
 
 
+def test_a_failed_write_or_stage_restores_the_page_and_index(
+    seeded, docs, actor, repo, monkeypatch
+):
+    """No pre-commit failure may leave a partially saved page or dirty index."""
+
+    before_page = (docs / "ops" / "overview.md").read_bytes()
+    before_index = (Path(repo.git_dir) / "index").read_bytes()
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("injected write failure")
+
+    monkeypatch.setattr("app.content.write_page", explode)
+    with pytest.raises(RuntimeError, match="injected write failure"):
+        seeded.update_page(
+            "ops/overview.md",
+            "clobbered",
+            [],
+            False,
+            actor,
+            base_blob_sha=seeded.page_blob_sha("ops/overview.md"),
+        )
+    assert (docs / "ops" / "overview.md").read_bytes() == before_page
+    assert (Path(repo.git_dir) / "index").read_bytes() == before_index
+    monkeypatch.undo()
+
+    def stage_explode(self, *args, **kwargs):
+        raise RuntimeError("injected stage failure")
+
+    monkeypatch.setattr(IndexFile, "add", stage_explode)
+    with pytest.raises(RuntimeError, match="injected stage failure"):
+        seeded.update_page(
+            "ops/overview.md",
+            "clobbered",
+            [],
+            False,
+            actor,
+            base_blob_sha=seeded.page_blob_sha("ops/overview.md"),
+        )
+    assert (docs / "ops" / "overview.md").read_bytes() == before_page
+    assert (Path(repo.git_dir) / "index").read_bytes() == before_index
+
+
+def test_a_failed_commit_restores_the_preexisting_index(seeded, docs, actor, repo, monkeypatch):
+    """The transaction must not erase an operator's already-staged work."""
+
+    staged = docs / "ops" / "operator-staged.md"
+    staged.write_text("operator work\n", encoding="utf-8")
+    repo.index.add([staged.relative_to(repo.working_tree_dir).as_posix()])
+    before_index = (Path(repo.git_dir) / "index").read_bytes()
+
+    def explode(self, *args, **kwargs):
+        raise RuntimeError("injected index commit failure")
+
+    monkeypatch.setattr(IndexFile, "commit", explode)
+    with pytest.raises(RuntimeError, match="injected index commit failure"):
+        seeded.update_page(
+            "ops/overview.md",
+            "clobbered",
+            [],
+            False,
+            actor,
+            base_blob_sha=seeded.page_blob_sha("ops/overview.md"),
+        )
+
+    assert (Path(repo.git_dir) / "index").read_bytes() == before_index
+    assert "ops/operator-staged.md" in repo.git.diff("--cached", "--name-only")
+    assert "overview body" in (docs / "ops" / "overview.md").read_text(encoding="utf-8")
+
+
 def test_the_content_folder_still_builds_after_a_full_lifecycle(app_env, seeded, docs, actor):
     """The whole point of the project: `content/` alone must stay a working site."""
 
     _app, settings, _admin, _token = app_env
 
-    seeded.update_page("ops/overview.md", "# Overview\n\nrewritten", ["intro"], False, actor)
+    seeded.update_page(
+        "ops/overview.md",
+        "# Overview\n\nrewritten",
+        ["intro"],
+        False,
+        actor,
+        base_blob_sha=seeded.page_blob_sha("ops/overview.md"),
+    )
     seeded.set_page_title("ops/overview.md", "Operational Overview", actor)
     seeded.set_container_title("ops", "Operations Handbook", actor)
     seeded.move_page("ops/overview.md", "ops/runbooks", "summary", actor)

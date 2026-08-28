@@ -187,3 +187,63 @@ def explain_access(session: Session, user: User, raw_path: str) -> AccessExplana
     """Return diagnostic information for an already-authorized admin caller."""
 
     return load_policy(session, user).explain(raw_path)
+
+
+class AuthorizationContext:
+    """The only authorization input accepted by content-facing services.
+
+    Routes create this object once per request, which snapshots the caller's
+    group rules and makes it impossible to accidentally pass a ``User`` to a
+    service method without also making an ACL decision.  It deliberately does
+    not expose permission explanations: those contain path names that a
+    normal caller may not be permitted to discover.
+    """
+
+    def __init__(self, session: Session, user: User):
+        self.session = session
+        self.user = user
+        self.policy = load_policy(session, user)
+
+    def require_read(self, raw_path: str) -> str:
+        path = normalize_relative_path(raw_path)
+        if not self.policy.decide(path).can_read:
+            raise AccessDenied()
+        return path
+
+    def require_write(self, raw_path: str) -> str:
+        path = normalize_relative_path(raw_path)
+        if not self.policy.decide(path).can_write:
+            raise AccessDenied()
+        return path
+
+    def require_admin(self) -> None:
+        if not self.user.is_active or not self.user.is_admin:
+            raise AccessDenied()
+
+    def reject_orphaned_exact_grant(self, raw_path: str) -> None:
+        """Do not create content underneath a grant an admin left behind.
+
+        A rule for a nonexistent path is intentionally not silently revived:
+        doing so would turn an old SQLite row into access to newly-created Git
+        content without an administrator deliberately reviewing it.
+        """
+
+        path = normalize_relative_path(raw_path)
+        existing = self.session.exec(
+            select(Permission.id).where(Permission.path_prefix == path).limit(1)
+        ).first()
+        if existing is not None:
+            raise AccessDenied()
+
+    def require_ungranted_subtree(self, raw_path: str) -> str:
+        """Require control of a subtree and ensure no grants would be stranded."""
+
+        path = self.require_write(raw_path)
+        rules = self.session.exec(select(Permission.path_prefix)).all()
+        if any(prefix == path or prefix.startswith(f"{path}/") for prefix in rules):
+            raise AccessDenied()
+        return path
+
+
+class AccessDenied(RuntimeError):
+    """A path-free denial used by transports to return the missing-content shape."""

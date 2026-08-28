@@ -13,10 +13,11 @@ from app.web_auth import CSRF_HEADER_NAME, SESSION_COOKIE_NAME
 
 PASSWORD = "correct horse battery staple"
 EMAIL = "admin@example.com"
+USERNAME = "admin"
 
 
-def _login(client: TestClient, email: str = EMAIL, password: str = PASSWORD):
-    return client.post("/auth/login", json={"email": email, "password": password})
+def _login(client: TestClient, username: str = USERNAME, password: str = PASSWORD):
+    return client.post("/auth/login", json={"username": username, "password": password})
 
 
 def _mutate_user(app, user_id: int, **changes) -> None:
@@ -33,7 +34,7 @@ def test_login_issues_a_usable_session_cookie(client):
     assert response.status_code == 200
     assert response.cookies.get(SESSION_COOKIE_NAME)
     assert response.json()["csrf_token"]
-    assert client.get("/auth/session").json()["email"] == EMAIL
+    assert client.get("/auth/session").json()["username"] == USERNAME
 
 
 def test_session_cookie_is_httponly_and_not_secure_outside_production(client):
@@ -54,8 +55,8 @@ def test_wrong_password_is_rejected_without_naming_the_reason(client):
     assert SESSION_COOKIE_NAME not in response.cookies
 
 
-def test_unknown_email_fails_exactly_like_a_wrong_password(client):
-    response = _login(client, email="nobody@example.com")
+def test_unknown_username_fails_exactly_like_a_wrong_password(client):
+    response = _login(client, username="nobody")
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid credentials"
 
@@ -168,3 +169,67 @@ def test_login_is_rate_limited(client):
     for _ in range(5):
         _login(client, password="wrong password guess here")
     assert _login(client).status_code == 429
+
+
+def test_forced_password_change_blocks_everything_except_change_and_logout(app_env, client):
+    app, _settings, admin, token = app_env
+    _mutate_user(app, admin.id, must_change_password=True)
+
+    login = _login(client)
+    assert login.status_code == 200
+    assert login.json()["must_change_password"] is True
+    restricted_cookie = login.cookies[SESSION_COOKIE_NAME]
+    csrf_token = login.json()["csrf_token"]
+
+    # Server-side restrictions apply to both session- and token-authenticated
+    # paths; a UI redirect cannot be used as an escape hatch.
+    assert client.get("/auth/session").status_code == 403
+    assert (
+        client.get("/api/ai/tree", headers={"Authorization": f"Bearer {token}"}).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            "/api/auth/token",
+            json={"username": USERNAME, "password": PASSWORD},
+        ).status_code
+        == 403
+    )
+    assert client.post("/auth/logout", headers={CSRF_HEADER_NAME: csrf_token}).status_code == 200
+
+    # A fresh restricted session may pass only the current-password-verified,
+    # CSRF-protected change endpoint.
+    changed_login = _login(client)
+    assert client.post(
+        "/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": "a new secure password"},
+    ).status_code == 403
+    bad_current = client.post(
+        "/auth/change-password",
+        json={"current_password": "wrong password", "new_password": "a new secure password"},
+        headers={CSRF_HEADER_NAME: changed_login.json()["csrf_token"]},
+    )
+    assert bad_current.status_code == 400
+    changed = client.post(
+        "/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": "a new secure password"},
+        headers={CSRF_HEADER_NAME: changed_login.json()["csrf_token"]},
+    )
+    assert changed.status_code == 200
+    assert changed.json()["must_change_password"] is False
+    assert changed.cookies[SESSION_COOKIE_NAME] != restricted_cookie
+    assert client.get("/auth/session").status_code == 200
+
+    # The pre-change session and all earlier bearer tokens are dead, while the
+    # new password can obtain a normal token.
+    client.cookies.set(SESSION_COOKIE_NAME, restricted_cookie)
+    assert client.get("/auth/session").status_code == 401
+    assert (
+        client.get("/api/ai/tree", headers={"Authorization": f"Bearer {token}"}).status_code
+        == 401
+    )
+    token_response = client.post(
+        "/api/auth/token",
+        json={"username": USERNAME, "password": "a new secure password"},
+    )
+    assert token_response.status_code == 200

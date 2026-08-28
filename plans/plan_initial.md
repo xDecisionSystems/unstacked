@@ -95,12 +95,26 @@ The app is a single wiki instance but may have multiple server processes. Use a 
 ### Database — users, groups, permissions only
 
 SQLite (SQLModel/SQLAlchemy):
-- `users` (id, email, password hash, display name, is_admin, is_active, session_generation, api_token_generation)
+- `users` (id, username, email, password hash, display name, is_admin, is_active, must_change_password, session_generation, api_token_generation)
 - `groups` (id, name, description)
 - `user_groups` (user_id, group_id)
 - `permissions` (group_id, path_prefix, can_read, can_write) — `path_prefix` is a normalized, segment-aware relative path under `docs/`; raw string prefix matching is forbidden. Resolution semantics are defined under T4.1.
 
 No content, revisions, API-token records, or search index live in the database. AI clients use expiring signed bearer tokens containing user ID, token generation, issued-at, expiry, audience, and a unique token ID. Incrementing `users.api_token_generation` revokes all outstanding API tokens for that user; deactivating the user rejects them immediately. This deliberately trades per-token naming/revocation for the repo's strict four-table database boundary.
+
+### First administrator credentials
+
+The initial account is always created as **`admin` / `admin`** (username and
+password). It is an administrator, has `must_change_password=true`, and is the
+only account bootstrap creates. The first successful password login may create
+only a password-change session: every other authenticated route, including API
+token issuance and AI/content operations, rejects that session until the
+password is changed. The change-password operation must validate the current
+password, set a compliant replacement, clear `must_change_password`, revoke
+the temporary session and any outstanding API tokens, and issue a fresh normal
+session. This is enforced server-side, not merely as a UI redirect. Re-running
+bootstrap never recreates or resets the account; an administrator uses the
+ordinary reset process if this initial credential is lost.
 
 ### App modules (FastAPI)
 
@@ -185,25 +199,24 @@ named module before writing anything new. No marker means nothing is built.
 
 #### [x] T1.1 — Database schema
 `sonnet` / `terra` · **M** · **high** · depends: T0.1, T0.2
-`app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
-**Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, and tests can insert a user, group, membership, and normalized permission.
+`app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. `users.username` is unique and suitable for the initial `admin` login; `must_change_password` is non-null and defaults false. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
+**Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, tests can insert a user, group, membership, and normalized permission, and migration coverage proves the initial-password flag and unique username survive upgrades.
 
 #### [x] T1.2 — Password auth & sessions
 `opus` / `sol` · **M** · **high** · depends: T1.1
-`app/auth.py`: Argon2 password hashing via `pwdlib`, login/logout routes, signed session cookies containing only minimal identifiers and the current `session_generation` (HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for every cookie-authenticated state change, generic/timing-resistant login failures, and bounded login rate limiting. Rotate the session on login/logout; increment the generation on password/admin security reset; and reject inactive users on every request. **Local passwords only** — no SSO/LDAP — but keep credential checking behind `authenticate(email, password) -> User | None`.
-**Done when:** login/logout work end to end; fixation and tampered/expired cookies are rejected; unsafe form requests without valid CSRF are rejected; inactive users lose access; and no route reads the password hash outside `authenticate()`.
+`app/auth.py`: Argon2 password hashing via `pwdlib`, login/logout routes, signed session cookies containing only minimal identifiers and the current `session_generation` (HttpOnly + SameSite + Secure-in-prod), `current_user` dependency, CSRF tokens for every cookie-authenticated state change, generic/timing-resistant login failures, and bounded login rate limiting. Authenticate by unique username (with email retained for account administration); rotate the session on login/logout; increment the generation on password/admin security reset; and reject inactive users on every request. **Local passwords only** — no SSO/LDAP — but keep credential checking behind `authenticate(username, password) -> User | None`.
+When `must_change_password` is true, issue a restricted session that can access only logout and the CSRF-protected current-password-verified change endpoint; block bearer-token issuance and every other authenticated route/service dependency until it clears the flag. A successful forced change revokes that restricted session and outstanding API tokens, then issues a new normal session.
+**Done when:** login/logout work end to end; fixation and tampered/expired cookies are rejected; unsafe form requests without valid CSRF are rejected; inactive users lose access; first use of `admin:admin` is forced through a server-enforced password change with no content/API access; and no route reads the password hash outside `authenticate()`.
 
-#### [~] T1.3 — API token auth
+#### [x] T1.3 — API token auth
 `opus` / `sol` · **M** · **high** · depends: T1.1, T1.2
 Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, and the user's current `api_token_generation`; verify an explicit algorithm and audience, then resolve the active user so machine clients inherit current group permissions. Admin/user revocation increments the generation and revokes all of that user's issued tokens. Keep tokens out of storage and logs, and document the lack of per-token revocation.
 **Done when:** a valid token authenticates as its active user; expired, wrong-audience, wrong-generation, tampered, and deactivated-user tokens fail; revocation invalidates all prior tokens; and raw tokens are never persisted or logged.
-**Remaining:** `app/auth.py` issues/verifies generation-scoped JWTs. Remaining: explicit tests for expired, wrong-audience, tampered and deactivated-user tokens; admin-facing revoke endpoint.
 
 #### [x] T1.4 — First-run bootstrap CLI
 `sonnet` / `terra` · **M** · **medium** · depends: T1.1, T3.2
-`python -m app.bootstrap` — create the first admin user, initialize the DB, and (via T3.2) the content repo.
-Make it idempotent and non-interactive-capable without accepting passwords in process arguments.
-**Done when:** a clean checkout reaches a usable admin and buildable content repo in one command, and rerunning cannot create a second accidental bootstrap admin.
+`python -m app.bootstrap` — initialize the DB and (via T3.2) the content repo, then create the first administrator as `admin:admin` with `must_change_password=true`. It must be idempotent: bootstrap never resets, recreates, or prints the default password after the initial account exists. Do not accept passwords in process arguments.
+**Done when:** a clean checkout reaches a buildable content repo and the restricted `admin:admin` first-login flow in one command, rerunning cannot create a second accidental bootstrap admin, and the first login must replace the default password before accessing the application.
 
 ---
 
@@ -213,7 +226,7 @@ Make it idempotent and non-interactive-capable without accepting passwords in pr
 `opus` / `sol` · **S** · **high** · depends: T0.1, T0.2
 `app/paths.py`: slugify titles; canonicalize URL paths exactly once; reject double encoding; and provide a `safe_join(docs_root, *parts)` that resolves the existing nearest parent and **rejects anything escaping `docs/`**, including symlink escapes and case-fold collisions on case-insensitive filesystems. Handle reserved/internal names (`assets`, `.pages`, dotfiles), bounded lengths, collisions, null bytes, separators, Windows-reserved names, and Unicode normalization. Every filesystem module uses typed validated relative paths from here, never raw request strings.
 **Done when:** an adversarial cross-platform suite covers traversal, encoding, symlink races/escapes, reserved names, collisions, and Unicode normalization without rejecting ordinary international titles.
-**Remaining:** `app/paths.py` enforces canonical form, traversal/symlink escape, reserved and Windows device names, NFKC normalization; `tests/test_paths.py` is the adversarial suite. Remaining: symlink TOCTOU races (check-then-open) are not addressed.
+**Remaining:** Descriptor-confined read and no-clobber create helpers now protect page reads/creation from symlink races, alongside canonical form, traversal/symlink escape, reserved/Windows device names, and NFKC normalization. Remaining: update/move/delete/nav lifecycle operations still need a transaction-wide descriptor-based I/O refactor before this task can be complete.
 > Security-critical: this is the single control preventing arbitrary filesystem read/write in a file-backed app.
 
 #### [x] T2.2 — Front-matter I/O **[P]**
@@ -247,13 +260,12 @@ Image/attachment upload into `docs/assets/<book>/`, request and decompressed-siz
 **Done when:** two users produce distinct authors; history follows a rename; restore adds a commit; unrelated dirty files remain untouched; and adversarial refs/paths cannot become command options or escape the repo.
 **Fixed post-hoc (2026-08-27):** `commit_paths` assumed a plain `git add` on a missing path stages its deletion — GitPython actually raises `FileNotFoundError`. Discovered while building T2.3, since every delete/rename calls `commit_paths` with an already-removed source path. Now partitions paths into present/absent and stages absent ones via `index.remove(..., ignore_unmatch=True)`.
 
-#### [~] T3.2 — Content repo bootstrap
+#### [x] T3.2 — Content repo bootstrap
 `sonnet` / `terra` · **M** · **medium** · depends: T3.1
 Initialize `content/` if absent: `git init` with an explicit initial branch; operator-owned `mkdocs.yml` enabling `search` and `awesome-nav` configured with `filename: .pages`; `requirements.txt` with exact build dependency versions; `hooks/drafts.py`; starter `docs/index.md`; a managed provider-neutral `docs/llm.md` workflow; root `docs/.pages`; and `.gitignore` (ignore `site/`). Bootstrap refuses to adopt a non-empty unknown directory and commits the initial tree. Existing content repos receive the workflow only when it is absent; the app never overwrites a locally maintained version. T7.2 adds CI without changing build semantics.
 **Done when:** bootstrap is idempotent; the generated repo builds via only `python -m venv`, `pip install -r requirements.txt`, and `mkdocs build --strict`; the workflow is available both as the rendered page and raw static `/llm.md`; draft output and draft search records are absent; malformed draft metadata fails clearly; and no app/database import is reachable from the hook.
-**Remaining:** `ContentRepository.initialize()` generates mkdocs.yml, requirements.txt, hooks/drafts.py, docs/.pages, index.md and llm.md, and is idempotent. Remaining: T7.2's CI workflow is not yet written into the content repo.
 
-#### T3.3 — Write lock & optimistic concurrency
+#### [x] T3.3 — Write lock & optimistic concurrency
 `opus` / `sol` · **L** · **max** · depends: T3.1, T2.3
 Repository-scoped inter-process lock around validation → mutation → exact staging → commit, with a bounded acquisition timeout. Save requests carry both path and base blob SHA; re-check both after acquiring the lock. Snapshot affected paths/index state and roll back on any pre-commit failure. Committed history is never reset to conceal an error.
 **Done when:** concurrent saves from separate processes produce one commit plus one conflict; unrelated dirty state is preserved; injected write/stage/commit failures restore affected files and index; and no request can wait forever.
@@ -273,7 +285,7 @@ Routes for per-page history list, diff between revisions, and restore-to-revisio
 **Done when:** a truth table covers inherited allow, more-specific allow/deny, equal-specificity cross-group conflict, sibling-prefix confusion (`chapter` vs `chapter-old`), write/read invariants, ancestor visibility, inactive users, default deny, and admin bypass.
 > Security-critical: every other module trusts this answer.
 
-#### T4.2 — ACL enforcement dependencies
+#### [x] T4.2 — ACL enforcement dependencies
 `opus` / `sol` · **L** · **max** · depends: T4.1, T2.3
 Central authorization service plus FastAPI dependencies `require_read(path)` / `require_write(path)` wired into **every** content, search, history, asset, render, export, and AI path. Service-layer methods require an authorization context too, so internal transports cannot bypass route dependencies. Tree listings filter unreadable nodes; unreadable paths return the same 404 shape/timing class as missing paths. Create checks the destination parent and refuses a path carrying an orphaned exact rule; delete checks the target; move/slug-rename checks source and destination and is admin-only in the MVP because it changes path-based access. Delete/move/slug-rename is blocked while any exact or descendant permission rule targets the affected subtree; an admin must deliberately remove/recreate those grants first, and destination rules then determine access. This avoids pretending SQLite and git can form one atomic transaction.
 **Done when:** route/service coverage tests fail for unguarded reads or writes; missing/unreadable responses are indistinguishable at the contract level; and structural authorization cases cannot move content into or out of unauthorized trees, strand reusable stale grants, or partially coordinate database and git state.
@@ -287,15 +299,21 @@ CRUD for users, groups, memberships, per-path grants, and admin-set password res
 
 ### Phase 5 — Rendering & web UI
 
-#### T5.1 — Markdown renderer
+#### [x] T5.1 — Markdown renderer
 `opus` / `sol` · **M** · **high** · depends: T3.2
 `app/render.py`: use MkDocs/Python-Markdown configuration loading rather than hand-parsing only `markdown_extensions`; render the supported Markdown semantics, rewrite links/assets in context, then sanitize with an explicit allowlist because content is user-supplied. Document that the app preview is semantically aligned but not theme/HTML-byte-identical to the final site.
 **Done when:** admonitions, fenced code, tables, relative links, and assets behave consistently in preview and build; unsupported plugins fail clearly; and active HTML/unsafe URLs cannot execute.
 
 #### T5.2 — Base layout & tree browser
 `sonnet` / `terra` · **L** · **high** · depends: T4.2, T5.1
-Jinja2 base template, sidebar tree (ACL-filtered), breadcrumbs, page view. No SPA framework.
-**Done when:** two users with different grants see different trees on the same instance.
+Jinja2 base template, sidebar tree (ACL-filtered), breadcrumbs, page view, and
+login page. No SPA framework. The root route (`/`) redirects an unauthenticated
+visitor to the login page; an authenticated user lands on their ACL-filtered
+tree. A user in the mandatory first-password-change state is routed only to
+that change-password flow.
+**Done when:** an unauthenticated `/` request redirects to login, a
+first-password-change session cannot reach the tree, and two users with
+different grants see different trees on the same instance.
 
 #### T5.3 — Editor & save flow **[P]**
 `sonnet` / `terra` · **L** · **high** · depends: T5.2, T3.3
@@ -330,12 +348,12 @@ Configure and validate an optional `origin`; support a least-privilege deploy ke
 "Verified private" is implemented as an explicit operator affirmation (`UNSTACKED_GITHUB_REMOTE_CONFIRMED_PRIVATE`) rather than a live GitHub API check — this repo has no way to test a real network call, and nothing else in the codebase makes one either. **Coverage gaps that need a real GitHub account to close:** SSH host-key pinning enforcement against actual github.com (the *configuration* is tested; OpenSSH's enforcement is not), an authenticated HTTPS push to a real private repo, and an actual privacy check (candidate for T6.3, which already expects network access).
 Despite GitHub-flavored settings names (`github_remote_url`, `github_token`, …), the implementation works against any git host reachable over https/ssh — nothing in `configure_remote` is GitHub-specific. Renaming those settings to generic `backup_remote_*` names is a reasonable future cleanup but not required; not doing it now to avoid unrelated churn.
 
-#### T6.2 — Debounced backup-sync worker
+#### [x] T6.2 — Debounced backup-sync worker
 `opus` / `sol` · **L** · **high** · depends: T6.1, T3.3
 Background task coalescing rapid saves into a periodic sync to whichever backup target is configured (today: git-remote push via T6.1); retry transient failures with bounded exponential backoff and jitter; never block a save on network I/O. For the git-remote target, derive durable pending state from local-vs-upstream refs, so startup resumes an unpushed branch without a queue table. Serialize with the repository lock and stop retrying non-fast-forward/auth/configuration errors until admin action. Surface ahead count, last success, and sanitized failure in the admin UI. Do nothing at all — no background task, no admin-UI status — when no backup target is configured; this must never be on the startup-required path.
 **Done when:** ten rapid saves produce ten commits but fewer pushes; restart/offline periods recover automatically; divergence never triggers merge/force; worker/admin git operations cannot race content commits; and the app starts and runs normally with no backup target configured at all.
 
-#### T6.3 — Manual backup & restore **[P]**
+#### [x] T6.3 — Manual backup & restore **[P]**
 `opus` / `sol` · **L** · **high** · depends: T6.1
 "Back up now" (sync to whichever target is configured — today, git-remote push) and guarded restore. For the git-remote target: clone only into a validated absent/empty destination; permit fast-forward only from a clean checkout. For dirty/divergent state, first copy the entire local repo (including `.git`) to a timestamped recovery directory outside the target, verify that copy, show the divergence, and require a second explicit confirmation before any replacement. Never use force-push or destructive reset. An operator relying on rsync/S3 instead needs no admin-UI support here at all — restoring is copying files back and pointing the app at them, entirely outside this task.
 **Done when:** empty and fast-forward restores work; dirty/divergent restores cannot proceed without a verified recovery copy and confirmation; invalid remotes cannot escape the configured destination; interrupted replacement leaves either the old or restored repo recoverable; and none of this is reachable or required when no backup target is configured.
@@ -354,12 +372,12 @@ Today the backup target is env-var-only, wired once at startup via `ContentRepos
 
 Static export is a full non-draft recovery copy and has no per-user ACL. The app must display this warning before download actions. Public deployment is out of MVP scope.
 
-#### T7.1 — Build/export runner
+#### [x] T7.1 — Build/export runner
 `sonnet` / `terra` · **M** · **high** · depends: T3.2
 `app/export.py`: run the exact configured mkdocs executable with `build --strict` using argument arrays, a fixed working directory, a clean/minimal environment, timeout, and output cap; never shell-interpolate input. Build into a fresh temporary directory and atomically replace the last successful export. Do not include `gh-deploy` in MVP.
 **Done when:** export produces the full non-draft `site/`; a failed/timed-out build preserves the previous successful export and reports a sanitized useful error; drafts are absent from HTML and the search index; and only admins can trigger/download it after acknowledging the no-ACL warning.
 
-#### T7.2 — Content-repo GitHub Action **[P]**
+#### [x] T7.2 — Content-repo GitHub Action **[P]**
 `sonnet` / `terra` · **S** · **medium** · depends: T3.2
 The workflow committed *inside the content repo* that installs `requirements.txt` and runs `mkdocs build --strict` on every push. It validates only and does not publish to Pages by default; artifacts use short retention and remain private.
 **Done when:** a push builds with no app/database reference, a draft is absent from output/search, and the workflow cannot accidentally make the artifact public.
@@ -368,7 +386,7 @@ The workflow committed *inside the content repo* that installs `requirements.txt
 
 ### Phase 8 — Search
 
-#### T8.1 — Search core
+#### [x] T8.1 — Search core
 `opus` / `sol` · **L** · **high** · depends: T2.3, T4.1
 `app/search.py`: fixed-string search by default over Markdown bodies and front-matter titles/tags; bound query length, result count, file size, runtime, and snippet size. Use ripgrep through argument arrays when available with a behaviorally equivalent pure-Python fallback. Discover candidate paths, authorize each path **before reading content or producing snippets/counts**, and paginate only the filtered set. Escape highlights at the final HTML boundary.
 **Done when:** a term appearing only in an unreadable page yields no result, count, timing-dependent snippet, or error leak; fallback and ripgrep return the same ordered contract; pathological input/files respect limits; and no query is interpreted as a regex or command option.
@@ -381,11 +399,10 @@ Search box, results page with snippets and breadcrumbs.
 
 ### Phase 9 — AI integration
 
-#### [~] T9.1 — Shared AI service layer
+#### [x] T9.1 — Shared AI service layer
 `opus` / `sol` · **L** · **high** · depends: T8.1, T4.2, T2.3
 `app/ai_service.py`: one permission-aware implementation of search, tree/list, get/download page, filtered export, create book, create chapter, and create page. Return structured results with deterministic item/character limits (do not depend on a model tokenizer). Treat wiki text as untrusted data, not tool instructions. Book/chapter creation is admin-only; page creation requires write access on the parent. Both transports call only this service and its ACL-aware content/search modules.
 **Done when:** direct service contract tests prove read/export and create operations apply the same ACL and limits expected by both transports, including missing/unreadable equivalence and Git author attribution.
-**Remaining:** `app/ai_service.py` is the single ACL-checked entry point for tree/get/export/create/history used by the REST transport. Remaining: search, and the token-budget-aware truncation contract.
 
 #### T9.2 — MCP server (Claude) **[P]**
 `opus` / `sol` · **L** · **high** · depends: T9.1, T1.3

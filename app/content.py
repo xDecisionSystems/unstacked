@@ -15,7 +15,13 @@ from sqlmodel import Session
 from app.acl import load_policy
 from app.config import Settings
 from app.frontmatter_io import PageDocument, new_page, parse_page, write_page
-from app.git_backend import GitBackend, RemoteConfig, Revision, RevisionNotFound
+from app.git_backend import (
+    GitBackend,
+    GitWriteLockTimeout,
+    RemoteConfig,
+    Revision,
+    RevisionNotFound,
+)
 from app.models import User
 from app.nav import (
     NavigationError,
@@ -27,9 +33,14 @@ from app.nav import (
 )
 from app.paths import (
     RESERVED_ROOT_NAMES,
+    ConfinedFileTooLarge,
+    UnsafePath,
+    atomic_write_confined,
+    is_confined_directory,
     make_slug,
     normalize_relative_path,
     path_depth,
+    read_confined_text,
     safe_join,
 )
 
@@ -44,6 +55,14 @@ class ContentExists(ContentError):
 
 class ContentMissing(ContentError):
     pass
+
+
+class ContentConflict(ContentError):
+    """The page changed after the client read the base revision."""
+
+
+class ContentLockTimeout(ContentError):
+    """A bounded content-write wait elapsed before the lock became available."""
 
 
 @dataclass(frozen=True)
@@ -143,6 +162,30 @@ CONTENT_REQUIREMENTS = """mkdocs==1.6.1
 mkdocs-awesome-nav==3.3.0
 """
 
+CONTENT_CI_WORKFLOW = """name: Validate content
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Install content build dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Build the static site strictly
+        run: python -m mkdocs build --strict
+"""
+
 DRAFT_HOOK = """from pathlib import Path
 
 import shutil
@@ -214,13 +257,18 @@ class ContentRepository:
         self.settings = settings
         self.root = settings.content_repo_path.resolve()
         self.docs = self.root / "docs"
-        self.git = GitBackend(self.root, settings.content_lock_path)
+        self.git = GitBackend(
+            self.root,
+            settings.content_lock_path,
+            lock_timeout_seconds=settings.content_lock_timeout_seconds,
+        )
 
     def initialize(self) -> None:
-        with self.git.lock:
+        with self.git.write_lock():
             if (self.root / ".git").is_dir():
                 self.docs.mkdir(parents=True, exist_ok=True)
                 self._ensure_llm_md()
+                self._ensure_content_ci_workflow()
             else:
                 self._bootstrap_repository()
             # Configure the backup remote once, at startup, so every later
@@ -252,8 +300,12 @@ class ContentRepository:
         self.root.mkdir(parents=True, exist_ok=True)
         self.docs.mkdir(parents=True, exist_ok=True)
         (self.root / "hooks").mkdir(exist_ok=True)
+        (self.root / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
         self._atomic_write(self.root / "mkdocs.yml", MKDOCS_YML)
         self._atomic_write(self.root / "requirements.txt", CONTENT_REQUIREMENTS)
+        self._atomic_write(
+            self.root / ".github" / "workflows" / "validate-content.yml", CONTENT_CI_WORKFLOW
+        )
         self._atomic_write(self.root / "hooks" / "drafts.py", DRAFT_HOOK)
         self._atomic_write(self.root / ".gitignore", "site/\n")
         self._atomic_write(self.docs / ".pages", 'nav:\n  - index.md\n  - "*"\n')
@@ -264,6 +316,7 @@ class ContentRepository:
             [
                 "mkdocs.yml",
                 "requirements.txt",
+                ".github/workflows/validate-content.yml",
                 "hooks/drafts.py",
                 ".gitignore",
                 "docs/.pages",
@@ -288,7 +341,7 @@ class ContentRepository:
         slug = make_slug(title, requested_slug)
         book = safe_join(self.docs, slug)
         nav = book / ".pages"
-        with self.git.lock:
+        with self.git.write_lock():
             if book.exists():
                 raise ContentExists("book already exists")
             try:
@@ -317,7 +370,7 @@ class ContentRepository:
         book = safe_join(self.docs, book_slug)
         chapter = safe_join(self.docs, f"{book_slug}/{slug}")
         nav = chapter / ".pages"
-        with self.git.lock:
+        with self.git.write_lock():
             if not book.is_dir():
                 raise ContentMissing("book not found")
             if chapter.exists():
@@ -349,7 +402,6 @@ class ContentRepository:
     ) -> CreatedContent:
         parent = self._validate_page_parent(parent)
         slug = make_slug(title, requested_slug)
-        parent_path = safe_join(self.docs, parent)
         page_relative = f"{parent}/{slug}.md"
         page = safe_join(self.docs, page_relative)
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
@@ -367,19 +419,19 @@ class ContentRepository:
                 "draft": draft,
             },
         )
-        with self.git.lock:
-            if not parent_path.is_dir():
+        with self.git.write_lock():
+            if not is_confined_directory(self.docs, parent):
                 raise ContentMissing("parent book or chapter not found")
-            if page.exists():
-                raise ContentExists("page already exists")
             try:
-                self._atomic_write(page, serialized)
+                atomic_write_confined(self.docs, page_relative, serialized, overwrite=False)
                 commit = self.git.commit_paths(
                     [page],
                     name=actor.display_name,
                     email=actor.email,
                     message=f"Create page: {page_relative}",
                 )
+            except FileExistsError:
+                raise ContentExists("page already exists") from None
             except Exception:
                 page.unlink(missing_ok=True)
                 raise
@@ -387,9 +439,14 @@ class ContentRepository:
 
     def read_page(self, relative: str) -> tuple[dict, str, str]:
         page = self._page_path(relative)
-        if page.stat().st_size > self.settings.max_page_bytes:
-            raise ContentError("page exceeds configured size limit")
-        raw = page.read_text(encoding="utf-8")
+        try:
+            raw = read_confined_text(self.docs, relative, max_bytes=self.settings.max_page_bytes)
+        except ConfinedFileTooLarge as exc:
+            raise ContentError("page exceeds configured size limit") from exc
+        except UnsafePath as exc:
+            # Preserve the service's indistinguishable missing-path behavior;
+            # callers must never learn whether a denied name is a symlink.
+            raise ContentMissing("page not found") from exc
         document = parse_page(raw, default_title=page.stem)
         return document.metadata, document.content, raw
 
@@ -400,13 +457,14 @@ class ContentRepository:
         tags: list[str],
         draft: bool,
         actor: User,
+        *,
+        base_blob_sha: str,
     ) -> str:
         """Rewrite a page body and its editable metadata as one commit.
 
-        There is deliberately no ``base_sha`` parameter yet.  Accepting one and
-        ignoring it would let a caller believe stale writes were being rejected
-        when they silently overwrite; T3.3 adds the parameter together with the
-        re-check that makes it mean something.
+        ``base_blob_sha`` is the blob ID the caller received with this page.
+        It is checked only after acquiring the cross-process write lock; a
+        check before that lock would leave a time-of-check/time-of-use gap.
 
         ``title`` is not editable here: changing it is
         :meth:`set_page_title`, which must stay a separate path so a title edit
@@ -418,27 +476,45 @@ class ContentRepository:
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
             raise ContentError("page exceeds configured size limit")
         rollback = _Rollback()
-        with self.git.lock:
-            page = self._page_path(relative)
-            page_relative = normalize_relative_path(relative)
-            document = self._read_document(page)
-            now = datetime.now(timezone.utc).isoformat()
-            metadata = {"updated_at": now, "tags": list(tags), "draft": draft}
-            # Repair app metadata a hand-authored page never had, rather than
-            # serializing the nulls the tolerant reader substitutes for it.
-            metadata.update(self._repaired_metadata(document, actor, now))
-            rollback.file(page)
-            try:
-                write_page(page, replace(document, content=markdown), metadata=metadata)
-                return self.git.commit_paths(
-                    [page],
-                    name=actor.display_name,
-                    email=actor.email,
-                    message=f"Update page: {page_relative}",
-                )
-            except Exception:
-                rollback.undo()
-                raise
+        try:
+            with self.git.write_lock():
+                page = self._page_path(relative)
+                page_relative = normalize_relative_path(relative)
+                try:
+                    current_blob_sha = self.git.blob_sha(page)
+                except RevisionNotFound as exc:
+                    raise ContentMissing("page not found") from exc
+                if current_blob_sha != base_blob_sha:
+                    raise ContentConflict("page changed; reload it before saving")
+                document = self._read_document(page)
+                now = datetime.now(timezone.utc).isoformat()
+                metadata = {"updated_at": now, "tags": list(tags), "draft": draft}
+                # Repair app metadata a hand-authored page never had, rather than
+                # serializing the nulls the tolerant reader substitutes for it.
+                metadata.update(self._repaired_metadata(document, actor, now))
+                rollback.file(page)
+                try:
+                    write_page(page, replace(document, content=markdown), metadata=metadata)
+                    return self.git.commit_paths(
+                        [page],
+                        name=actor.display_name,
+                        email=actor.email,
+                        message=f"Update page: {page_relative}",
+                    )
+                except Exception:
+                    rollback.undo()
+                    raise
+        except GitWriteLockTimeout as exc:
+            raise ContentLockTimeout(str(exc)) from exc
+
+    def page_blob_sha(self, relative: str) -> str:
+        """Return the opaque version callers must send back with an update."""
+
+        page = self._page_path(relative)
+        try:
+            return self.git.blob_sha(page)
+        except RevisionNotFound as exc:
+            raise ContentMissing("page not found") from exc
 
     def set_page_title(self, relative: str, title: str, actor: User) -> str:
         """Retitle a page without moving it, so existing links keep resolving.
@@ -450,7 +526,7 @@ class ContentRepository:
 
         title = self._validate_title(title)
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
             document = self._read_document(page)
@@ -480,7 +556,7 @@ class ContentRepository:
 
         title = self._validate_title(title)
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             container = self._container_path(relative)
             navigation = container / ".pages"
             if not navigation.is_file():
@@ -510,7 +586,7 @@ class ContentRepository:
         """
 
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
             rollback.file(page)
@@ -559,7 +635,7 @@ class ContentRepository:
         """
 
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
             parent = page_relative.rsplit("/", 1)[0]
@@ -636,7 +712,7 @@ class ContentRepository:
         """
 
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             container = self._container_path(relative)
             kind = self._kind(relative)
             # Snapshot the whole subtree before it goes, and declare exactly
@@ -660,7 +736,7 @@ class ContentRepository:
 
     def _rename_container(self, relative: str, new_slug: str, actor: User) -> MovedContent:
         rollback = _Rollback()
-        with self.git.lock:
+        with self.git.write_lock():
             container = self._container_path(relative)
             kind = self._kind(relative)
             previous_path = container.relative_to(self.docs).as_posix()
@@ -721,7 +797,7 @@ class ContentRepository:
         self, relative: str, revision: str, actor: User
     ) -> str:
         page = self._deleted_or_existing_page_path(relative)
-        with self.git.lock:
+        with self.git.write_lock():
             try:
                 return self.git.restore_as_new_commit(
                     page,
@@ -953,4 +1029,25 @@ class ContentRepository:
             name="Unstacked",
             email="system@unstacked.local",
             message="Add managed LLM workflow",
+        )
+
+    def _ensure_content_ci_workflow(self) -> None:
+        """Seed portable validation CI without taking over an existing workflow.
+
+        This lives in the content repository because that repository must stay
+        independently buildable after the application and database are gone.
+        A local maintainer may replace the workflow with a stricter one, so
+        bootstrap only creates this exact managed path when it is absent.
+        """
+
+        workflow = self.root / ".github" / "workflows" / "validate-content.yml"
+        if workflow.exists():
+            return
+        workflow.parent.mkdir(parents=True, exist_ok=True)
+        self._atomic_write(workflow, CONTENT_CI_WORKFLOW)
+        self.git.commit_paths(
+            [workflow],
+            name="Unstacked",
+            email="system@unstacked.local",
+            message="Add content validation workflow",
         )

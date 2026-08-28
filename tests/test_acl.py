@@ -14,6 +14,7 @@ from app.models import Group, Permission, User, UserGroup, normalize_path_prefix
 
 def _make_user(session: Session, email: str, *, is_admin=False, is_active=True) -> User:
     user = User(
+        username=email,
         email=email,
         password_hash=hash_password("acl password is sufficiently long"),
         display_name="ACL Agent",

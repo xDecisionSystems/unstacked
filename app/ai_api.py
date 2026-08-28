@@ -3,10 +3,10 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from app.ai_service import AccessDenied
+from app.acl import AccessDenied, AuthorizationContext
 from app.auth import authenticate, client_identifier, create_api_token, get_current_user
 from app.content import ContentError, ContentExists, ContentMissing, CreatedContent
 from app.models import User
@@ -31,14 +31,29 @@ def attachment_disposition(filename: str) -> str:
 
 
 class TokenRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=1024)
+    username: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class RevokeTokensRequest(BaseModel):
+    """Optionally select another user whose machine credentials to revoke.
+
+    Omitting ``user_id`` always means the bearer-token caller.  Selecting a
+    different account is an administrator-only security operation.
+    """
+
+    user_id: int | None = Field(default=None, gt=0)
+
+
+class RevokeTokensResponse(BaseModel):
+    user_id: int
+    api_token_generation: int
 
 
 class ContainerCreate(BaseModel):
@@ -99,15 +114,23 @@ def _content_error(exc: Exception) -> HTTPException:
     return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
 
+def _authorization(request: Request, session: Session, user: User) -> AuthorizationContext:
+    """Construct the mandatory service authorization context for this request."""
+
+    return AuthorizationContext(session, user)
+
+
 @router.post("/auth/token", response_model=TokenResponse)
 def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
     settings = request.app.state.settings
     client_host = client_identifier(request, settings.trusted_proxy_hops)
-    request.app.state.login_limiter.check(f"{client_host}:{str(payload.email).casefold()}")
+    request.app.state.login_limiter.check(f"{client_host}:{payload.username}")
     with Session(request.app.state.engine) as session:
-        user = authenticate(session, str(payload.email), payload.password)
+        user = authenticate(session, payload.username, payload.password)
         if user is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
+        if user.must_change_password:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Password change required")
         token = create_api_token(user, request.app.state.settings)
     return TokenResponse(
         access_token=token,
@@ -115,17 +138,51 @@ def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
     )
 
 
+@router.post("/auth/tokens/revoke", response_model=RevokeTokensResponse)
+def revoke_api_tokens(
+    payload: RevokeTokensRequest,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> RevokeTokensResponse:
+    """Invalidate every bearer token issued to one account.
+
+    There are intentionally no token rows: advancing the account generation
+    invalidates every signed token for that account without retaining a raw
+    credential or even a credential fingerprint.  A user can revoke their own
+    tokens; only an administrator may revoke another user's tokens.
+    """
+
+    target_id = payload.user_id if payload.user_id is not None else user.id
+    if target_id is None:  # Defensive: authenticated users always have an id.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid bearer token")
+    if target_id != user.id and not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required")
+
+    with Session(request.app.state.engine) as session:
+        target = session.get(User, target_id)
+        if target is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        target.api_token_generation += 1
+        session.add(target)
+        session.commit()
+        session.refresh(target)
+        return RevokeTokensResponse(
+            user_id=target.id,
+            api_token_generation=target.api_token_generation,
+        )
+
+
 @router.get("/ai/tree")
 def get_tree(request: Request, user: Annotated[User, Depends(get_current_user)]):
     with Session(request.app.state.engine) as session:
-        return {"books": request.app.state.ai_service.tree(session, user)}
+        return {"books": request.app.state.ai_service.tree(_authorization(request, session, user))}
 
 
 @router.get("/ai/export")
 def download_export(request: Request, user: Annotated[User, Depends(get_current_user)]):
     try:
         with Session(request.app.state.engine) as session:
-            archive = request.app.state.ai_service.export(session, user)
+            archive = request.app.state.ai_service.export(_authorization(request, session, user))
     except ContentError as exc:
         raise _content_error(exc) from exc
     return Response(
@@ -147,7 +204,7 @@ def get_page_diff(
         path = normalize_relative_path(content_path)
         with Session(request.app.state.engine) as session:
             diff = request.app.state.ai_service.page_diff(
-                session, user, path, from_revision, to_revision
+                _authorization(request, session, user), path, from_revision, to_revision
             )
     except (AccessDenied, ContentError, UnsafePath) as exc:
         raise _content_error(exc) from exc
@@ -170,7 +227,7 @@ def restore_page_revision(
         path = normalize_relative_path(content_path)
         with Session(request.app.state.engine) as session:
             commit = request.app.state.ai_service.restore_page(
-                session, user, path, payload.revision
+                _authorization(request, session, user), path, payload.revision
             )
     except (AccessDenied, ContentError, UnsafePath) as exc:
         raise _content_error(exc) from exc
@@ -186,7 +243,9 @@ def get_page_history(
     try:
         path = normalize_relative_path(content_path)
         with Session(request.app.state.engine) as session:
-            return request.app.state.ai_service.page_history(session, user, path)
+            return request.app.state.ai_service.page_history(
+                _authorization(request, session, user), path
+            )
     except (AccessDenied, ContentError, UnsafePath) as exc:
         raise _content_error(exc) from exc
 
@@ -201,7 +260,9 @@ def get_content(
     try:
         path = normalize_relative_path(content_path)
         with Session(request.app.state.engine) as session:
-            metadata, markdown, raw = request.app.state.ai_service.get_page(session, user, path)
+            metadata, markdown, raw = request.app.state.ai_service.get_page(
+                _authorization(request, session, user), path
+            )
     except (AccessDenied, ContentError, UnsafePath) as exc:
         raise _content_error(exc) from exc
     if download:
@@ -220,13 +281,14 @@ def create_book(
     user: Annotated[User, Depends(get_current_user)],
 ):
     try:
-        return _created(
-            request.app.state.ai_service.create_book(
-                user,
-                title=payload.title,
-                slug=payload.slug,
+        with Session(request.app.state.engine) as session:
+            return _created(
+                request.app.state.ai_service.create_book(
+                    _authorization(request, session, user),
+                    title=payload.title,
+                    slug=payload.slug,
+                )
             )
-        )
     except AccessDenied as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required") from exc
     except (ContentError, UnsafePath) as exc:
@@ -241,14 +303,15 @@ def create_chapter(
     user: Annotated[User, Depends(get_current_user)],
 ):
     try:
-        return _created(
-            request.app.state.ai_service.create_chapter(
-                user,
-                book_slug=make_slug(book_slug, book_slug),
-                title=payload.title,
-                slug=payload.slug,
+        with Session(request.app.state.engine) as session:
+            return _created(
+                request.app.state.ai_service.create_chapter(
+                    _authorization(request, session, user),
+                    book_slug=make_slug(book_slug, book_slug),
+                    title=payload.title,
+                    slug=payload.slug,
+                )
             )
-        )
     except AccessDenied as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required") from exc
     except (ContentError, UnsafePath) as exc:
@@ -261,8 +324,7 @@ def _create_page(parent: str, payload: PageCreate, request: Request, user: User)
         with Session(request.app.state.engine) as session:
             return _created(
                 request.app.state.ai_service.create_page(
-                    session,
-                    user,
+                    _authorization(request, session, user),
                     parent=parent,
                     title=payload.title,
                     slug=payload.slug,

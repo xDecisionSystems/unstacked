@@ -4,7 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from app.paths import UnsafePath, make_slug, normalize_relative_path, path_depth, safe_join
+from app.paths import (
+    UnsafePath,
+    atomic_write_confined,
+    make_slug,
+    normalize_relative_path,
+    path_depth,
+    read_confined_text,
+    safe_join,
+)
 
 
 @pytest.mark.parametrize(
@@ -114,6 +122,61 @@ def test_safe_join_returns_a_path_inside_the_root(tmp_path: Path):
     docs.mkdir()
     resolved = safe_join(docs, "book/chapter/page.md")
     assert resolved == docs.resolve() / "book" / "chapter" / "page.md"
+
+
+def test_descriptor_read_rejects_a_symlink_swapped_after_path_validation(tmp_path: Path):
+    """Opening by directory descriptor, not a previously resolved Path, matters."""
+
+    docs = tmp_path / "docs"
+    book = docs / "book"
+    docs.mkdir()
+    book.mkdir()
+    page = book / "page.md"
+    page.write_text("safe", encoding="utf-8")
+    checked = safe_join(docs, "book/page.md")
+    assert checked == page
+
+    outside = tmp_path / "outside.md"
+    outside.write_text("secret", encoding="utf-8")
+    page.unlink()
+    page.symlink_to(outside)
+
+    with pytest.raises(UnsafePath):
+        read_confined_text(docs, "book/page.md")
+
+
+def test_descriptor_write_replaces_a_raced_final_symlink_without_touching_target(tmp_path: Path):
+    """A final symlink is replaced as a directory entry, never followed."""
+
+    docs = tmp_path / "docs"
+    book = docs / "book"
+    docs.mkdir()
+    book.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("secret", encoding="utf-8")
+    (book / "page.md").symlink_to(outside)
+
+    atomic_write_confined(docs, "book/page.md", "replacement", overwrite=True)
+
+    assert outside.read_text(encoding="utf-8") == "secret"
+    assert (book / "page.md").read_text(encoding="utf-8") == "replacement"
+    assert not (book / "page.md").is_symlink()
+
+
+def test_descriptor_create_does_not_clobber_a_concurrent_existing_name(tmp_path: Path):
+    """Create uses link publication, so it has no exists-then-replace race."""
+
+    docs = tmp_path / "docs"
+    book = docs / "book"
+    docs.mkdir()
+    book.mkdir()
+    page = book / "page.md"
+    page.write_text("first writer", encoding="utf-8")
+
+    with pytest.raises(FileExistsError):
+        atomic_write_confined(docs, "book/page.md", "second writer", overwrite=False)
+
+    assert page.read_text(encoding="utf-8") == "first writer"
 
 
 @pytest.mark.parametrize(
