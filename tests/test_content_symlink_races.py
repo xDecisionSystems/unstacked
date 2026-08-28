@@ -134,3 +134,40 @@ def test_container_retitle_rejects_navigation_swapped_for_symlink(
         "title: outside navigation sentinel\nnav:\n  - '*'\n"
     )
     assert book.is_symlink(), repr(raised.value)
+
+
+def test_delete_rejects_page_parent_swapped_after_confined_snapshot(
+    seeded, docs, actor, monkeypatch, tmp_path: Path
+):
+    """Delete must not follow a parent swapped after it saved rollback bytes."""
+
+    book = docs / "ops"
+    outside = tmp_path / "outside-delete"
+    outside.mkdir()
+    outside_page = outside / "overview.md"
+    outside_page.write_text("outside delete sentinel\n", encoding="utf-8")
+    _swap_after_read(monkeypatch, book, outside, "ops/overview.md", method="read_bytes")
+
+    with pytest.raises(_UNSAFE_MUTATION):
+        seeded.delete_page("ops/overview.md", actor)
+
+    assert outside_page.read_text(encoding="utf-8") == "outside delete sentinel\n"
+    assert book.is_symlink()
+
+
+def test_move_rejects_source_parent_swapped_after_confined_snapshot(
+    seeded, docs, actor, monkeypatch, tmp_path: Path
+):
+    """Move must not publish a source selected through a substituted parent."""
+
+    book = docs / "ops"
+    outside = tmp_path / "outside-move"
+    outside.mkdir()
+    outside_page = outside / "overview.md"
+    outside_page.write_text("outside move sentinel\n", encoding="utf-8")
+    _swap_after_read(monkeypatch, book, outside, "ops/overview.md", method="read_bytes")
+
+    with pytest.raises(_UNSAFE_MUTATION):
+        seeded.move_page("ops/overview.md", "ops/runbooks", "summary", actor)
+
+    assert outside_page.read_text(encoding="utf-8") == "outside move sentinel\n"

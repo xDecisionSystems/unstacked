@@ -180,6 +180,62 @@ class _Rollback:
             shutil.rmtree(directory, ignore_errors=True)
 
 
+class _ConfinedRollback:
+    """Restore a small page transaction through its held tree boundary.
+
+    This deliberately records docs-relative names, rather than ``Path``
+    objects.  A path object would resolve a newly substituted ancestor during
+    rollback, which is exactly the race the descriptor-rooted lifecycle work
+    is intended to close.  It is purposefully narrow: container operations
+    still use their existing tree snapshot until they are migrated too.
+    """
+
+    def __init__(self, tree: ConfinedTree) -> None:
+        self.tree = tree
+        self._files: dict[str, bytes | None] = {}
+        self._navigation: dict[str, str] = {}
+
+    def file(self, relative: str) -> bytes:
+        if relative not in self._files:
+            self._files[relative] = self.tree.read_bytes(relative)
+        original = self._files[relative]
+        assert original is not None
+        return original
+
+    def absent_file(self, relative: str) -> None:
+        """Record a destination known to be absent until publication."""
+
+        self._files.setdefault(relative, None)
+
+    def navigation(self, parent: str, original: str) -> None:
+        self._navigation.setdefault(parent, original)
+
+    def undo(self) -> None:
+        # A move restores its source only after the new destination is gone.
+        # Do the absence half first, then put the original bytes back.
+        for relative, original in self._files.items():
+            if original is None:
+                try:
+                    self.tree.unlink(relative)
+                except UnsafePath:
+                    # An adversarial replacement must never be removed through
+                    # this rollback path.  The original operation will still
+                    # report its failure, while the external target remains
+                    # untouched.
+                    pass
+        for relative, original in self._files.items():
+            if original is not None:
+                try:
+                    self.tree.write_bytes(relative, original, overwrite=True)
+                except UnsafePath:
+                    pass
+        for parent, original in self._navigation.items():
+            try:
+                self.tree.write_internal_text(parent, original, overwrite=True)
+            except UnsafePath:
+                pass
+
+
 def _atomic_write_bytes(path: Path, content: bytes) -> None:
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
@@ -676,15 +732,21 @@ class ContentRepository:
         what stands in for a recycle bin here.
         """
 
-        rollback = _Rollback()
         with self.git.write_lock():
-            page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
-            rollback.file(page)
+            if not page_relative.endswith(".md") or path_depth(page_relative) not in {2, 3}:
+                raise ContentMissing("page not found")
+            parent, page_name = page_relative.rsplit("/", 1)
+            tree = ConfinedTree(self.docs)
+            rollback = _ConfinedRollback(tree)
             try:
-                affected = [page]
-                affected.extend(self._changed_nav(rollback, page.parent, old=page.name))
-                page.unlink()
+                rollback.file(page_relative)
+            except UnsafePath as exc:
+                raise ContentMissing("page not found") from exc
+            try:
+                affected = [f"docs/{page_relative}"]
+                affected.extend(self._changed_nav_confined(tree, rollback, parent, old=page_name))
+                tree.unlink(page_relative)
                 return self.git.commit_paths(
                     affected,
                     name=actor.display_name,
@@ -725,43 +787,53 @@ class ContentRepository:
         rename); ``new_slug`` of ``None`` keeps the current slug (a pure move).
         """
 
-        rollback = _Rollback()
         with self.git.write_lock():
-            page = self._page_path(relative)
             page_relative = normalize_relative_path(relative)
+            if not page_relative.endswith(".md") or path_depth(page_relative) not in {2, 3}:
+                raise ContentMissing("page not found")
             parent = page_relative.rsplit("/", 1)[0]
             target_parent = self._validate_page_parent(new_parent if new_parent else parent)
-            slug = make_slug(page.stem, new_slug if new_slug else page.stem)
-            target_parent_path = safe_join(self.docs, target_parent)
+            page_name = page_relative.rsplit("/", 1)[1]
+            slug = make_slug(Path(page_name).stem, new_slug if new_slug else Path(page_name).stem)
             target_relative = f"{target_parent}/{slug}.md"
-            target = safe_join(self.docs, target_relative)
-            if not target_parent_path.is_dir():
+            if not is_confined_directory(self.docs, target_parent):
                 raise ContentMissing("destination book or chapter not found")
-            if target == page:
+            if target_relative == page_relative:
                 raise ContentError("page is already at that location")
-            if target.exists():
-                raise ContentExists("a page already exists at that location")
-            rollback.file(page)
-            rollback.file(target)
+            tree = ConfinedTree(self.docs)
+            rollback = _ConfinedRollback(tree)
             try:
-                affected = [page, target]
-                if target_parent_path == page.parent:
+                rollback.file(page_relative)
+            except UnsafePath as exc:
+                raise ContentMissing("page not found") from exc
+            rollback.absent_file(target_relative)
+            try:
+                affected = [f"docs/{page_relative}", f"docs/{target_relative}"]
+                if target_parent == parent:
                     affected.extend(
-                        self._changed_nav(rollback, page.parent, old=page.name, new=target.name)
+                        self._changed_nav_confined(
+                            tree, rollback, parent, old=page_name, new=f"{slug}.md"
+                        )
                     )
                 else:
-                    affected.extend(self._changed_nav(rollback, page.parent, old=page.name))
                     affected.extend(
-                        self._changed_nav(rollback, target_parent_path, new=target.name)
+                        self._changed_nav_confined(tree, rollback, parent, old=page_name)
                     )
-                _atomic_write_bytes(target, page.read_bytes())
-                page.unlink()
+                    affected.extend(
+                        self._changed_nav_confined(
+                            tree, rollback, target_parent, new=f"{slug}.md"
+                        )
+                    )
+                tree.rename(page_relative, target_relative, overwrite=False)
                 commit = self.git.commit_paths(
                     affected,
                     name=actor.display_name,
                     email=actor.email,
                     message=f"Move page: {page_relative} -> {target_relative}",
                 )
+            except FileExistsError as exc:
+                rollback.undo()
+                raise ContentExists("a page already exists at that location") from exc
             except Exception:
                 rollback.undo()
                 raise
@@ -1337,6 +1409,54 @@ class ContentRepository:
         except NavigationError as exc:
             raise ContentError("navigation file is malformed") from exc
         return []
+
+    def _changed_nav_confined(
+        self,
+        tree: ConfinedTree,
+        rollback: _ConfinedRollback,
+        parent: str,
+        *,
+        old: str | None = None,
+        new: str | None = None,
+    ) -> list[str]:
+        """Apply the small explicit-nav adjustment through ``ConfinedTree``.
+
+        The old path-based helper remains for container operations until those
+        transactions are migrated.  Page delete/move must not route their nav
+        rewrite through it: a substituted parent after reading ``.pages``
+        would otherwise turn the write or rollback into an outside-tree I/O.
+        """
+
+        try:
+            if ".pages" not in tree.list(parent):
+                return []
+            original = tree.read_internal_text(parent)
+        except UnsafePath as exc:
+            raise ContentError("navigation file is malformed") from exc
+        try:
+            navigation = parse_navigation(original, source=".pages")
+            values = dict(navigation.values)
+            entries = navigation.entries
+            if entries is None or any(not isinstance(entry, str) for entry in entries):
+                return []
+            changed = False
+            if old is not None and old in entries:
+                if new is None:
+                    values["nav"] = [entry for entry in entries if entry != old]
+                else:
+                    values["nav"] = [new if entry == old else entry for entry in entries]
+                changed = True
+            elif new is not None and "*" not in entries and new not in entries:
+                values["nav"] = [*entries, new]
+                changed = True
+            if not changed:
+                return []
+            serialized = serialize_navigation(Navigation(values), source=".pages")
+        except NavigationError as exc:
+            raise ContentError("navigation file is malformed") from exc
+        rollback.navigation(parent, original)
+        tree.write_internal_text(parent, serialized, overwrite=True)
+        return [f"docs/{parent}/.pages"]
 
     def _page_ref(self, relative: str) -> str:
         """Validate a page path for history use without requiring it on disk."""

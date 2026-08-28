@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 23:33 UTC — Codex
+Extended T2.1 confinement through page delete and move transactions, including
+navigation edits and rollback. Ancestor-symlink adversarial tests confirm that
+the operations do not delete or publish an outside sentinel.
+- Files: `app/content.py`, `tests/test_content_symlink_races.py`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 23:31 UTC — Codex
 Removed MCP from the MVP at the user's request. The existing signed-bearer
 REST/OpenAPI surface is now the sole AI transport, avoiding a second protocol
@@ -107,18 +114,3 @@ an incremental checkpoint; export actions and fuller management controls
 remain before T5.5 is complete.
 - Files: `app/web.py`, `app/templates/base.html`, `app/templates/admin.html`,
   `app/static/style.css`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-28 21:55 UTC — Codex
-Completed T5.4's browser history UI. The ACL-filtered revision page displays
-Git commits and an escaped side-by-side source diff; selecting a historical
-revision and restoring it creates a new commit through the existing service.
-Restore controls are not rendered to read-only users, and a deleted page can
-be recovered through its still-reachable Git history.
-
-Browser history tests: 18 passing; API/Git history tests: 47 passing; ruff
-clean. Production Compose rebuilt and became healthy on port 18055, where
-`/healthz` returned `{"status":"ok"}`; stopped without `-v`.
-- Files: `app/content.py`, `app/ai_service.py`, `app/web.py`,
-  `app/templates/page.html`, `app/templates/history.html`,
-  `app/static/style.css`, `tests/test_web.py`, `plans/plan_initial.md`,
-  `LOG.md`
