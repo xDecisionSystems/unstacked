@@ -123,8 +123,15 @@ def is_confined_directory(root: Path, relative: str) -> bool:
     return True
 
 
-def read_confined_text(root: Path, relative: str, *, max_bytes: int | None = None) -> str:
-    """Read one regular UTF-8 file without a symlink check-then-open race."""
+def read_confined_bytes(root: Path, relative: str, *, max_bytes: int | None = None) -> bytes:
+    """Read one regular file without a symlink check-then-open race.
+
+    The budget is enforced while reading rather than by stat-then-read: the
+    size a stat reports is not the size a later read returns, and for uploads
+    the byte count is the one thing an attacker fully controls.  Reading one
+    byte past the budget is enough to know the file is over it, so an
+    oversized file is never fully materialized.
+    """
 
     try:
         with _confined_parent(root, relative) as (parent_fd, leaf):
@@ -148,15 +155,21 @@ def read_confined_text(root: Path, relative: str, *, max_bytes: int | None = Non
         content = b"".join(chunks)
         if max_bytes is not None and len(content) > max_bytes:
             raise ConfinedFileTooLarge("file exceeds configured size limit")
-        return content.decode("utf-8")
+        return content
     finally:
         os.close(descriptor)
 
 
-def atomic_write_confined(
+def read_confined_text(root: Path, relative: str, *, max_bytes: int | None = None) -> str:
+    """Read one regular UTF-8 file without a symlink check-then-open race."""
+
+    return read_confined_bytes(root, relative, max_bytes=max_bytes).decode("utf-8")
+
+
+def atomic_write_confined_bytes(
     root: Path,
     relative: str,
-    text: str,
+    content: bytes,
     *,
     overwrite: bool,
 ) -> None:
@@ -168,7 +181,6 @@ def atomic_write_confined(
     never follows it.  Parent directories are held by descriptor throughout.
     """
 
-    encoded = text.encode("utf-8")
     temporary = f".{uuid4().hex}.unstacked-tmp"
     try:
         with _confined_parent(root, relative) as (parent_fd, leaf):
@@ -180,7 +192,7 @@ def atomic_write_confined(
             )
             try:
                 with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(encoded)
+                    handle.write(content)
                     handle.flush()
                     os.fsync(handle.fileno())
                 if overwrite:
@@ -201,4 +213,31 @@ def atomic_write_confined(
     except (UnsafePath, FileExistsError):
         raise
     except OSError as exc:
+        raise UnsafePath("path is missing or unsafe") from exc
+
+
+def atomic_write_confined(
+    root: Path,
+    relative: str,
+    text: str,
+    *,
+    overwrite: bool,
+) -> None:
+    """Atomically write a regular UTF-8 file beneath ``root``."""
+
+    atomic_write_confined_bytes(root, relative, text.encode("utf-8"), overwrite=overwrite)
+
+
+def unlink_confined(root: Path, relative: str) -> None:
+    """Remove one regular file beneath ``root`` without following a symlink.
+
+    Deleting through a ``Path`` would resolve every ancestor first, so an
+    untrusted local process could swap a directory for a symlink between the
+    check and the unlink and have the deletion land outside the content root.
+    """
+
+    try:
+        with _confined_parent(root, relative) as (parent_fd, leaf):
+            os.unlink(leaf, dir_fd=parent_fd)
+    except (OSError, UnsafePath) as exc:
         raise UnsafePath("path is missing or unsafe") from exc

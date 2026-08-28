@@ -104,9 +104,35 @@ All `/api/ai/*` routes require `Authorization: Bearer <token>`.
 | `POST` | `/api/ai/books/{book}/chapters` | Create a chapter (admin only). |
 | `POST` | `/api/ai/books/{book}/pages` | Create a page directly in a book. |
 | `POST` | `/api/ai/books/{book}/chapters/{chapter}/pages` | Create a page in a chapter. |
+| `POST` | `/api/ai/books/{book}/assets` | Upload one image (multipart `file`); requires write access to the book. |
+| `GET` | `/api/ai/books/{book}/assets` | List the book's assets. |
+| `DELETE` | `/api/ai/books/{book}/assets/{filename}` | Delete one asset. |
+| `GET` | `/assets/{path}` | Serve one asset for the live app, `nosniff` and `inline`. |
 
 Interactive request/response schemas are available at `/docs` while the app
 is running.
+
+### Assets
+
+Uploads land in `content/docs/assets/<book>/` and are committed like any other
+content change. What a file *is* comes from its own signature, never from its
+name or declared `Content-Type`: only PNG, JPEG, GIF and WebP are accepted, and
+each is parsed end to end, so a file with a second payload appended to it is
+rejected rather than stored. SVG and every other scriptable or executable
+format is refused by design. The submitted filename is slugified the same way a
+page slug is, and the stored extension is rewritten to match the real format.
+
+Reference an asset from Markdown with a **relative** link so the same page works
+in the running app and in a standalone `mkdocs build`:
+
+```markdown
+![Logo](../assets/my-book/logo.png)          <!-- from a page in the book -->
+![Logo](../../assets/my-book/logo.png)       <!-- from a page in a chapter -->
+```
+
+A static build serves the file straight from the built site; `/assets/{path}`
+exists only for the live, permission-checked app, where an asset inherits the
+ACL of the book that owns it.
 
 ## LLM workflow
 

@@ -79,6 +79,22 @@ class Settings(BaseSettings):
     trusted_proxy_hops: int = 0
     max_page_bytes: int = 2_000_000
     max_export_bytes: int = 50_000_000
+    # --- Asset uploads (see app/assets.py) -----------------------------------
+    # 10 MiB comfortably covers the screenshots, diagrams and photographs a
+    # wiki page needs while keeping the worst case per in-flight request small
+    # enough that a burst of concurrent uploads cannot exhaust memory or the
+    # spool directory.  It also sits under the default body limit of every
+    # common reverse proxy, so the app's answer is the one clients see.
+    max_upload_bytes: int = 10_485_760
+    # Byte count alone does not bound an image: a monochrome 30000x30000 PNG
+    # compresses to a few hundred kilobytes and decodes to gigabytes of
+    # bitmap.  These two caps bound the decoded size instead, and are checked
+    # against the declared header dimensions before anything decodes pixels.
+    # 12000 per side accepts large scans and panoramas; 40 megapixels is five
+    # times a 4K screenshot and bounds any future decode at roughly 160 MB of
+    # 32-bit bitmap.
+    max_upload_dimension: int = 12_000
+    max_upload_pixels: int = 40_000_000
     # Search deliberately has its own smaller budgets.  A page may be valid
     # wiki content yet too expensive to inspect on every keystroke.
     max_search_query_chars: int = 500
@@ -137,6 +153,12 @@ class Settings(BaseSettings):
             raise ValueError("backup sync debounce must be positive")
         if self.backup_sync_max_backoff_seconds < self.backup_sync_debounce_seconds:
             raise ValueError("backup sync maximum backoff must be at least the debounce")
+        if self.max_upload_bytes < 1:
+            raise ValueError("upload size limit must be positive")
+        if self.max_upload_dimension < 1:
+            raise ValueError("upload dimension limit must be positive")
+        if self.max_upload_pixels < 1:
+            raise ValueError("upload pixel limit must be positive")
         if self.max_search_query_chars < 1:
             raise ValueError("search query limit must be positive")
         if self.max_search_results < 1:

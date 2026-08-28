@@ -25,41 +25,27 @@ Confirmed scope (from user):
   to a bucket are equally valid and need no app support beyond the
   already-durable local directories to sync from.
 
-### ⚠ Pending handoff (2026-08-28) — read before starting T2.5 or T6.4
+### ⚠ Pending handoff (2026-08-28) — read before starting T6.4
 
-Claude Code was dispatching subagents for T2.5 and T6.4 when the session had
-to stop (user hit their session limit). **Neither task's status marker below
-has been updated — both still read as not started — but real work exists and
-must not be redone from scratch.** It was pushed to `origin` as ordinary
-branches (not merged to `main`, since it was not yet independently reviewed
-the way every other merged task in this plan was):
+Claude Code was dispatching a T6.4 subagent when the session had to stop
+(user hit their session limit). Its status marker has not been updated because
+the work is incomplete, but the work must not be redone from scratch:
 
-- **T2.5 (assets & uploads)** — branch `pending/t2.5-assets-review`. The
-  subagent reported it complete and tested (342 passing including 47 new,
-  ruff clean), with a detailed report on its signature-detection approach,
-  size/dimension caps, and a genuinely pre-buffering upload-size guard. **Not
-  yet independently verified by a coordinating session** the way T1.2/T2.3/
-  T4.3/T6.1/T5.2 were above (rerun the suite yourself, spot-check the
-  security-relevant claims empirically, then merge with `--no-ff` and update
-  this plan + LOG.md, following the pattern of every prior merge entry in
-  LOG.md's history for what "reviewed" should look like here).
 - **T6.4 (backup config backend)** — branch `pending/t6.4-backup-config-wip`.
   This one is **genuinely incomplete** — committed as a WIP safety snapshot
   only so it would not be lost, not because it was finished. Untested,
   unreviewed, likely does not pass the suite as-is. Treat it as a starting
   point to finish, not as done work to merge.
 
-If you are Codex (or a future Claude session) picking this up: `git fetch`
-these two branches, inspect them, and either finish/review/merge them before
-touching T2.5/T6.4 again, or explicitly decide to discard and redo — but
-don't silently duplicate the effort by dispatching a fresh subagent for
-either task without first looking.
+If you are Codex (or a future Claude session) picking this up: `git fetch` and
+inspect that branch before touching T6.4 again. Do not silently duplicate the
+effort by dispatching fresh work without first looking.
 
 ### Implementation checkpoint (2026-08-27, updated)
 
 The backend is substantially complete: scaffolding, schema/migrations, both auth transports (bearer tokens and cookie sessions, username-based login, forced password change on admin-issued credentials), path safety, the full content CRUD lifecycle (create/read/update/delete/move/rename, all through one locked git-mutation path), optimistic concurrency (blob-sha conflict detection), the ACL resolver plus its central enforcement (`AuthorizationContext`), the admin API (users/groups/grants/last-admin protection), pluggable/optional backup (git-remote target, debounced sync worker, manual backup/restore), static export, grep-based search, and the shared AI service behind the REST/OpenAPI surface. Real `mkdocs build --strict` runs are exercised in tests throughout, including after full lifecycle sequences (create → edit → move → rename → delete).
 
-Remaining: T2.5 (asset uploads), the web UI (T5.2–T5.5, including the T6.4 backup setup page), search's own UI (T8.2), the MCP transport (T9.2), a few partial-completion notes (T1.3/T2.1/T9.3/T10.1), and documentation/round-trip-test polish (T10.4, T10.6).
+Remaining: the web UI (T5.3–T5.5, including the T6.4 backup setup page), search's own UI (T8.2), the MCP transport (T9.2), a few partial-completion notes (T1.3/T2.1/T9.3/T10.1), and documentation/round-trip-test polish (T10.4, T10.6).
 
 Per-task status is tracked with `[x]`/`[~]` markers below; a `[~]` task names what already exists so nobody rebuilds it.
 
@@ -279,10 +265,21 @@ Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, a
 `app/nav.py`: parse and write awesome-nav v3 `.pages` files; explicit ordering and display titles; preserve unknown supported keys; reject malformed files without clobbering them; remove stale entries on delete. Writes are atomic and are orchestrated by T2.3 rather than committed independently.
 **Done when:** reorder changes only `.pages`; operator-added supported keys survive round trips; malformed YAML remains untouched with an actionable error; and `mkdocs build --strict` reflects the order.
 
-#### T2.5 — Assets & uploads
+#### [x] T2.5 — Assets & uploads
 `opus` / `sol` · **M** · **high** · depends: T2.1, T2.3
 Image/attachment upload into `docs/assets/<book>/`, request and decompressed-size caps, signature-based type detection, a conservative allowlist, filename sanitizing via `app/paths.py`, and markdown-relative links that resolve in a static build. Disallow active content such as HTML/SVG by default; serve downloads with `nosniff` and safe disposition headers.
 **Done when:** an uploaded image renders in-app and in the static build; hostile names and polyglot/spoofed files fail safely; oversized uploads are rejected before exhausting memory/disk; and upload/asset routes obey ACL.
+**Note:** PNG, JPEG, GIF, and WebP uploads are detected and structurally
+validated from their bytes, bounded by request bytes and declared dimensions,
+stored under the owning book, committed through the shared locked content
+path, and served with re-detected media types, `nosniff`, safe inline
+disposition, and the book's ACL. A raw ASGI guard rejects declared oversize
+requests before FastAPI parses multipart data and cuts off undeclared or
+understated streams as they cross the cap. Independent review added rejection
+of metadata-only image containers and fixed book deletion/rename so assets do
+not remain published or stranded under a stale ACL namespace; relative links
+inside renamed books migrate with them. Verified with 357 passing tests,
+strict standalone MkDocs coverage, and a healthy production Compose build.
 
 ---
 

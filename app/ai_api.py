@@ -2,20 +2,42 @@ import re
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, Field
 from sqlmodel import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.acl import AccessDenied, AuthorizationContext
 from app.auth import authenticate, client_identifier, create_api_token, get_current_user
-from app.content import ContentError, ContentExists, ContentMissing, CreatedContent
+from app.content import ContentError, ContentExists, ContentMissing, CreatedContent, StoredAsset
 from app.models import User
 from app.paths import UnsafePath, make_slug, normalize_relative_path
 
 router = APIRouter(prefix="/api", tags=["AI content"])
 
+# Assets are served outside the /api prefix because ``app/render.py`` already
+# rewrites Markdown image links onto a bare ``/assets/`` route; that contract
+# is what makes a preview and a static build resolve the same link.
+asset_router = APIRouter(tags=["Assets"])
+
 # Characters safe to place inside a quoted Content-Disposition filename.
 SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _disposition(kind: str, filename: str, fallback: str) -> str:
+    fallback_name = SAFE_FILENAME_RE.sub("_", filename) or fallback
+    encoded = quote(filename, safe="")
+    return f"{kind}; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded}"
 
 
 def attachment_disposition(filename: str) -> str:
@@ -25,9 +47,20 @@ def attachment_disposition(filename: str) -> str:
     content repository, so the name is sanitized rather than trusted.
     """
 
-    fallback = SAFE_FILENAME_RE.sub("_", filename) or "page.md"
-    encoded = quote(filename, safe="")
-    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
+    return _disposition("attachment", filename, "page.md")
+
+
+def inline_disposition(filename: str) -> str:
+    """The same header, but for content meant to render rather than download.
+
+    An image referenced by an ``<img>`` tag has to be served ``inline`` or the
+    browser saves it instead of drawing it.  ``inline`` is only safe here
+    because the response also carries ``nosniff`` and a media type re-derived
+    from the bytes, so the browser cannot be talked into treating the body as
+    a document.
+    """
+
+    return _disposition("inline", filename, "asset")
 
 
 class TokenRequest(BaseModel):
@@ -99,6 +132,29 @@ class RestoreRequest(BaseModel):
 class RestoreResponse(BaseModel):
     path: str
     restored_revision: str
+    commit: str
+
+
+class AssetResponse(BaseModel):
+    """Where an asset landed, described the way a page will need to link to it."""
+
+    path: str
+    book: str
+    filename: str
+    media_type: str
+    width: int
+    height: int
+    size_bytes: int
+    commit: str
+
+
+class AssetListResponse(BaseModel):
+    book: str
+    assets: list[str]
+
+
+class DeletedAssetResponse(BaseModel):
+    path: str
     commit: str
 
 
@@ -368,3 +424,138 @@ def create_chapter_page(
     except UnsafePath as exc:
         raise _content_error(exc) from exc
     return _create_page(parent, payload, request, user)
+
+
+def _asset(value: StoredAsset) -> AssetResponse:
+    return AssetResponse(**value.__dict__)
+
+
+def _store_asset(request: Request, user: User, book_slug: str, filename: str, data: bytes):
+    """The blocking half of an upload: ACL check, signature check, git commit."""
+
+    try:
+        with Session(request.app.state.engine) as session:
+            return _asset(
+                request.app.state.ai_service.upload_asset(
+                    _authorization(request, session, user),
+                    book_slug=book_slug,
+                    filename=filename,
+                    data=data,
+                )
+            )
+    except (AccessDenied, ContentError, UnsafePath) as exc:
+        raise _content_error(exc) from exc
+
+
+@router.post("/ai/books/{book_slug}/assets", response_model=AssetResponse, status_code=201)
+async def upload_asset(
+    book_slug: str,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    file: Annotated[UploadFile, File()],
+):
+    """Accept one image for a book, identified by its bytes rather than its name.
+
+    ``UploadSizeLimitMiddleware`` has already bounded the request body, so the
+    read below cannot be the thing that exhausts memory.  It still reads one
+    byte past the budget and checks, because a route must not depend on a
+    middleware someone could forget to install for its own safety property.
+    """
+
+    limit = request.app.state.settings.max_upload_bytes
+    data = await file.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            "Upload exceeds the configured size limit",
+        )
+    # Git and the filesystem are blocking; keep them off the event loop.
+    return await run_in_threadpool(
+        _store_asset, request, user, book_slug, file.filename or "", data
+    )
+
+
+@router.get("/ai/books/{book_slug}/assets", response_model=AssetListResponse)
+def list_assets(
+    book_slug: str,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    try:
+        with Session(request.app.state.engine) as session:
+            assets = request.app.state.ai_service.list_assets(
+                _authorization(request, session, user), book_slug
+            )
+    except (AccessDenied, ContentError, UnsafePath) as exc:
+        raise _content_error(exc) from exc
+    return AssetListResponse(book=book_slug, assets=assets)
+
+
+@router.delete("/ai/books/{book_slug}/assets/{filename}", response_model=DeletedAssetResponse)
+def delete_asset(
+    book_slug: str,
+    filename: str,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    try:
+        with Session(request.app.state.engine) as session:
+            commit = request.app.state.ai_service.delete_asset(
+                _authorization(request, session, user),
+                book_slug=book_slug,
+                filename=filename,
+            )
+    except (AccessDenied, ContentError, UnsafePath) as exc:
+        raise _content_error(exc) from exc
+    return DeletedAssetResponse(path=f"assets/{book_slug}/{filename}", commit=commit)
+
+
+@asset_router.get("/assets/{asset_path:path}", include_in_schema=False)
+def serve_asset(
+    asset_path: str,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Serve one asset for the live preview only.
+
+    A static build never reaches this route: MkDocs copies ``docs/assets/``
+    into the site and the page's own relative ``<img src>`` resolves to that
+    file directly.  This exists so the same Markdown also renders while the
+    app is running, where the file is behind an ACL.
+
+    ``app/render.py`` prefixes every non-Markdown link with ``/assets/``, so a
+    docs-relative ``assets/book/logo.png`` arrives here doubled.  Both spellings
+    are accepted; they cannot be ambiguous because ``assets`` is a reserved
+    name that no book may take.
+    """
+
+    try:
+        normalized = normalize_relative_path(asset_path)
+        if not normalized.startswith("assets/"):
+            normalized = f"assets/{normalized}"
+        with Session(request.app.state.engine) as session:
+            asset = request.app.state.ai_service.get_asset(
+                _authorization(request, session, user), normalized
+            )
+    except (AccessDenied, ContentError, UnsafePath) as exc:
+        raise _content_error(exc) from exc
+    return Response(
+        content=asset.data,
+        # The type comes from the file's own signature, never from its
+        # extension, so a mislabelled file cannot pick its own media type.
+        media_type=asset.media_type,
+        headers={
+            "Content-Disposition": inline_disposition(asset.filename),
+            # Without this a browser may sniff the body and honour what it
+            # finds instead of the type sent, which is the whole mechanism a
+            # polyglot upload relies on.
+            "X-Content-Type-Options": "nosniff",
+            # Defence in depth: even if a future format slipped past the
+            # allowlist, nothing in it may load or execute.
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Referrer-Policy": "no-referrer",
+            # Assets are permission-controlled, so a shared cache must not
+            # keep one and hand it to a different user.
+            "Cache-Control": "private, max-age=0, must-revalidate",
+        },
+    )

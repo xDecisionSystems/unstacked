@@ -10,6 +10,28 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 19:58 UTC — Codex
+T2.5 independently reviewed, repaired, and merged with `--no-ff`. Read the
+complete pending branch diff and empirically checked the security-sensitive
+claims: spoofed labels derive their stored type/name from bytes, appended
+payloads and active formats are refused, dimension bombs fail while still
+small on disk, a declared oversize body never reaches the app, an understated
+stream is cut off at the ASGI receive boundary, denied users cannot upload or
+read, served assets carry `nosniff`, and a strict standalone MkDocs build
+copies and resolves the same relative image link.
+
+Review found two real gaps beyond the report. Structurally empty containers
+(for example, PNG with no IDAT) could be accepted as images; parsers now
+require actual image data. Book delete/rename ignored `docs/assets/<book>`,
+leaving deleted assets published and renamed assets under the stale ACL
+namespace; those lifecycle operations now delete or move assets in the same
+recoverable Git commit and rewrite the renamed book's relative asset links.
+Focused asset coverage is 52 passing; full suite is 357 passing and ruff is
+clean. Production Compose rebuilt successfully, became healthy, and returned
+`{"status":"ok"}` from `/healthz` on port 18052; stopped without `-v`.
+- Files: T2.5 branch files plus `app/assets.py`, `app/content.py`,
+  `tests/test_assets.py`, `app/main.py`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 19:46 UTC — Claude Code
 Session had to stop mid-wave (user hit their session limit) with T2.5 and
 T6.4 subagents outstanding. T2.5 had actually finished (reported complete,
@@ -257,30 +279,4 @@ to T3.1 documenting the git_backend.py fix.
 - Files: `app/content.py`, `app/git_backend.py`,
   `tests/test_content_lifecycle.py` (merged from subagent);
   `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 04:13 UTC — Claude Code
-Dispatched three parallel subagents (isolated git worktrees, opus tier) to
-coordinate plan implementation: T2.3 finish (update/delete/move/rename),
-T1.2 (web session auth), T6.1 (GitHub remote credentials) — run alongside
-Codex, which is independently committing to main. T2.3 was run solo
-(the plan forbids racing it against T2.1/T4.1/T4.2/T3.3); T1.2/T6.1 are
-independent modules so ran in parallel with it.
-
-T1.2 landed first. Reviewed its actual diff (not just its report):
-`app/web_auth.py`, cookie sessions cleanly separated from bearer-token
-auth, session_generation-based invalidation, synchronizer-pattern CSRF,
-fixation defense via a freshly rotated session id per login, shared rate
-limiter with the bearer login path. Independently re-ran the full suite
-and ruff myself before merging — both clean, 16 new tests. Found and
-fixed one real gap the subagent flagged itself: it added `itsdangerous`
-to pyproject.toml but had no uv binary to update uv.lock, which would
-have broken CI's `uv sync --locked`. Installed uv, regenerated the lock,
-reverified. Merged to main, marked T1.2 `[x]`.
-- Files: `.gitignore`, `uv.lock` (from me); `app/web_auth.py`,
-  `tests/test_web_auth.py`, `app/config.py`, `app/main.py`,
-  `.env.example`, `pyproject.toml` (merged from subagent);
-  `plans/plan_initial.md`, `LOG.md`
-
-
-
 

@@ -13,6 +13,7 @@ from git import Actor, Repo
 from sqlmodel import Session
 
 from app.acl import load_policy
+from app.assets import AssetTooLarge, DetectedImage, UnsupportedAsset, detect_image
 from app.config import Settings
 from app.frontmatter_io import PageDocument, new_page, parse_page, write_page
 from app.git_backend import (
@@ -36,13 +37,22 @@ from app.paths import (
     ConfinedFileTooLarge,
     UnsafePath,
     atomic_write_confined,
+    atomic_write_confined_bytes,
     is_confined_directory,
     make_slug,
     normalize_relative_path,
     path_depth,
+    read_confined_bytes,
     read_confined_text,
     safe_join,
+    unlink_confined,
 )
+
+# Assets live in one reserved directory at the docs root, partitioned by the
+# book that owns them.  ``RESERVED_ROOT_NAMES`` already forbids a book of this
+# name, so ``assets/<book>/<file>`` can never collide with real content and a
+# path's first segment unambiguously says whether it is an asset.
+ASSETS_ROOT = "assets"
 
 
 class ContentError(RuntimeError):
@@ -87,6 +97,36 @@ class MovedContent:
     slug: str
     previous_path: str
     commit: str
+
+
+@dataclass(frozen=True)
+class StoredAsset:
+    """An uploaded asset as it now exists in the content repository.
+
+    ``path`` is docs-relative, which is the form both the static build and the
+    preview renderer resolve Markdown links against; callers link to it rather
+    than to any application URL so a page keeps working when the content repo
+    is built on its own.
+    """
+
+    path: str
+    book: str
+    filename: str
+    media_type: str
+    width: int
+    height: int
+    size_bytes: int
+    commit: str
+
+
+@dataclass(frozen=True)
+class AssetContent:
+    """Asset bytes plus the type re-derived from those bytes, never a label."""
+
+    path: str
+    filename: str
+    media_type: str
+    data: bytes
 
 
 class _Rollback:
@@ -244,6 +284,19 @@ Create content deliberately:
 - `POST /api/ai/books/{book}/pages` and
   `POST /api/ai/books/{book}/chapters/{chapter}/pages` create pages when you
   have write access to the parent.
+
+Attach images deliberately:
+
+- `POST /api/ai/books/{book}/assets` uploads one image (multipart `file`) when
+  you have write access to the book. Only PNG, JPEG, GIF and WebP are
+  accepted, decided by the file's own bytes rather than its name or declared
+  type; SVG and any other active content is refused.
+- The reply's `path` is repository-relative, e.g. `assets/{book}/logo.png`.
+  Reference it from a page with a *relative* Markdown link so it resolves in
+  the static build too: `![Alt](../assets/{book}/logo.png)` from a page in the
+  book, one more `../` from a page in a chapter.
+- `GET /api/ai/books/{book}/assets` lists them; `DELETE
+  /api/ai/books/{book}/assets/{filename}` removes one.
 
 Authenticate every API call with `Authorization: Bearer <token>`. Before a
 write, confirm the target parent and proposed title with the requester. Keep
@@ -718,12 +771,20 @@ class ContentRepository:
             # Snapshot the whole subtree before it goes, and declare exactly
             # those paths to the commit.
             affected = rollback.tree(container)
+            asset_container = None
+            if kind == "book":
+                asset_relative = f"{ASSETS_ROOT}/{relative}"
+                if is_confined_directory(self.docs, asset_relative):
+                    asset_container = safe_join(self.docs, asset_relative)
+                    affected.extend(rollback.tree(asset_container))
             try:
                 affected = list(affected)
                 affected.extend(
                     self._changed_nav(rollback, container.parent, old=container.name)
                 )
                 shutil.rmtree(container)
+                if asset_container is not None:
+                    shutil.rmtree(asset_container)
                 return self.git.commit_paths(
                     affected,
                     name=actor.display_name,
@@ -755,11 +816,31 @@ class ContentRepository:
                 raise ContentExists("a book or chapter already exists at that location")
             sources = rollback.tree(container)
             rollback.created_directory(target)
+            asset_source = asset_target = None
+            if kind == "book":
+                asset_relative = f"{ASSETS_ROOT}/{previous_path}"
+                if is_confined_directory(self.docs, asset_relative):
+                    asset_source = safe_join(self.docs, asset_relative)
+                    asset_target = safe_join(self.docs, f"{ASSETS_ROOT}/{slug}")
+                    if asset_target.exists():
+                        raise ContentExists(
+                            "assets already exist for the destination book slug"
+                        )
+                    sources.extend(rollback.tree(asset_source))
+                    rollback.created_directory(asset_target)
             try:
                 affected = list(sources)
                 affected.extend(
-                    target / source.relative_to(container) for source in sources
+                    target / source.relative_to(container)
+                    for source in sources
+                    if source.is_relative_to(container)
                 )
+                if asset_source is not None and asset_target is not None:
+                    affected.extend(
+                        asset_target / source.relative_to(asset_source)
+                        for source in sources
+                        if source.is_relative_to(asset_source)
+                    )
                 affected.extend(
                     self._changed_nav(rollback, parent, old=container.name, new=slug)
                 )
@@ -767,6 +848,15 @@ class ContentRepository:
                 # so Git records renames and `--follow` still reaches the pages'
                 # earlier history.
                 os.replace(container, target)
+                if asset_source is not None and asset_target is not None:
+                    os.replace(asset_source, asset_target)
+                    old_reference = f"assets/{previous_path}/".encode()
+                    new_reference = f"assets/{slug}/".encode()
+                    for page in target.rglob("*.md"):
+                        original = page.read_bytes()
+                        rewritten = original.replace(old_reference, new_reference)
+                        if rewritten != original:
+                            _atomic_write_bytes(page, rewritten)
                 commit = self.git.commit_paths(
                     affected,
                     name=actor.display_name,
@@ -870,6 +960,214 @@ class ContentRepository:
                 if output.tell() > self.settings.max_export_bytes:
                     raise ContentError("export exceeds configured size limit")
         return output.getvalue()
+
+    # --- Assets --------------------------------------------------------------
+
+    def store_asset(
+        self, book_slug: str, filename: str, data: bytes, actor: User
+    ) -> StoredAsset:
+        """Commit one uploaded image into ``docs/assets/<book>/``.
+
+        The stored name is derived, never accepted: the client's stem is put
+        through the same slug rules as a page, and the extension comes from
+        what the bytes actually are rather than from what the upload claimed.
+        A file whose label and content disagree therefore cannot land under a
+        name that misrepresents it.
+
+        Collisions are refused rather than silently disambiguated.  An author
+        writes the Markdown link by hand, so quietly storing ``logo-1.png``
+        when they uploaded ``logo.png`` would produce a page with a broken
+        image and no error anywhere.
+        """
+
+        book_slug = make_slug(book_slug, book_slug)
+        if len(data) > self.settings.max_upload_bytes:
+            raise ContentError("upload exceeds configured size limit")
+        try:
+            detected = detect_image(
+                data,
+                max_pixels=self.settings.max_upload_pixels,
+                max_dimension=self.settings.max_upload_dimension,
+            )
+        except (AssetTooLarge, UnsupportedAsset) as exc:
+            raise ContentError(str(exc)) from exc
+        name = self._asset_filename(filename, detected)
+        relative = f"{ASSETS_ROOT}/{book_slug}/{name}"
+        target = safe_join(self.docs, relative)
+        rollback = _Rollback()
+        try:
+            with self.git.write_lock():
+                if not is_confined_directory(self.docs, book_slug):
+                    raise ContentMissing("book not found")
+                self._prepare_asset_directory(rollback, book_slug)
+                if target.exists():
+                    # Fail before the snapshot below, which would otherwise
+                    # read an existing file of unbounded size into memory only
+                    # to restore bytes this call was never going to touch.
+                    # The exclusive write remains the authority on the race.
+                    rollback.undo()
+                    raise ContentExists("an asset with that name already exists")
+                rollback.file(target)
+                try:
+                    atomic_write_confined_bytes(self.docs, relative, data, overwrite=False)
+                    commit = self.git.commit_paths(
+                        [target],
+                        name=actor.display_name,
+                        email=actor.email,
+                        message=f"Add asset: {relative}",
+                    )
+                except FileExistsError:
+                    rollback.undo()
+                    raise ContentExists("an asset with that name already exists") from None
+                except Exception:
+                    rollback.undo()
+                    raise
+        except GitWriteLockTimeout as exc:
+            raise ContentLockTimeout(str(exc)) from exc
+        return StoredAsset(
+            path=relative,
+            book=book_slug,
+            filename=name,
+            media_type=detected.media_type,
+            width=detected.width,
+            height=detected.height,
+            size_bytes=len(data),
+            commit=commit,
+        )
+
+    def read_asset(self, relative: str) -> AssetContent:
+        """Return an asset's bytes and the type re-derived from those bytes.
+
+        Detection is repeated on every read rather than cached or inferred
+        from the extension, so a file placed in the repository by hand — or a
+        page-sized text file renamed to ``.png`` — can never be served under
+        an image media type it does not deserve.
+        """
+
+        relative = self._asset_ref(relative)
+        try:
+            data = read_confined_bytes(
+                self.docs, relative, max_bytes=self.settings.max_upload_bytes
+            )
+        except ConfinedFileTooLarge as exc:
+            raise ContentError("asset exceeds configured size limit") from exc
+        except UnsafePath as exc:
+            # Same indistinguishable shape the page reader uses: a caller must
+            # not learn that a denied name happens to be a symlink.
+            raise ContentMissing("asset not found") from exc
+        try:
+            detected = detect_image(
+                data,
+                max_pixels=self.settings.max_upload_pixels,
+                max_dimension=self.settings.max_upload_dimension,
+            )
+        except (AssetTooLarge, UnsupportedAsset) as exc:
+            raise ContentError(str(exc)) from exc
+        return AssetContent(
+            path=relative,
+            filename=relative.rsplit("/", 1)[-1],
+            media_type=detected.media_type,
+            data=data,
+        )
+
+    def delete_asset(self, book_slug: str, filename: str, actor: User) -> str:
+        """Remove an asset from the tree; Git keeps it recoverable."""
+
+        book_slug = make_slug(book_slug, book_slug)
+        relative = self._asset_ref(f"{ASSETS_ROOT}/{book_slug}/{filename}")
+        rollback = _Rollback()
+        try:
+            with self.git.write_lock():
+                asset = safe_join(self.docs, relative)
+                if not asset.is_file():
+                    raise ContentMissing("asset not found")
+                rollback.file(asset)
+                try:
+                    unlink_confined(self.docs, relative)
+                    return self.git.commit_paths(
+                        [asset],
+                        name=actor.display_name,
+                        email=actor.email,
+                        message=f"Delete asset: {relative}",
+                    )
+                except UnsafePath as exc:
+                    rollback.undo()
+                    raise ContentMissing("asset not found") from exc
+                except Exception:
+                    rollback.undo()
+                    raise
+        except GitWriteLockTimeout as exc:
+            raise ContentLockTimeout(str(exc)) from exc
+
+    def list_assets(self, book_slug: str) -> list[str]:
+        """List the docs-relative asset paths a book owns."""
+
+        book_slug = make_slug(book_slug, book_slug)
+        directory = self.docs / ASSETS_ROOT / book_slug
+        if not is_confined_directory(self.docs, f"{ASSETS_ROOT}/{book_slug}"):
+            return []
+        return sorted(
+            f"{ASSETS_ROOT}/{book_slug}/{child.name}"
+            for child in directory.iterdir()
+            if child.is_file() and not child.name.startswith(".")
+        )
+
+    def _prepare_asset_directory(self, rollback: "_Rollback", book_slug: str) -> None:
+        """Create ``assets/<book>/``, recording only what this call invented.
+
+        Only the topmost directory that did not already exist is handed to the
+        rollback, so undoing a failed upload never removes a sibling book's
+        assets along with its own.
+        """
+
+        assets_root = self.docs / ASSETS_ROOT
+        book_directory = assets_root / book_slug
+        if not assets_root.exists():
+            rollback.created_directory(assets_root)
+        elif not book_directory.exists():
+            rollback.created_directory(book_directory)
+        book_directory.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _asset_filename(filename: str, detected: DetectedImage) -> str:
+        """Slugify a client-supplied name and re-extension it from the bytes.
+
+        The name arrives from an untrusted multipart header, so it is treated
+        as a title to be slugified rather than as a path: separators of either
+        flavour are dropped before slugging, which leaves nothing for
+        ``safe_join`` to have to reject.
+        """
+
+        if not isinstance(filename, str) or not filename.strip():
+            raise ContentError("upload has no filename")
+        leaf = filename.replace("\\", "/").rsplit("/", 1)[-1]
+        stem = leaf.rsplit(".", 1)[0] if "." in leaf[1:] else leaf
+        try:
+            slug = make_slug(stem)
+        except UnsafePath as exc:
+            raise ContentError(f"filename cannot be used as an asset name: {exc}") from exc
+        return f"{slug}.{detected.extension}"
+
+    def _asset_ref(self, relative: str) -> str:
+        """Validate that a path names an asset slot, without touching the disk.
+
+        Assets get the same fixed-depth treatment content does: exactly
+        ``assets/<book>/<file>``.  A deeper path would be copied into the
+        static site by MkDocs yet be unreachable through any application
+        route, which is the same invisible-but-published trap
+        ``_validate_page_parent`` exists to prevent.
+        """
+
+        relative = normalize_relative_path(relative)
+        parts = relative.split("/")
+        if len(parts) != 3 or parts[0] != ASSETS_ROOT:
+            raise ContentMissing("asset not found")
+        if parts[1] in RESERVED_ROOT_NAMES:
+            raise ContentMissing("asset not found")
+        # Resolve so traversal cannot reach a file outside docs/ even if a
+        # future caller passes something normalize_relative_path tolerates.
+        safe_join(self.docs, relative)
+        return relative
 
     @staticmethod
     def _atomic_write(path: Path, text: str) -> None:
