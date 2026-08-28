@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:10 UTC — Codex
+Made manual backup/restore compatible with the browser admin console: these
+admin endpoints now accept either bearer tokens or authenticated cookies, and
+cookie requests require the existing synchronizer CSRF token.
+- Files: `app/backup_api.py`, `LOG.md`
+
 ## 2026-08-28 22:01 UTC — Codex
 Started T5.5 with an admin-only browser console wired to the established
 cookie/CSRF-protected APIs for users, groups, memberships, grants, API token

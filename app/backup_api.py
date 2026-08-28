@@ -10,12 +10,14 @@ state as a conflict instead of failing on a missing attribute.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user
+from app.auth import bearer_scheme, get_current_user
 from app.git_backend import GitSyncError
 from app.manual_backup import ManualBackupService, RestoreResult
 from app.models import User
+from app.web_auth import get_current_web_user, require_csrf
 
 router = APIRouter(prefix="/api/admin/backup", tags=["Backup"])
 
@@ -36,10 +38,24 @@ class RestoreResponse(BaseModel):
     recovery_verified: bool = False
 
 
-def _admin(user: Annotated[User, Depends(get_current_user)]) -> User:
+def _admin(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+) -> User:
+    """Accept the same bearer-or-cookie admin transports as admin settings."""
+
+    user = get_current_user(request, credentials) if credentials else get_current_web_user(request)
     if not user.is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required")
     return user
+
+
+async def _csrf_for_cookie_backup(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+) -> None:
+    if credentials is None:
+        await require_csrf(request)
 
 
 def _manual_backup(request: Request) -> ManualBackupService:
@@ -61,7 +77,7 @@ def _restore_response(value: RestoreResult) -> RestoreResponse:
     )
 
 
-@router.post("/now", response_model=BackupResponse)
+@router.post("/now", response_model=BackupResponse, dependencies=[Depends(_csrf_for_cookie_backup)])
 def backup_now(request: Request, _user: Annotated[User, Depends(_admin)]) -> BackupResponse:
     try:
         return BackupResponse(pushed_commits=_manual_backup(request).backup_now())
@@ -71,7 +87,9 @@ def backup_now(request: Request, _user: Annotated[User, Depends(_admin)]) -> Bac
         ) from exc
 
 
-@router.post("/restore", response_model=RestoreResponse)
+@router.post(
+    "/restore", response_model=RestoreResponse, dependencies=[Depends(_csrf_for_cookie_backup)]
+)
 def restore_backup(
     payload: RestoreRequest,
     request: Request,
