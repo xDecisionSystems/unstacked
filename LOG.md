@@ -10,6 +10,39 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 18:48 UTC — Claude Code
+Dispatched three parallel subagents (T3.3, T4.3, T7.1) before Codex's most
+recent burst of work landed; all three got cut off mid-task by a session
+API limit, uncommitted. Resuming them turned up a real coordination
+collision: while they ran, Codex independently pushed 19 commits
+implementing its own T3.3, T4.2, T6.2, T7.1, and T8.1 directly on main —
+same tasks, different code, neither side aware of the other. Verified my
+subagents' actual work first rather than assuming: independently confirmed
+T3.3's `blob_sha()` matches real `git hash-object` byte-for-byte, and that
+its cross-process concurrency tests use genuine `subprocess.Popen`
+children with a shared wall-clock start (not threads, which would only
+prove the GIL) — solid work, but redundant: Codex's own concurrency tests
+are equally rigorous (real `multiprocessing`, spawn context). Discarded
+the T3.3 and T7.1 branches rather than force a merge of two correct,
+independently-built solutions to the same problem.
+
+T4.3 (admin API) was genuinely still open — merged after reconciling
+against the schema/API drift Codex's other work introduced in the
+meantime: added the new `username` field (now the login identifier,
+separate from email) to the create-user flow and fixed every affected
+test; set `must_change_password=True` on admin-created/reset users to
+match bootstrap's own admin account; fixed a real test-harness bug (a
+`threading.Barrier(2)` that assumed one `_require_user` call per request,
+but `update_user` legitimately calls it twice) rather than loosening the
+underlying guard, which is already race-safe by construction — one
+`UPDATE ... WHERE <no other active admin exists>` statement under
+SQLite's write lock, verified correct independently. Full suite 295
+passing, ruff clean. Rewrote the plan's stale implementation checkpoint
+and added a coordination-lesson note: check `git log origin/main` for
+recent activity before dispatching a task believed unclaimed.
+- Files: `app/admin_api.py`, `tests/test_admin_api.py` (merged, with
+  fixes); `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-27 05:54 UTC — Codex
 Integrated three more plan tasks: sanitized MkDocs-aligned preview rendering,
 guarded optional manual backup/restore, and the shared ACL-aware bounded AI
@@ -216,10 +249,4 @@ mark T1.1, T2.4, and T4.1 complete; the full validation suite follows.
   `tests/test_models.py`, `app/nav.py`, `app/content.py`, `tests/test_nav.py`,
   `app/acl.py`, `tests/test_acl.py`, `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-27 03:20 UTC — Codex
-Kept the Docker application listener and health checks on internal port 8000,
-while making the external Compose host port configurable through
-`UNSTACKED_HOST_PORT` (default 8001) to avoid the occupied Coolify host port.
-Updated the deployment instructions with the host-to-container port mapping.
-- Files: `Dockerfile`, `docker-compose.yaml`, `README.md`, `LOG.md`
 
