@@ -343,9 +343,10 @@ EasyMDE editor, live preview via `render`, save posting the base SHA for conflic
 Revision list, side-by-side diff, restore button with confirmation.
 **Note:** `/pages/{path}/history` is ACL-filtered through `AIContentService`; it compares selected Git revisions using escaped `HtmlDiff` output and renders restore controls only for writers. Restoring creates a new Git commit and works even after a page was deleted. Browser history tests: 18 passing; API/Git history tests: 47 passing; clean ruff; production Compose healthy on port 18055.
 
-#### T5.5 — Admin UI
+#### [x] T5.5 — Admin UI
 `sonnet` / `terra` · **L** · **high** · depends: T4.3, T5.2, T1.3, T6.3, T6.4, T7.1
 Screens for users, groups, memberships, permission grants, issue/revoke-all API tokens, a **backup setup page** (configure/test/clear the backup target and trigger a manual backup — see T6.4, which owns the persistence and re-configuration logic this page calls), and export actions. Token UI states plainly that tokens are short-lived, shown once, and revocation affects all tokens for that user; the backup setup page carries the same "never rendered back" guarantee for a saved credential.
+**Note:** `/admin` is an admin-only, CSRF-protected browser console over the established APIs: users, groups/memberships, grants, token issue/revoke, backup configure/manual push/clear, and acknowledged static-export download. Export ZIPs are private response bytes, never a public filesystem mount.
 
 ---
 

@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:32 UTC — Codex
+Completed T5.5's admin console: confirmed user/group/grant actions, browser
+token revocation, backup controls, and a CSRF-protected acknowledged static
+export download backed by the safe ZIP packager.
+- Files: `app/web.py`, `app/templates/admin.html`, `app/static/style.css`,
+  `tests/test_web.py`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 22:42 UTC — Codex
 Integrated safe static-export packaging for the forthcoming admin download:
 admin-only, lock-protected, synthetic archive paths, and no symlinks or server

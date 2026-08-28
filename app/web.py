@@ -35,6 +35,7 @@ from sqlmodel import Session
 
 from app.acl import AccessDenied, AuthorizationContext
 from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
+from app.export import ExportError, StaticExportRunner
 from app.models import User
 from app.nav import NavigationError, read_navigation
 from app.paths import UnsafePath
@@ -481,6 +482,33 @@ def admin_view(
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     return templates.TemplateResponse(request, "admin.html", context)
+
+
+@router.post("/admin/export", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def download_static_export(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    """Return a freshly packaged static export after explicit ACL warning."""
+
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+    form = await _read_form(request)
+    if form.get("acknowledge_no_acl") != "on":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Acknowledge that this export includes all non-draft content without ACLs",
+        )
+    try:
+        archive = StaticExportRunner(
+            request.app.state.settings, request.app.state.content
+        ).package_for(user)
+    except ExportError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    return Response(
+        content=archive,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="unstacked-static-export.zip"'},
+    )
 
 
 @router.get("/pages/{page_path:path}/history", response_class=HTMLResponse, include_in_schema=False)

@@ -380,6 +380,19 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert response.status_code == 200
     assert "/api/admin/users" in response.text
     assert "/api/admin/backup/config" in response.text
+    # Live rows delegate their destructive actions to the established CSRF
+    # guarded APIs; confirmation happens before each state-changing request.
+    for control in (
+        "data-user-deactivate",
+        "data-user-delete",
+        "data-group-delete",
+        "data-member-remove",
+        "data-permission-delete",
+    ):
+        assert control in response.text
+    assert "confirmAction" in response.text
+    assert "/members/${user}`,'DELETE'" in response.text
+    assert "/permissions/${b.dataset.permissionDelete}`,'DELETE'" in response.text
     client.cookies.clear()
     _make_user(app, "reader")
     _login(client, "reader")

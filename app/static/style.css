@@ -289,6 +289,13 @@ button.danger { background: var(--danger); border-color: var(--danger); }
 .admin-grid form { display:grid; gap:.45rem; margin:.8rem 0; }
 .admin-grid input { padding:.4rem; border:1px solid var(--border); border-radius:4px; }
 .admin-grid p { overflow-wrap:anywhere; }
+.admin-row { border-top: 1px solid var(--border); padding: .65rem 0; overflow-wrap: anywhere; }
+.admin-row:first-child { border-top: 0; }
+.admin-actions { display: inline-flex; flex-wrap: wrap; gap: .35rem; margin-left: .5rem; }
+.admin-row > button { margin-top: .35rem; }
+.admin-row details { margin-top: .35rem; }
+.admin-members { margin: .35rem 0 0; padding-left: 1.25rem; }
+.admin-members button { margin-left: .35rem; padding: .2rem .4rem; font-size: .85rem; }
 
 .history-picker { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; }
 .history-picker label { display: flex; flex-direction: column; gap: 0.25rem; }
