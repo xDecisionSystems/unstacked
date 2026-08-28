@@ -464,3 +464,62 @@ def test_history_ui_can_restore_a_deleted_page(app_env, client):
     )
     assert restored.headers["location"] == "/pages/handbook/leave"
     assert repository.read_page("handbook/leave.md")[1] == "recover me"
+
+
+# --------------------------------------------------------------------------
+# Search UI
+# --------------------------------------------------------------------------
+
+
+def test_search_ui_uses_acl_filtered_results_and_escapes_literal_highlights(app_env, client):
+    app, _settings, _admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Visible", "visible", _admin)
+    repository.create_page(
+        "visible",
+        "Safe result",
+        "safe-result",
+        "before <img src=x onerror=alert(1)> needle after",
+        ["guide"],
+        False,
+        _admin,
+    )
+    repository.create_book("Hidden", "hidden", _admin)
+    repository.create_page(
+        "hidden", "Private result", "private", "needle secret", [], False, _admin
+    )
+    reader = _make_user(app, "search-reader")
+    _grant(app, reader.id, "visible", group_name="visible-search-group")
+    _login(client, "search-reader")
+
+    response = client.get("/search", params={"q": "needle"})
+
+    assert response.status_code == 200
+    assert "Safe result" in response.text
+    assert "/pages/visible/safe-result" in response.text
+    assert "<mark>needle</mark>" in response.text
+    assert "&lt;img src=x onerror=alert(1)&gt;" in response.text
+    assert "<img src=x" not in response.text
+    assert "Private result" not in response.text
+    assert "needle secret" not in response.text
+
+
+def test_search_ui_paginates_the_already_filtered_result_set(app_env, client):
+    app, settings, admin, _token = app_env
+    docs = settings.content_repo_path / "docs" / "search-book"
+    docs.mkdir(parents=True)
+    for number in range(21):
+        (docs / f"result-{number:02}.md").write_text(
+            f"---\ntitle: Result {number:02}\ntags: []\n---\nneedle {number:02}", encoding="utf-8"
+        )
+    _login(client, "admin")
+
+    first = client.get("/search", params={"q": "needle"})
+    second = client.get("/search", params={"q": "needle", "page": 2})
+
+    assert '<h2><a href="/pages/search-book/result-00">Result 00</a></h2>' in first.text
+    assert '<h2><a href="/pages/search-book/result-20">Result 20</a></h2>' not in first.text
+    assert "page=2" in first.text
+    assert '<h2><a href="/pages/search-book/result-20">Result 20</a></h2>' in second.text
+    assert '<h2><a href="/pages/search-book/result-00">Result 00</a></h2>' not in second.text
+    assert "page=1" in second.text

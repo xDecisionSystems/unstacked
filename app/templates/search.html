@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Search · Unstacked{% endblock %}
+{% block content %}
+<h1>Search</h1>
+<form class="search-form" method="get" action="/search" role="search">
+  <label for="search-query">Search readable content</label>
+  <input id="search-query" name="q" type="search" required value="{{ query }}">
+  <button type="submit">Search</button>
+</form>
+{% if error %}
+<p class="error-message">{{ error }}</p>
+{% elif results is not none %}
+<p class="search-summary">{{ results.total }} result{% if results.total != 1 %}s{% endif %} for <strong>{{ query }}</strong>.</p>
+{% if results.entries %}
+<ol class="search-results">
+  {% for result in results.entries %}
+  <li>
+    <h2><a href="/pages/{{ result.path }}">{{ result.title }}</a></h2>
+    <nav class="breadcrumbs" aria-label="Result location">
+      {% for crumb in result.breadcrumbs %}{% if not loop.first %}<span class="sep">/</span>{% endif %}<span>{{ crumb }}</span>{% endfor %}
+    </nav>
+    <p class="search-snippet">{{ result.snippet }}</p>
+    {% if result.tags %}<p class="search-tags">Tags: {{ result.tags|join(', ') }}</p>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="empty-state">No readable content matched that search.</p>
+{% endif %}
+{% if results.truncated %}<p class="empty-state">Results were limited to keep search responsive.</p>{% endif %}
+{% if results.has_previous or results.has_next %}
+<nav class="pagination" aria-label="Search results pages">
+  {% if results.has_previous %}<a class="button" href="/search?q={{ query|urlencode }}&amp;page={{ results.previous_page }}">Previous</a>{% endif %}
+  <span>Page {{ results.page }}</span>
+  {% if results.has_next %}<a class="button" href="/search?q={{ query|urlencode }}&amp;page={{ results.next_page }}">Next</a>{% endif %}
+</nav>
+{% endif %}
+{% endif %}
+{% endblock %}

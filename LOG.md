@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:25 UTC — Codex
+Integrated the browser search UI and operator documentation. Search reuses the
+shared ACL-first service, escapes snippets before literal highlight markup, and
+keeps pagination filtered. README now documents deployment, recovery, backup,
+ACL, exports, secrets, and token revocation.
+- Files: `app/web.py`, `app/templates/base.html`, `app/templates/search.html`,
+  `app/static/style.css`, `tests/test_web.py`, `README.md`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 22:16 UTC — Codex
 Integrated reviewed search API and ACL authorization coverage from the parallel
 batch. Bearer callers can now search through the shared ACL-first service with

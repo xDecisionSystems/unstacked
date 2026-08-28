@@ -30,11 +30,12 @@ permissions — never for content.
 
 ## Status
 
-The first API slice is implemented. Authenticated AI clients can list and
-download permitted Markdown, download an ACL-filtered ZIP, and create books,
-chapters, and pages. Books and chapters require an admin token; page creation
-requires write access to its parent book/chapter. Each mutation is committed
-to the nested content Git repository as the authenticated user.
+The application has a browser wiki for reading, editing, history/restore, and
+basic administration, alongside the authenticated REST API. Every content
+mutation is committed to the nested content Git repository as the acting user.
+The browser administration screen is still being expanded; the API/OpenAPI
+surface remains the complete operator interface for administration and backup
+operations.
 
 See [plans/plan_initial.md](plans/plan_initial.md) for the full architecture
 and phased build plan, and [AGENTS.md](AGENTS.md) for contributor rules.
@@ -90,6 +91,106 @@ persistent storage at `/app/data` and `/app/content`, expose container port
 replica. Local disk remains complete application state. Optionally configure a
 private git remote through the admin backup API, and independently snapshot
 both volumes so the SQLite users/permissions database is protected too.
+
+## Operating the service
+
+### Upgrade and deploy
+
+Keep both persistent directories before changing versions: `content/` is the
+independent Git/MkDocs repository, and `data/` contains `app.db`, the content
+lock, runtime backup configuration, and local secrets. For a source checkout,
+fetch the intended revision, run `uv sync --extra dev`, then run `uv run ruff
+check .` and `uv run pytest` before restarting the service. For Compose, pull
+the intended source revision and use `docker compose -f docker-compose.yaml up
+--build -d`; the application initializes its schema and content repository on
+startup. Confirm `GET /healthz` before retiring the previous deployment.
+
+Do not replace or discard persistent `content/` or `data/` as part of an
+upgrade. Take a filesystem/platform snapshot first, and retain it until the
+new instance is healthy. A Git remote is useful for content history, but it
+does not contain the user and permission database.
+
+### Rotate the signing secret
+
+`UNSTACKED_API_TOKEN_SECRET` signs both API bearer tokens and browser sessions.
+Generate a new random value of at least 32 bytes, update the production secret
+in the deployment environment, and restart all application processes together.
+For example:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Rotation immediately invalidates existing browser sessions and bearer tokens;
+users must sign in again and automation must obtain new tokens. Keep the old
+secret only long enough to roll back a failed deployment, and never place it in
+Git, a content remote, or an exported site. In development, when the variable
+is unset, the application persists its generated secret at
+`data/api_token_secret`; replacing or deleting that file has the same
+invalidate-every-session-and-token effect.
+
+### Permission model
+
+Content permissions belong to groups and are path-prefix rules under `docs/`.
+They are segment-aware: a rule for `handbook` matches `handbook/intro`, not
+`handbook-old`. Access is default-deny. Among matching rules, the deepest path
+wins; if several rules are equally specific, an explicit deny wins. Write is
+never granted without read. Administrators bypass content ACLs, while inactive
+accounts have no access.
+
+Unreadable content is intentionally presented as missing rather than forbidden.
+Navigation may show an ancestor only to reach a readable descendant; that does
+not grant access to the ancestor's page. Create requires write access to its
+parent; moving, renaming, and deleting content is additionally protected from
+stranding exact or descendant permission rules, so an administrator must review
+those grants first.
+
+### API tokens and revocation
+
+Bearer tokens are short-lived signed credentials; they are shown only when
+issued and are not stored as token rows. A user can revoke all of their own
+tokens, and an administrator can revoke all tokens for any user, through
+`POST /api/auth/tokens/revoke`. This is intentionally account-wide revocation:
+there is no per-token name, listing, or selective revocation. Password resets,
+forced password changes, account deactivation, and signing-secret rotation also
+invalidate affected credentials.
+
+### Backup and guarded restore
+
+Backup is optional. The built-in target is any **private** Git remote and
+backs up the complete `content/` Git repository, including drafts and without
+per-user ACL filtering. Configure it as an administrator with
+`GET`/`PUT`/`DELETE /api/admin/backup/config`; saving validates remote access
+with a remote listing and a dry-run push before persisting the setting. A
+supplied inline token is stored in an owner-only file under `data/` and is not
+returned by the API. A saved runtime setting takes precedence over environment
+settings; clearing it writes a tombstone, so an old environment value does not
+silently reactivate backup after restart.
+
+Use `POST /api/admin/backup/now` for an immediate non-force push. To restore,
+use `POST /api/admin/backup/restore`. An empty destination is cloned and a
+clean checkout that is behind is fast-forwarded. If local content is dirty,
+ahead, or divergent, the first call creates and verifies a complete recovery
+copy outside the target and returns a one-time confirmation ID. Submit that ID
+in a second restore request to replace the checkout. Restore never silently
+overwrites local work and never force-pushes. Keep the recovery copy until the
+restored instance has been checked.
+
+### Exports and disaster recovery
+
+`GET /api/ai/export` is an ACL-filtered ZIP for the authenticated caller.
+This is different from a static MkDocs export: a static build contains every
+non-draft page and has **no runtime ACL**. Treat static sites, build artifacts,
+and content Git remotes as private; they are recovery artifacts, not a
+permission-preserving web deployment.
+
+If the application or database is lost, recover the wiki by restoring the
+**entire** `content/` directory (not only `content/docs/`) and running its own
+MkDocs build instructions. That restores non-draft content and Git history
+without any application code. To restore users, groups, permissions, runtime
+backup settings, and locally managed secrets, securely restore `data/` as well,
+including `data/app.db`. If `data/` was not backed up, bootstrap a new admin
+and recreate access control; do not assume the content Git remote contains it.
 
 ## AI content API
 
@@ -212,11 +313,11 @@ supplied token is written to an owner-only file under `data/` and is never
 returned by later reads. Once configured, `POST /api/admin/backup/now` triggers
 a manual push and the debounced worker handles later content commits.
 
-The browser form for these endpoints is part of the remaining admin UI work.
-Until it lands, use the authenticated admin API/OpenAPI page or initial
-environment variables from [.env.example](.env.example). A saved runtime
-record wins over those variables; clearing writes a tombstone so a stale
-variable cannot silently turn backup back on after restart.
+The browser administration screen can configure, test, clear, and manually
+push the target. The authenticated admin API/OpenAPI page remains available
+for automation and guarded restore. A saved runtime record wins over the
+initial environment variables; clearing writes a tombstone so a stale variable
+cannot silently turn backup back on after restart.
 
 A git target protects content history, not `data/app.db`. Snapshot both
 persistent volumes through Coolify—or use rsync/S3 or another trusted external
@@ -225,10 +326,11 @@ recovery.
 
 ### What's actually live right now
 
-Only the REST/AI content API (`/api/ai/*`, `/healthz`, `/llm.md`, `/docs`)
-is implemented — there is no browsable web UI yet (that's Phase 5 of the
-plan). Deploying today gets you a working, permission-checked API server,
-not a point-and-click wiki.
+The application provides a permission-checked browser wiki (`/`), login,
+editor, page history/restore, and an administrator console (`/admin`), in
+addition to `/api/ai/*`, `/healthz`, `/llm.md`, and `/docs`. Some management
+and export controls continue to be completed in the web interface; use the
+documented authenticated API when a browser control is not yet present.
 
 ## License
 

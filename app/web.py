@@ -30,6 +30,7 @@ from urllib.parse import parse_qsl
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 from sqlmodel import Session
 
 from app.acl import AccessDenied, AuthorizationContext
@@ -38,6 +39,7 @@ from app.models import User
 from app.nav import NavigationError, read_navigation
 from app.paths import UnsafePath
 from app.render import MarkdownRenderer, RenderConfigurationError
+from app.search import SearchError, SearchTimeout
 from app.web_auth import (
     FORM_CONTENT_TYPE,
     MAX_FORM_BYTES,
@@ -171,6 +173,36 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
     }
 
 
+def _highlight_search_snippet(snippet: str, query: str) -> Markup:
+    """Escape a literal snippet, adding markup only around literal matches.
+
+    Search text is content supplied by wiki editors.  It must never be handed
+    to the template as safe HTML merely to draw the match highlight.  Splitting
+    before escaping preserves the fixed-string search contract (including
+    punctuation) while making both the surrounding text and the query safe.
+    """
+
+    pieces = snippet.split(query)
+    if len(pieces) == 1:
+        return escape(snippet)
+    rendered: list[Markup] = []
+    for index, piece in enumerate(pieces):
+        rendered.append(escape(piece))
+        if index != len(pieces) - 1:
+            rendered.append(Markup("<mark>") + escape(query) + Markup("</mark>"))
+    return Markup("").join(rendered)
+
+
+def _search_breadcrumbs(content, path: str) -> list[str]:
+    """Return display breadcrumbs without opening the matched page again."""
+
+    parts = path.removesuffix(".md").split("/")
+    breadcrumbs = [_container_title(content.docs, parts[0])]
+    if len(parts) == 3:
+        breadcrumbs.append(_container_title(content.docs, parts[0], parts[1]))
+    return breadcrumbs
+
+
 @router.get("/", include_in_schema=False)
 def index(request: Request) -> RedirectResponse:
     """Route by session state: unauthenticated, forced change, or ordinary."""
@@ -292,6 +324,53 @@ def tree_view(
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     return templates.TemplateResponse(request, "tree.html", context)
+
+
+@router.get("/search", response_class=HTMLResponse, include_in_schema=False)
+def search_view(
+    request: Request,
+    user: Annotated[User, Depends(require_normal_web_user)],
+    q: str = "",
+    page: int = 1,
+) -> Response:
+    """Render bounded, ACL-filtered literal search results for browser users."""
+
+    with Session(request.app.state.engine) as session:
+        context = _base_context(request, session, user)
+        context.update({"query": q, "results": None, "error": None})
+        if not q:
+            return templates.TemplateResponse(request, "search.html", context)
+        try:
+            results = request.app.state.ai_service.search(
+                _authorization(session, user), q, page=page
+            )
+        except SearchTimeout:
+            context["error"] = "Search timed out. Please try a narrower query."
+        except SearchError as exc:
+            # SearchError messages describe only caller-controlled validation
+            # and configured budgets; no filesystem or ACL detail is exposed.
+            context["error"] = str(exc)
+        else:
+            context["results"] = {
+                "entries": [
+                    {
+                        "path": item.path.removesuffix(".md"),
+                        "title": item.title,
+                        "tags": item.tags,
+                        "breadcrumbs": _search_breadcrumbs(request.app.state.content, item.path),
+                        "snippet": _highlight_search_snippet(item.snippet, q),
+                    }
+                    for item in results.items
+                ],
+                "page": results.page,
+                "has_previous": results.page > 1,
+                "has_next": results.page * results.page_size < results.total,
+                "previous_page": results.page - 1,
+                "next_page": results.page + 1,
+                "total": results.total,
+                "truncated": results.truncated,
+            }
+    return templates.TemplateResponse(request, "search.html", context)
 
 
 def _tags(value: str) -> list[str]:

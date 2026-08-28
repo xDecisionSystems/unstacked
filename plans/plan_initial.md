@@ -424,9 +424,10 @@ The workflow committed *inside the content repo* that installs `requirements.txt
 `app/search.py`: fixed-string search by default over Markdown bodies and front-matter titles/tags; bound query length, result count, file size, runtime, and snippet size. Use ripgrep through argument arrays when available with a behaviorally equivalent pure-Python fallback. Discover candidate paths, authorize each path **before reading content or producing snippets/counts**, and paginate only the filtered set. Escape highlights at the final HTML boundary.
 **Done when:** a term appearing only in an unreadable page yields no result, count, timing-dependent snippet, or error leak; fallback and ripgrep return the same ordered contract; pathological input/files respect limits; and no query is interpreted as a regex or command option.
 
-#### T8.2 — Search API & UI **[P]**
+#### [x] T8.2 — Search API & UI
 `sonnet` / `terra` · **M** · **low** · depends: T8.1, T5.2
 Search box, results page with snippets and breadcrumbs.
+**Note:** The bearer API and browser UI both use `AIContentService.search`; browser snippets escape all content before adding only literal-match `<mark>` tags. Pagination occurs after ACL filtering. Focused browser tests: 21 passing; ruff clean.
 
 ---
 
@@ -474,7 +475,7 @@ Push to a local bare scratch remote, remove the disposable local checkout, resto
 `sonnet` / `terra` · **M** · **medium** · depends: T0.1, T10.3
 GitHub Action for the app repo: locked dependency install, ruff, tests with coverage, migration check, package build, and the worst-case drill. Pin third-party actions to immutable commit SHAs and grant minimum token permissions.
 
-#### T10.6 — Operator documentation **[P]**
+#### [x] T10.6 — Operator documentation
 `sonnet` / `terra` · **M** · **low** · depends: most of the above
 Install/deploy/upgrade guide; secret rotation; private backup and guarded restore runbook; precise permission semantics; static export's lack of ACL; token revocation tradeoff; and the "my app died, how do I get my wiki back" recovery procedure. State that recovery restores non-draft content/history, not users or permissions unless `data/app.db` is separately backed up securely.
 

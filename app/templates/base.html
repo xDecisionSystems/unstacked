@@ -9,6 +9,11 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/tree">Unstacked</a>
+    <form class="site-search" method="get" action="/search" role="search">
+      <label class="visually-hidden" for="site-search-query">Search content</label>
+      <input id="site-search-query" name="q" type="search" placeholder="Search content" value="{{ query|default('') }}">
+      <button type="submit">Search</button>
+    </form>
     <form method="post" action="/logout">
       <span class="whoami">{{ current_user.display_name }}</span>
       {% if is_admin %}<a href="/manage">Manage content</a><a href="/admin">Admin</a>{% endif %}
