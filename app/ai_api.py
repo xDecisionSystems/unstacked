@@ -13,16 +13,24 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.acl import AccessDenied, AuthorizationContext
-from app.auth import authenticate, client_identifier, create_api_token, get_current_user
+from app.auth import (
+    authenticate,
+    bearer_scheme,
+    client_identifier,
+    create_api_token,
+    get_current_user,
+)
 from app.content import ContentError, ContentExists, ContentMissing, CreatedContent, StoredAsset
 from app.models import User
 from app.paths import UnsafePath, make_slug, normalize_relative_path
 from app.search import SearchError, SearchTimeout
+from app.web_auth import get_current_web_user, require_csrf
 
 router = APIRouter(prefix="/api", tags=["AI content"])
 
@@ -192,6 +200,14 @@ def _authorization(request: Request, session: Session, user: User) -> Authorizat
     return AuthorizationContext(session, user)
 
 
+async def _csrf_for_cookie_token_action(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+) -> None:
+    if credentials is None:
+        await require_csrf(request)
+
+
 @router.post("/auth/token", response_model=TokenResponse)
 def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
     settings = request.app.state.settings
@@ -210,11 +226,15 @@ def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
     )
 
 
-@router.post("/auth/tokens/revoke", response_model=RevokeTokensResponse)
+@router.post(
+    "/auth/tokens/revoke",
+    response_model=RevokeTokensResponse,
+    dependencies=[Depends(_csrf_for_cookie_token_action)],
+)
 def revoke_api_tokens(
     payload: RevokeTokensRequest,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
 ) -> RevokeTokensResponse:
     """Invalidate every bearer token issued to one account.
 
@@ -224,6 +244,7 @@ def revoke_api_tokens(
     tokens; only an administrator may revoke another user's tokens.
     """
 
+    user = get_current_user(request, credentials) if credentials else get_current_web_user(request)
     target_id = payload.user_id if payload.user_id is not None else user.id
     if target_id is None:  # Defensive: authenticated users always have an id.
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid bearer token")

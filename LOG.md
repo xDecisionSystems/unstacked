@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:30 UTC — Codex
+Made API-token revocation usable from the cookie-based admin console without
+weakening bearer support: browser requests now require the existing CSRF token.
+- Files: `app/ai_api.py`, `LOG.md`
+
 ## 2026-08-28 22:25 UTC — Codex
 Integrated the browser search UI and operator documentation. Search reuses the
 shared ACL-first service, escapes snippets before literal highlight markup, and
