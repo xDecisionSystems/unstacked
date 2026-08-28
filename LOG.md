@@ -10,6 +10,27 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 19:42 UTC — Claude Code
+T5.2 (base web UI: login, ACL-filtered tree, page view) landed — first
+dispatch of a new wave (T2.5 assets, T6.4 backup config also running in
+parallel), checked `git log` for new Codex activity before starting this
+time per last session's lesson. Clean diff, no file overlap except the
+expected line in `app/main.py`. Reviewed and independently verified rather
+than trusting the report: constructed a book/page with a hostile title
+(`<script>…`) and confirmed Jinja2 autoescaping renders it inert in both
+the sidebar and breadcrumb — the only `|safe` use is the pre-sanitized
+page body from `MarkdownRenderer`, everything else relies on default
+escaping; separately confirmed a logout POST without a CSRF token is
+genuinely rejected (403) and the session survives, not just accepted
+silently. Login/logout/change-password bridge the JSON-oriented
+`app/web_auth.py` routes by calling them as plain Python with a
+`RedirectResponse` in place of the `Response` they set the cookie on —
+reuses 100% of credential/CSRF/cookie logic, works with JS disabled.
+Full suite 305 passing, ruff clean. Merged cleanly, no conflicts.
+- Files: `app/web.py`, `app/templates/*.html`, `app/static/style.css`,
+  `app/main.py`, `tests/test_web.py` (merged from subagent);
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 18:48 UTC — Claude Code
 Dispatched three parallel subagents (T3.3, T4.3, T7.1) before Codex's most
 recent burst of work landed; all three got cut off mid-task by a session
@@ -240,13 +261,5 @@ tests for push, fast-forward, and refusal behavior.
 - Files: `app/git_backend.py`, `tests/test_git_backend.py`,
   `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-27 03:49 UTC — Codex
-Completed three unblocked plan foundations: database-level authorization
-constraints with migration coverage, atomic awesome-nav `.pages` management,
-and deterministic ACL container visibility/diagnostics. Updated the plan to
-mark T1.1, T2.4, and T4.1 complete; the full validation suite follows.
-- Files: `app/models.py`, `app/migrations/versions/20260827_0002_database_constraints.py`,
-  `tests/test_models.py`, `app/nav.py`, `app/content.py`, `tests/test_nav.py`,
-  `app/acl.py`, `tests/test_acl.py`, `plans/plan_initial.md`, `LOG.md`
 
 

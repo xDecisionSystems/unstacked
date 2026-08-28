@@ -309,7 +309,7 @@ CRUD for users, groups, memberships, per-path grants, and admin-set password res
 `app/render.py`: use MkDocs/Python-Markdown configuration loading rather than hand-parsing only `markdown_extensions`; render the supported Markdown semantics, rewrite links/assets in context, then sanitize with an explicit allowlist because content is user-supplied. Document that the app preview is semantically aligned but not theme/HTML-byte-identical to the final site.
 **Done when:** admonitions, fenced code, tables, relative links, and assets behave consistently in preview and build; unsupported plugins fail clearly; and active HTML/unsafe URLs cannot execute.
 
-#### T5.2 — Base layout & tree browser
+#### [x] T5.2 — Base layout & tree browser
 `sonnet` / `terra` · **L** · **high** · depends: T4.2, T5.1
 Jinja2 base template, sidebar tree (ACL-filtered), breadcrumbs, page view, and
 login page. No SPA framework. The root route (`/`) redirects an unauthenticated
@@ -319,6 +319,7 @@ that change-password flow.
 **Done when:** an unauthenticated `/` request redirects to login, a
 first-password-change session cannot reach the tree, and two users with
 different grants see different trees on the same instance.
+**Note:** `app/web.py` + `app/templates/`. The `/auth/*` JSON routes in `app/web_auth.py` are reused directly (not reimplemented) — the browser-form login/logout/change-password handlers call those functions as plain Python with a `RedirectResponse` standing in for the `Response` they set the cookie on, so credential verification, CSRF, and cookie issuance stay in one place. Verified independently, not just via the report: constructed a book/page with a hostile title (`<script>…`) and confirmed Jinja2 autoescaping renders it inert in both the sidebar and the breadcrumb (only the pre-sanitized page `body` uses `|safe`); confirmed a logout POST without a CSRF token is genuinely rejected (403) and the session survives. `/pages/{path}` returns 404 identically for "doesn't exist" and "can't read it".
 
 #### T5.3 — Editor & save flow **[P]**
 `sonnet` / `terra` · **L** · **high** · depends: T5.2, T3.3
