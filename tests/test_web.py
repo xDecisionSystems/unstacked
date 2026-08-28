@@ -373,6 +373,19 @@ def test_manage_content_is_admin_only_and_csrf_protected(app_env, client):
     assert client.post("/manage/book", data={"title": "Nope"}).status_code == 403
 
 
+def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, client):
+    app, _settings, _admin, _token = app_env
+    _login(client, "admin")
+    response = client.get("/admin")
+    assert response.status_code == 200
+    assert "/api/admin/users" in response.text
+    assert "/api/admin/backup/config" in response.text
+    client.cookies.clear()
+    _make_user(app, "reader")
+    _login(client, "reader")
+    assert client.get("/admin").status_code == 404
+
+
 # --------------------------------------------------------------------------
 # History UI
 # --------------------------------------------------------------------------

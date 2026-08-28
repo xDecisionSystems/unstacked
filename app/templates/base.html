@@ -11,7 +11,7 @@
     <a class="brand" href="/tree">Unstacked</a>
     <form method="post" action="/logout">
       <span class="whoami">{{ current_user.display_name }}</span>
-      {% if is_admin %}<a href="/manage">Manage content</a>{% endif %}
+      {% if is_admin %}<a href="/manage">Manage content</a><a href="/admin">Admin</a>{% endif %}
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit">Log out</button>
     </form>

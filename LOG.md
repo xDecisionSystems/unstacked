@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:01 UTC — Codex
+Started T5.5 with an admin-only browser console wired to the established
+cookie/CSRF-protected APIs for users, groups, memberships, grants, API token
+issuance/revocation, and runtime backup configuration/manual backup. This is
+an incremental checkpoint; export actions and fuller management controls
+remain before T5.5 is complete.
+- Files: `app/web.py`, `app/templates/base.html`, `app/templates/admin.html`,
+  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-28 21:55 UTC — Codex
 Completed T5.4's browser history UI. The ACL-filtered revision page displays
 Git commits and an escaped side-by-side source diff; selecting a historical
@@ -243,11 +252,3 @@ deployment changes, including a generated non-committed secret, an unused host
 port, health verification, behavior checks where practical, and safe teardown
 that preserves the persistent volumes.
 - Files: `AGENTS.md`, `LOG.md`
-
-## 2026-08-27 04:54 UTC — Codex
-Updated the authentication and bootstrap plan for the required first account:
-`admin:admin` is a one-time administrator with a server-enforced mandatory
-password change. Reopened the affected completed tasks to cover username and
-flag migrations, restricted first-login sessions, token/content blocking, and
-the idempotent fixed-credential bootstrap.
-- Files: `plans/plan_initial.md`, `LOG.md`

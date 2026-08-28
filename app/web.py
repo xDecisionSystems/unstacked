@@ -391,6 +391,19 @@ def _history_context(
     return context
 
 
+@router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
+def admin_view(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    """Administrative console; mutations stay in the established admin APIs."""
+
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+    with Session(request.app.state.engine) as session:
+        context = _base_context(request, session, user)
+    return templates.TemplateResponse(request, "admin.html", context)
+
+
 @router.get("/pages/{page_path:path}/history", response_class=HTMLResponse, include_in_schema=False)
 def page_history_view(
     request: Request,
