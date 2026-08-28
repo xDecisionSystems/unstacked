@@ -42,6 +42,17 @@ asset_router = APIRouter(tags=["Assets"])
 # Characters safe to place inside a quoted Content-Disposition filename.
 SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]")
 
+# ``ContentRepository`` is the final authority on the UTF-8 byte budget, but
+# reject an obviously excessive JSON string before it reaches a filesystem or
+# Git write.  This fixed transport ceiling intentionally matches the default
+# configured page budget; deployments that lower the setting retain the
+# stricter repository check.
+MAX_PAGE_MARKDOWN_CHARS = 2_000_000
+# A unified diff can contain both versions of a page.  Leave a small amount of
+# room for file headers and context, but never stream an unbounded Git result
+# into an API response.
+DIFF_RESPONSE_OVERHEAD_BYTES = 65_536
+
 
 def _disposition(kind: str, filename: str, fallback: str) -> str:
     fallback_name = SAFE_FILENAME_RE.sub("_", filename) or fallback
@@ -100,11 +111,11 @@ class RevokeTokensResponse(BaseModel):
 
 class ContainerCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    slug: str | None = None
+    slug: str | None = Field(default=None, max_length=200)
 
 
 class PageCreate(ContainerCreate):
-    markdown: str = ""
+    markdown: str = Field(default="", max_length=MAX_PAGE_MARKDOWN_CHARS)
     tags: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(
         default_factory=list,
         max_length=100,
@@ -198,6 +209,23 @@ def _authorization(request: Request, session: Session, user: User) -> Authorizat
     """Construct the mandatory service authorization context for this request."""
 
     return AuthorizationContext(session, user)
+
+
+def _bounded_diff(diff: str, max_page_bytes: int) -> str:
+    """Refuse a Git diff that would exceed the REST response budget.
+
+    The content layer already limits each current page, but Git history may
+    contain older oversized files.  Measuring encoded bytes (rather than
+    Python characters) makes the response limit hold for non-ASCII content.
+    """
+
+    limit = (max_page_bytes * 2) + DIFF_RESPONSE_OVERHEAD_BYTES
+    if len(diff.encode("utf-8")) > limit:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            "Diff exceeds the configured response size limit",
+        )
+    return diff
 
 
 async def _csrf_for_cookie_token_action(
@@ -344,7 +372,7 @@ def get_page_diff(
         path=path,
         from_revision=from_revision,
         to_revision=to_revision,
-        diff=diff,
+        diff=_bounded_diff(diff, request.app.state.settings.max_page_bytes),
     )
 
 

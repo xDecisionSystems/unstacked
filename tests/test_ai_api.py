@@ -8,6 +8,7 @@ from git import Repo
 from sqlmodel import Session
 
 from app.acl import AccessDenied, AuthorizationContext
+from app.ai_api import DIFF_RESPONSE_OVERHEAD_BYTES, MAX_PAGE_MARKDOWN_CHARS
 from app.auth import create_api_token, hash_password
 from app.models import Group, Permission, User, UserGroup
 from tests.conftest import bearer
@@ -325,6 +326,38 @@ def test_search_endpoint_authentication_pagination_and_input_bounds(client, app_
     )
     assert invalid.status_code == 422
     assert "length limit" in invalid.json()["detail"]
+
+
+def test_rest_rejects_oversized_page_payload_before_a_content_write(client, app_env):
+    _app, _settings, _admin, token = app_env
+
+    response = client.post(
+        "/api/ai/books/does-not-matter/pages",
+        json={"title": "Too large", "markdown": "x" * (MAX_PAGE_MARKDOWN_CHARS + 1)},
+        headers=bearer(token),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "markdown"]
+    assert "at most" in response.json()["detail"][0]["msg"]
+
+
+def test_rest_rejects_utf8_diff_larger_than_its_response_budget(client, app_env, monkeypatch):
+    app, settings, _admin, token = app_env
+    # Keep the test small while proving the check measures encoded bytes, not
+    # characters: each emoji below occupies four UTF-8 bytes.
+    settings.max_page_bytes = 16
+    limit = (settings.max_page_bytes * 2) + DIFF_RESPONSE_OVERHEAD_BYTES
+    monkeypatch.setattr(app.state.ai_service, "page_diff", lambda *_args: "🙂" * ((limit // 4) + 1))
+
+    response = client.get(
+        "/api/ai/history/anything/page.md/diff",
+        params={"from_revision": "a" * 7, "to_revision": "b" * 7},
+        headers=bearer(token),
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Diff exceeds the configured response size limit"}
 
 
 def test_llm_md_is_available_from_the_app(client):

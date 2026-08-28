@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:50 UTC — Codex
+Integrated T9.3 REST bounds: reject obviously oversized page JSON before any
+content write and cap Git diff responses by UTF-8 bytes, including historical
+oversized/non-ASCII content.
+- Files: `app/ai_api.py`, `tests/test_ai_api.py`, `LOG.md`
+
 ## 2026-08-28 22:32 UTC — Codex
 Completed T5.5's admin console: confirmed user/group/grant actions, browser
 token revocation, backup controls, and a CSRF-protected acknowledged static
