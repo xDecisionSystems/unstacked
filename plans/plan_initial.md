@@ -25,6 +25,36 @@ Confirmed scope (from user):
   to a bucket are equally valid and need no app support beyond the
   already-durable local directories to sync from.
 
+### ⚠ Pending handoff (2026-08-28) — read before starting T2.5 or T6.4
+
+Claude Code was dispatching subagents for T2.5 and T6.4 when the session had
+to stop (user hit their session limit). **Neither task's status marker below
+has been updated — both still read as not started — but real work exists and
+must not be redone from scratch.** It was pushed to `origin` as ordinary
+branches (not merged to `main`, since it was not yet independently reviewed
+the way every other merged task in this plan was):
+
+- **T2.5 (assets & uploads)** — branch `pending/t2.5-assets-review`. The
+  subagent reported it complete and tested (342 passing including 47 new,
+  ruff clean), with a detailed report on its signature-detection approach,
+  size/dimension caps, and a genuinely pre-buffering upload-size guard. **Not
+  yet independently verified by a coordinating session** the way T1.2/T2.3/
+  T4.3/T6.1/T5.2 were above (rerun the suite yourself, spot-check the
+  security-relevant claims empirically, then merge with `--no-ff` and update
+  this plan + LOG.md, following the pattern of every prior merge entry in
+  LOG.md's history for what "reviewed" should look like here).
+- **T6.4 (backup config backend)** — branch `pending/t6.4-backup-config-wip`.
+  This one is **genuinely incomplete** — committed as a WIP safety snapshot
+  only so it would not be lost, not because it was finished. Untested,
+  unreviewed, likely does not pass the suite as-is. Treat it as a starting
+  point to finish, not as done work to merge.
+
+If you are Codex (or a future Claude session) picking this up: `git fetch`
+these two branches, inspect them, and either finish/review/merge them before
+touching T2.5/T6.4 again, or explicitly decide to discard and redo — but
+don't silently duplicate the effort by dispatching a fresh subagent for
+either task without first looking.
+
 ### Implementation checkpoint (2026-08-27, updated)
 
 The backend is substantially complete: scaffolding, schema/migrations, both auth transports (bearer tokens and cookie sessions, username-based login, forced password change on admin-issued credentials), path safety, the full content CRUD lifecycle (create/read/update/delete/move/rename, all through one locked git-mutation path), optimistic concurrency (blob-sha conflict detection), the ACL resolver plus its central enforcement (`AuthorizationContext`), the admin API (users/groups/grants/last-admin protection), pluggable/optional backup (git-remote target, debounced sync worker, manual backup/restore), static export, grep-based search, and the shared AI service behind the REST/OpenAPI surface. Real `mkdocs build --strict` runs are exercised in tests throughout, including after full lifecycle sequences (create → edit → move → rename → delete).

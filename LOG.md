@@ -10,6 +10,35 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 19:46 UTC — Claude Code
+Session had to stop mid-wave (user hit their session limit) with T2.5 and
+T6.4 subagents outstanding. T2.5 had actually finished (reported complete,
+342 passing, ruff clean) but was sitting on a local-only worktree branch,
+never reviewed or merged. T6.4 was still mid-flight with real but
+incomplete, uncommitted changes in its worktree. Neither state is safe to
+just walk away from: a local-only branch is invisible to anyone who isn't
+this exact session (including Codex, which works from `origin`), and
+uncommitted changes in a worktree can simply vanish.
+
+Committed T6.4's in-progress state as an explicit WIP snapshot (not a
+finished task — labeled as such) so it survives regardless of what happens
+to this session or its worktrees. Pushed both branches to `origin` under
+`pending/t2.5-assets-review` and `pending/t6.4-backup-config-wip` rather
+than leaving them local, since local branches in this clone may not be
+visible to Codex depending on how it's actually invoked, and pushing costs
+nothing to be safe. Added a prominent "Pending handoff" section at the top
+of the plan (before the implementation checkpoint, so it's the first thing
+anyone reads) naming both branches, their real status (T2.5: done,
+unreviewed; T6.4: genuinely incomplete), and what to do with each —
+explicitly to stop a future session (mine or Codex) from silently
+re-dispatching work that already exists.
+
+Did not mark T2.5 or T6.4 `[x]` or `[~]` — that would overclaim before an
+independent review actually happens, which is the standard every other
+merged task in this plan was held to.
+- Files: `plans/plan_initial.md`, `LOG.md` (plus the two pushed branches,
+  not part of `main`)
+
 ## 2026-08-28 19:42 UTC — Claude Code
 T5.2 (base web UI: login, ACL-filtered tree, page view) landed — first
 dispatch of a new wave (T2.5 assets, T6.4 backup config also running in
@@ -252,14 +281,6 @@ reverified. Merged to main, marked T1.2 `[x]`.
   `.env.example`, `pyproject.toml` (merged from subagent);
   `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-27 03:52 UTC — Codex
-Completed the Git-wrapper plan task with guarded `origin` push and
-fetch/fast-forward operations. Synchronization now refuses dirty or divergent
-content histories and returns generic typed failures, preventing remote or
-credential details from reaching callers. Added bare-repository integration
-tests for push, fast-forward, and refusal behavior.
-- Files: `app/git_backend.py`, `tests/test_git_backend.py`,
-  `plans/plan_initial.md`, `LOG.md`
 
 
 
