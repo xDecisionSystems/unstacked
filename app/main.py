@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 
 from app.admin_api import router as admin_router
+from app.ai_api import asset_router
 from app.ai_api import router as ai_router
 from app.ai_service import AIContentService
 from app.auth import LoginRateLimiter
@@ -11,6 +12,7 @@ from app.config import Settings
 from app.content import ContentRepository
 from app.manual_backup import ManualBackupService
 from app.models import create_db_engine, migrate_schema
+from app.upload_limit import UploadSizeLimitMiddleware
 from app.web_auth import router as web_auth_router
 
 
@@ -26,6 +28,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
         description="Permission-aware read and create access to a Git-backed Markdown wiki.",
     )
+    # Registered before any router so it wraps the whole application: an
+    # oversized upload has to be refused above the framework, not inside a
+    # handler the framework only reaches after buffering the body.
+    app.add_middleware(UploadSizeLimitMiddleware, max_bytes=settings.max_upload_bytes)
     app.state.settings = settings
     app.state.engine = engine
     app.state.content = content
@@ -54,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             worker.stop()
         app.include_router(backup_router)
     app.include_router(ai_router)
+    app.include_router(asset_router)
     app.include_router(web_auth_router)
     app.include_router(admin_router)
 

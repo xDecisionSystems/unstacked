@@ -1,5 +1,13 @@
 from app.acl import AccessDenied, AuthorizationContext
-from app.content import ContentMissing, ContentRepository, CreatedContent, MovedContent
+from app.content import (
+    ASSETS_ROOT,
+    AssetContent,
+    ContentMissing,
+    ContentRepository,
+    CreatedContent,
+    MovedContent,
+    StoredAsset,
+)
 from app.git_backend import Revision
 from app.paths import make_slug, normalize_relative_path
 from app.search import ContentSearch, SearchPage
@@ -109,6 +117,52 @@ class AIContentService:
             draft,
             authorization.user,
         )
+
+    def upload_asset(
+        self,
+        authorization: AuthorizationContext,
+        *,
+        book_slug: str,
+        filename: str,
+        data: bytes,
+    ) -> StoredAsset:
+        """Store an image for a book the caller may write to.
+
+        Assets are authorized by the book that owns them, not by their own
+        ``assets/...`` path: an asset is part of that book's content, so
+        uploading one requires exactly what creating a page in it requires.
+        """
+
+        book_slug = make_slug(book_slug, book_slug)
+        authorization.require_write(book_slug)
+        return self.content.store_asset(book_slug, filename, data, authorization.user)
+
+    def get_asset(self, authorization: AuthorizationContext, path: str) -> AssetContent:
+        try:
+            normalized = normalize_relative_path(path)
+            parts = normalized.split("/")
+            if len(parts) != 3 or parts[0] != ASSETS_ROOT:
+                raise ContentMissing("asset not found")
+            authorization.require_read(parts[1])
+        except AccessDenied as exc:
+            # Indistinguishable from a missing asset, as elsewhere: the reply
+            # must not tell an unauthorized caller which books exist.
+            raise ContentMissing("asset not found") from exc
+        return self.content.read_asset(normalized)
+
+    def delete_asset(
+        self, authorization: AuthorizationContext, *, book_slug: str, filename: str
+    ) -> str:
+        book_slug = make_slug(book_slug, book_slug)
+        authorization.require_write(book_slug)
+        return self.content.delete_asset(book_slug, filename, authorization.user)
+
+    def list_assets(self, authorization: AuthorizationContext, book_slug: str) -> list[str]:
+        try:
+            book = authorization.require_read(make_slug(book_slug, book_slug))
+        except AccessDenied as exc:
+            raise ContentMissing("book not found") from exc
+        return self.content.list_assets(book)
 
     def page_history(self, authorization: AuthorizationContext, path: str) -> list[Revision]:
         path = authorization.require_read(path)
