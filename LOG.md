@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 22:16 UTC — Codex
+Integrated reviewed search API and ACL authorization coverage from the parallel
+batch. Bearer callers can now search through the shared ACL-first service with
+bounded pagination/errors; new tests verify no unreadable-result leak and
+route/service mutation boundaries.
+- Files: `app/ai_api.py`, `tests/test_ai_api.py`,
+  `tests/test_authorization_coverage.py`, `app/web.py`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 22:13 UTC — Codex
 Reviewed and integrated T10.4 backup round-trip coverage. The tests prove an
 identical bare-remote restore, verified recovery before divergent replacement,
@@ -231,15 +240,3 @@ and test suite passed before marking T4.2, T6.2, and T8.1 complete.
   `app/config.py`, `app/git_backend.py`, `app/main.py`, `app/search.py`,
   `tests/test_acl.py`, `tests/test_ai_api.py`, `tests/test_backup.py`,
   `tests/test_search.py`, `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-27 05:26 UTC — Codex
-Integrated a second parallel implementation batch: generation-wide API-token
-revocation with adversarial token tests, a safe last-good MkDocs export runner,
-and repository-wide write locking with optimistic blob conflicts and rollback
-coverage. All three agents ran isolated Compose deployments on ports
-18011–18013, verified `/healthz`, and preserved volumes on teardown; integrated
-lint and tests then passed.
-- Files: `app/ai_api.py`, `app/auth.py`, `app/config.py`, `app/content.py`,
-  `app/export.py`, `app/git_backend.py`, `tests/test_ai_api.py`,
-  `tests/test_export.py`, `tests/test_content_lifecycle.py`,
-  `plans/plan_initial.md`, `LOG.md`

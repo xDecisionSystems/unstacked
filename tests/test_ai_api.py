@@ -224,6 +224,109 @@ def test_password_exchange_issues_bearer_token(client):
     assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 200
 
 
+def test_search_endpoint_returns_only_acl_readable_results(client, app_env):
+    app, settings, _admin, admin_token = app_env
+    admin_headers = bearer(admin_token)
+    assert (
+        client.post("/api/ai/books", json={"title": "Public"}, headers=admin_headers).status_code
+        == 201
+    )
+    assert (
+        client.post("/api/ai/books", json={"title": "Secret"}, headers=admin_headers).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/ai/books/public/pages",
+            json={"title": "Guide", "markdown": "find-this", "tags": ["visible"]},
+            headers=admin_headers,
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/ai/books/secret/pages",
+            json={"title": "Hidden", "markdown": "find-this", "tags": ["private"]},
+            headers=admin_headers,
+        ).status_code
+        == 201
+    )
+    with Session(app.state.engine) as session:
+        reader = User(
+            username="search-reader",
+            email="search-reader@example.com",
+            password_hash=hash_password("reader password is sufficiently long"),
+            display_name="Search Reader",
+        )
+        group = Group(name="public-searchers")
+        session.add_all([reader, group])
+        session.commit()
+        session.refresh(reader)
+        session.refresh(group)
+        session.add_all(
+            [
+                UserGroup(user_id=reader.id, group_id=group.id),
+                Permission(group_id=group.id, path_prefix="public", can_read=True),
+            ]
+        )
+        session.commit()
+        reader_token = create_api_token(reader, settings)
+
+    response = client.get(
+        "/api/ai/search", params={"query": "find-this"}, headers=bearer(reader_token)
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "path": "public/guide.md",
+                "title": "Guide",
+                "tags": ["visible"],
+                "snippet": "find-this",
+            }
+        ],
+        "page": 1,
+        "page_size": 20,
+        "total": 1,
+        "truncated": False,
+    }
+
+
+def test_search_endpoint_authentication_pagination_and_input_bounds(client, app_env):
+    _app, settings, _admin, token = app_env
+    headers = bearer(token)
+    assert client.get("/api/ai/search", params={"query": "needle"}).status_code == 401
+    assert (
+        client.post("/api/ai/books", json={"title": "Guides"}, headers=headers).status_code == 201
+    )
+    for title in ("Alpha", "Beta"):
+        assert (
+            client.post(
+                "/api/ai/books/guides/pages",
+                json={"title": title, "markdown": "needle"},
+                headers=headers,
+            ).status_code
+            == 201
+        )
+
+    page = client.get(
+        "/api/ai/search", params={"query": "needle", "page": 2, "page_size": 1}, headers=headers
+    )
+    assert page.status_code == 200
+    assert page.json()["page"] == 2
+    assert page.json()["page_size"] == 1
+    assert page.json()["total"] == 2
+    assert [item["path"] for item in page.json()["items"]] == ["guides/beta.md"]
+
+    invalid = client.get(
+        "/api/ai/search",
+        params={"query": "x" * (settings.max_search_query_chars + 1)},
+        headers=headers,
+    )
+    assert invalid.status_code == 422
+    assert "length limit" in invalid.json()["detail"]
+
+
 def test_llm_md_is_available_from_the_app(client):
     response = client.get("/llm.md")
     assert response.status_code == 200

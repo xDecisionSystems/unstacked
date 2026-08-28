@@ -22,6 +22,7 @@ from app.auth import authenticate, client_identifier, create_api_token, get_curr
 from app.content import ContentError, ContentExists, ContentMissing, CreatedContent, StoredAsset
 from app.models import User
 from app.paths import UnsafePath, make_slug, normalize_relative_path
+from app.search import SearchError, SearchTimeout
 
 router = APIRouter(prefix="/api", tags=["AI content"])
 
@@ -158,6 +159,21 @@ class DeletedAssetResponse(BaseModel):
     commit: str
 
 
+class SearchResultResponse(BaseModel):
+    path: str
+    title: str
+    tags: list[str]
+    snippet: str
+
+
+class SearchPageResponse(BaseModel):
+    items: list[SearchResultResponse]
+    page: int
+    page_size: int
+    total: int
+    truncated: bool
+
+
 def _created(value: CreatedContent) -> CreatedResponse:
     return CreatedResponse(**value.__dict__)
 
@@ -232,6 +248,45 @@ def revoke_api_tokens(
 def get_tree(request: Request, user: Annotated[User, Depends(get_current_user)]):
     with Session(request.app.state.engine) as session:
         return {"books": request.app.state.ai_service.tree(_authorization(request, session, user))}
+
+
+@router.get("/ai/search", response_model=SearchPageResponse)
+def search_content(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    query: str = Query(),
+    page: int = Query(1),
+    page_size: int | None = Query(None),
+) -> SearchPageResponse:
+    """Search content through the shared, ACL-filtering service contract."""
+
+    try:
+        with Session(request.app.state.engine) as session:
+            result = request.app.state.ai_service.search(
+                _authorization(request, session, user),
+                query,
+                page=page,
+                page_size=page_size,
+            )
+    except SearchTimeout as exc:
+        raise HTTPException(status.HTTP_408_REQUEST_TIMEOUT, "Search timed out") from exc
+    except SearchError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    return SearchPageResponse(
+        items=[
+            SearchResultResponse(
+                path=item.path,
+                title=item.title,
+                tags=list(item.tags),
+                snippet=item.snippet,
+            )
+            for item in result.items
+        ],
+        page=result.page,
+        page_size=result.page_size,
+        total=result.total,
+        truncated=result.truncated,
+    )
 
 
 @router.get("/ai/export")

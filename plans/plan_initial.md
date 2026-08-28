@@ -29,7 +29,7 @@ Confirmed scope (from user):
 
 The backend is substantially complete: scaffolding, schema/migrations, both auth transports (bearer tokens and cookie sessions, username-based login, forced password change on admin-issued credentials), path safety, the full content CRUD lifecycle (create/read/update/delete/move/rename, all through one locked git-mutation path), optimistic concurrency (blob-sha conflict detection), the ACL resolver plus its central enforcement (`AuthorizationContext`), the admin API (users/groups/grants/last-admin protection), pluggable/optional backup (runtime-editable git-remote target, debounced sync worker, manual backup/restore), static export, grep-based search, and the shared AI service behind the REST/OpenAPI surface. Real `mkdocs build --strict` runs are exercised in tests throughout, including after full lifecycle sequences (create → edit → move → rename → delete).
 
-Remaining: the web UI (T5.3–T5.5, including the browser form for the completed backup-config backend), search's own UI (T8.2), the MCP transport (T9.2), a few partial-completion notes (T1.3/T2.1/T9.3/T10.1), and documentation/round-trip-test polish (T10.4, T10.6).
+Remaining: the web UI (T5.5, including the browser form for the completed backup-config backend), search's own UI (T8.2), the MCP transport (T9.2), a few partial-completion notes (T1.3/T2.1/T9.3/T10.1), and documentation polish (T10.6).
 
 Per-task status is tracked with `[x]`/`[~]` markers below; a `[~]` task names what already exists so nobody rebuilds it.
 
@@ -446,7 +446,7 @@ MCP server exposing search/list/get/download and create-book/chapter/page tools 
 `sonnet` / `terra` · **M** · **high** · depends: T9.1, T1.3
 `/api/ai/*` endpoints with a provider-neutral OpenAPI schema for ACL-filtered tree/page/ZIP downloads and create-book/chapter/page operations; signed bearer-token auth, request/response limits, and rate limiting. Keep the REST contract provider-neutral even if a ChatGPT Action is the first client.
 **Done when:** the generated OpenAPI validates against the target action client; unauthenticated/expired/revoked calls fail; response limits are enforced; create operations produce one correctly authored Git commit; and REST/MCP authorization results match.
-**Remaining:** `app/ai_api.py` exposes auth, tree, content, export, history, diff, restore and create endpoints with bearer auth. Remaining: search endpoint, response size limits, rate limiting beyond login, and OpenAPI validation against a real action client.
+**Remaining:** `app/ai_api.py` exposes auth, tree, search, content, export, history, diff, restore and create endpoints with bearer auth. Remaining: response size limits, rate limiting beyond login, and OpenAPI validation against a real action client.
 
 ---
 
@@ -455,7 +455,7 @@ MCP server exposing search/list/get/download and create-book/chapter/page tools 
 #### [~] T10.1 — ACL & path-safety test suites
 `opus` / `sol` · **L** · **high** · depends: T4.2, T2.1
 Consolidate the task-level ACL/path tests into exhaustive security regression suites, including segment-aware matching, conflicting equal-depth rules, inactive users, ancestor visibility, Unicode/case behavior, URL decoding, symlinks, and route/service authorization coverage. Add property-based tests where they improve boundary coverage.
-**Remaining:** `tests/test_acl.py` (truth table) and `tests/test_paths.py` (adversarial) cover the current pure resolver and path boundary. Remaining: route/service authorization coverage (needs T4.2), and property-based boundary tests.
+**Remaining:** `tests/test_acl.py` (truth table), `tests/test_paths.py` (adversarial), and `tests/test_authorization_coverage.py` cover pure, route, and service boundaries. Remaining: property-based boundary tests.
 
 #### [x] T10.2 — Content round-trip integration test **[P]**
 `sonnet` / `terra` · **L** · **high** · depends: T2.3, T3.2, T4.2
