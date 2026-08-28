@@ -69,6 +69,36 @@ def new_navigation(title: str) -> Navigation:
     return Navigation({"title": title, "nav": ["*"]})
 
 
+def parse_navigation(text: str, *, source: str = ".pages") -> Navigation:
+    """Parse ``.pages`` text without performing filesystem I/O.
+
+    Content lifecycle operations use this boundary when their directory access
+    is confined to a descriptor rooted at ``docs/``.  ``source`` is only used
+    in operator-facing validation errors; it never identifies a path to read.
+    """
+
+    if not isinstance(text, str):
+        raise NavigationError(f"malformed navigation file {source}: expected text")
+    try:
+        parsed = yaml.load(text, Loader=_UniqueKeyLoader)
+    except (yaml.YAMLError, NavigationError) as exc:
+        raise NavigationError(f"malformed navigation file {source}: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise NavigationError(f"malformed navigation file {source}: top level must be a mapping")
+    if any(not isinstance(key, str) for key in parsed):
+        raise NavigationError(f"malformed navigation file {source}: keys must be strings")
+    _validate_values(source, parsed)
+    return Navigation(copy.deepcopy(parsed))
+
+
+def serialize_navigation(navigation: Navigation, *, source: str = ".pages") -> str:
+    """Validate and serialize navigation as UTF-8-safe YAML without I/O."""
+
+    values = copy.deepcopy(navigation.values)
+    _validate_values(source, values)
+    return yaml.safe_dump(values, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+
 def read_navigation(path: Path) -> Navigation:
     """Parse one existing ``.pages`` file without changing it on failure."""
 
@@ -76,26 +106,13 @@ def read_navigation(path: Path) -> Navigation:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise NavigationError(f"cannot read navigation file {path}: {exc.strerror}") from exc
-    try:
-        parsed = yaml.load(raw, Loader=_UniqueKeyLoader)
-    except (yaml.YAMLError, NavigationError) as exc:
-        raise NavigationError(f"malformed navigation file {path}: {exc}") from exc
-    if not isinstance(parsed, dict):
-        raise NavigationError(f"malformed navigation file {path}: top level must be a mapping")
-    if any(not isinstance(key, str) for key in parsed):
-        raise NavigationError(f"malformed navigation file {path}: keys must be strings")
-    _validate_values(path, parsed)
-    return Navigation(copy.deepcopy(parsed))
+    return parse_navigation(raw, source=str(path))
 
 
 def write_navigation(path: Path, navigation: Navigation) -> None:
     """Atomically replace a valid navigation file, retaining all its keys."""
 
-    values = copy.deepcopy(navigation.values)
-    _validate_values(path, values)
-    serialized = yaml.safe_dump(
-        values, allow_unicode=True, default_flow_style=False, sort_keys=False
-    )
+    serialized = serialize_navigation(navigation, source=str(path))
     _atomic_write(path, serialized)
 
 
@@ -159,16 +176,16 @@ def _validate_title(title: object) -> None:
         raise NavigationError("navigation title must be a non-empty string")
 
 
-def _validate_values(path: Path, values: dict[str, Any]) -> None:
+def _validate_values(source: str, values: dict[str, Any]) -> None:
     title = values.get("title")
     if title is not None:
         try:
             _validate_title(title)
         except NavigationError as exc:
-            raise NavigationError(f"malformed navigation file {path}: {exc}") from exc
+            raise NavigationError(f"malformed navigation file {source}: {exc}") from exc
     entries = values.get("nav")
     if entries is not None and not isinstance(entries, list):
-        raise NavigationError(f"malformed navigation file {path}: nav must be a list")
+        raise NavigationError(f"malformed navigation file {source}: nav must be a list")
 
 
 def _atomic_write(path: Path, text: str) -> None:

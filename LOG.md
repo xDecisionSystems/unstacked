@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 23:00 UTC — Codex
+Integrated the T2.1 foundations: descriptor-rooted confined tree operations
+reject symlink traversal for lifecycle primitives, and navigation now has pure
+parse/serialize helpers for confined callers.
+- Files: `app/paths.py`, `app/nav.py`, `tests/test_paths.py`,
+  `tests/test_nav.py`, `LOG.md`
+
 ## 2026-08-28 22:50 UTC — Codex
 Integrated T9.3 REST bounds: reject obviously oversized page JSON before any
 content write and cap Git diff responses by UTF-8 bytes, including historical

@@ -1,3 +1,4 @@
+import ctypes
 import os
 import re
 import stat
@@ -241,3 +242,225 @@ def unlink_confined(root: Path, relative: str) -> None:
             os.unlink(leaf, dir_fd=parent_fd)
     except (OSError, UnsafePath) as exc:
         raise UnsafePath("path is missing or unsafe") from exc
+
+
+def _rename_no_replace(
+    source_parent_fd: int,
+    source_leaf: str,
+    destination_parent_fd: int,
+    destination_leaf: str,
+) -> None:
+    """Atomically rename only when ``destination_leaf`` does not exist.
+
+    POSIX ``rename`` overwrites its destination, which is unsuitable for the
+    create-style content operations that use this primitive.  Linux provides
+    ``renameat2(..., RENAME_NOREPLACE)`` and Darwin provides the equivalent
+    descriptor-relative ``renameatx_np(..., RENAME_EXCL)``.  Do not replace
+    this with an exists-then-rename fallback: that reintroduces the race this
+    module exists to avoid.
+    """
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    if renameat2 is not None:
+        result = renameat2(
+            source_parent_fd,
+            os.fsencode(source_leaf),
+            destination_parent_fd,
+            os.fsencode(destination_leaf),
+            1,  # RENAME_NOREPLACE
+        )
+    else:
+        renameatx_np = getattr(libc, "renameatx_np", None)
+        if renameatx_np is None:
+            raise UnsafePath("atomic no-clobber rename is unavailable on this platform")
+        result = renameatx_np(
+            source_parent_fd,
+            os.fsencode(source_leaf),
+            destination_parent_fd,
+            os.fsencode(destination_leaf),
+            0x0004,  # RENAME_EXCL
+        )
+    if result != 0:
+        error = ctypes.get_errno()
+        if error == 17:  # EEXIST; avoiding a platform-specific errno import is intentional.
+            raise FileExistsError(destination_leaf)
+        raise OSError(error, os.strerror(error))
+
+
+class ConfinedTree:
+    """Descriptor-rooted, symlink-intolerant operations below one directory.
+
+    This is the mutation-facing counterpart to :func:`safe_join`.  A normal
+    ``Path`` captures a spelling, not the directory inode it was checked
+    against; every method here instead opens ancestors with ``O_NOFOLLOW`` and
+    performs the final operation through those descriptors.  It deliberately
+    accepts only the canonical relative names enforced by
+    :func:`normalize_relative_path`.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    @contextmanager
+    def _directory(self, relative: str | None = None) -> Iterator[int]:
+        """Yield an existing directory descriptor, never following a link."""
+
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        try:
+            current_fd = os.open(self.root, flags)
+        except OSError as exc:
+            raise UnsafePath("confined root is missing or unsafe") from exc
+        try:
+            if relative is not None:
+                for part in PurePosixPath(normalize_relative_path(relative)).parts:
+                    try:
+                        next_fd = os.open(part, flags, dir_fd=current_fd)
+                    except OSError as exc:
+                        raise UnsafePath("path contains an unsafe or missing directory") from exc
+                    os.close(current_fd)
+                    current_fd = next_fd
+            yield current_fd
+        finally:
+            os.close(current_fd)
+
+    def read_bytes(self, relative: str, *, max_bytes: int | None = None) -> bytes:
+        return read_confined_bytes(self.root, relative, max_bytes=max_bytes)
+
+    def read_text(self, relative: str, *, max_bytes: int | None = None) -> str:
+        return read_confined_text(self.root, relative, max_bytes=max_bytes)
+
+    def write_bytes(self, relative: str, content: bytes, *, overwrite: bool = False) -> None:
+        atomic_write_confined_bytes(self.root, relative, content, overwrite=overwrite)
+
+    def write_text(self, relative: str, content: str, *, overwrite: bool = False) -> None:
+        atomic_write_confined(self.root, relative, content, overwrite=overwrite)
+
+    def unlink(self, relative: str) -> None:
+        """Remove a regular file; a final symlink is rejected, not followed."""
+
+        try:
+            with _confined_parent(self.root, relative) as (parent_fd, leaf):
+                info = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+                if not stat.S_ISREG(info.st_mode):
+                    raise UnsafePath("path is not a regular file")
+                os.unlink(leaf, dir_fd=parent_fd)
+                os.fsync(parent_fd)
+        except (OSError, UnsafePath) as exc:
+            if isinstance(exc, UnsafePath):
+                raise
+            raise UnsafePath("path is missing or unsafe") from exc
+
+    def mkdir(self, relative: str, *, parents: bool = False, exist_ok: bool = False) -> None:
+        """Create a directory without following any existing ancestor link."""
+
+        parts = PurePosixPath(normalize_relative_path(relative)).parts
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        try:
+            current_fd = os.open(self.root, flags)
+            try:
+                for index, part in enumerate(parts):
+                    final = index == len(parts) - 1
+                    try:
+                        next_fd = os.open(part, flags, dir_fd=current_fd)
+                    except FileNotFoundError:
+                        if not parents and not final:
+                            raise UnsafePath("parent directory is missing")
+                        os.mkdir(part, 0o755, dir_fd=current_fd)
+                        next_fd = os.open(part, flags, dir_fd=current_fd)
+                    else:
+                        if final and not exist_ok:
+                            raise FileExistsError(relative)
+                    os.close(current_fd)
+                    current_fd = next_fd
+                os.fsync(current_fd)
+            finally:
+                os.close(current_fd)
+        except FileExistsError:
+            raise
+        except UnsafePath:
+            raise
+        except OSError as exc:
+            raise UnsafePath("path is missing or unsafe") from exc
+
+    def rename(self, source: str, destination: str, *, overwrite: bool = False) -> None:
+        """Rename an entry inside the tree without resolving either leaf link."""
+
+        try:
+            with _confined_parent(self.root, source) as (source_fd, source_leaf):
+                source_info = os.stat(source_leaf, dir_fd=source_fd, follow_symlinks=False)
+                if stat.S_ISLNK(source_info.st_mode):
+                    raise UnsafePath("source is a symlink")
+                with _confined_parent(self.root, destination) as (destination_fd, destination_leaf):
+                    if overwrite:
+                        os.replace(
+                            source_leaf,
+                            destination_leaf,
+                            src_dir_fd=source_fd,
+                            dst_dir_fd=destination_fd,
+                        )
+                    else:
+                        _rename_no_replace(source_fd, source_leaf, destination_fd, destination_leaf)
+                    os.fsync(source_fd)
+                    if destination_fd != source_fd:
+                        os.fsync(destination_fd)
+        except FileExistsError:
+            raise
+        except UnsafePath:
+            raise
+        except OSError as exc:
+            raise UnsafePath("path is missing or unsafe") from exc
+
+    def list(self, relative: str | None = None) -> list[str]:
+        """List direct children, rejecting symlinks and non-file/non-directory entries."""
+
+        try:
+            with self._directory(relative) as directory_fd:
+                names = sorted(os.listdir(directory_fd))
+                for name in names:
+                    info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                    if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
+                        raise UnsafePath("directory contains an unsafe entry")
+                return names
+        except UnsafePath:
+            raise
+        except OSError as exc:
+            raise UnsafePath("path is missing or unsafe") from exc
+
+    def delete_tree(self, relative: str) -> None:
+        """Delete a directory tree, rejecting every symlink rather than traversing it."""
+
+        def remove_directory(directory_fd: int) -> None:
+            for name in os.listdir(directory_fd):
+                info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                if stat.S_ISREG(info.st_mode):
+                    os.unlink(name, dir_fd=directory_fd)
+                elif stat.S_ISDIR(info.st_mode):
+                    child_fd = os.open(
+                        name,
+                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                        dir_fd=directory_fd,
+                    )
+                    try:
+                        remove_directory(child_fd)
+                    finally:
+                        os.close(child_fd)
+                    os.rmdir(name, dir_fd=directory_fd)
+                else:
+                    raise UnsafePath("directory contains an unsafe entry")
+
+        try:
+            with _confined_parent(self.root, relative) as (parent_fd, leaf):
+                descriptor = os.open(
+                    leaf, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd
+                )
+                try:
+                    remove_directory(descriptor)
+                finally:
+                    os.close(descriptor)
+                os.rmdir(leaf, dir_fd=parent_fd)
+                os.fsync(parent_fd)
+        except UnsafePath:
+            raise
+        except OSError as exc:
+            raise UnsafePath("path is missing or unsafe") from exc

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.paths import (
+    ConfinedTree,
     UnsafePath,
     atomic_write_confined,
     make_slug,
@@ -177,6 +178,91 @@ def test_descriptor_create_does_not_clobber_a_concurrent_existing_name(tmp_path:
         atomic_write_confined(docs, "book/page.md", "second writer", overwrite=False)
 
     assert page.read_text(encoding="utf-8") == "first writer"
+
+
+def test_confined_tree_performs_regular_lifecycle_operations(tmp_path: Path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    tree = ConfinedTree(docs)
+
+    tree.mkdir("book/chapter", parents=True)
+    tree.write_text("book/chapter/page.md", "first")
+    assert tree.list("book") == ["chapter"]
+    assert tree.list("book/chapter") == ["page.md"]
+    tree.rename("book/chapter/page.md", "book/chapter/renamed.md")
+    assert tree.read_text("book/chapter/renamed.md") == "first"
+    tree.unlink("book/chapter/renamed.md")
+    tree.delete_tree("book")
+    assert not (docs / "book").exists()
+
+
+def test_confined_tree_write_and_rename_are_atomic_no_clobber(tmp_path: Path):
+    docs = tmp_path / "docs"
+    (docs / "book").mkdir(parents=True)
+    tree = ConfinedTree(docs)
+    tree.write_text("book/source.md", "source")
+    tree.write_text("book/destination.md", "destination")
+
+    with pytest.raises(FileExistsError):
+        tree.write_text("book/destination.md", "new")
+    with pytest.raises(FileExistsError):
+        tree.rename("book/source.md", "book/destination.md")
+
+    assert tree.read_text("book/source.md") == "source"
+    assert tree.read_text("book/destination.md") == "destination"
+
+
+@pytest.mark.parametrize(
+    "operation", ["read", "write", "unlink", "mkdir", "rename", "list", "delete"]
+)
+def test_confined_tree_rejects_symlinked_ancestors(tmp_path: Path, operation: str):
+    docs = tmp_path / "docs"
+    outside = tmp_path / "outside"
+    docs.mkdir()
+    outside.mkdir()
+    (docs / "book").symlink_to(outside, target_is_directory=True)
+    tree = ConfinedTree(docs)
+
+    with pytest.raises(UnsafePath):
+        if operation == "read":
+            tree.read_text("book/page.md")
+        elif operation == "write":
+            tree.write_text("book/page.md", "nope")
+        elif operation == "unlink":
+            tree.unlink("book/page.md")
+        elif operation == "mkdir":
+            tree.mkdir("book/chapter", parents=True)
+        elif operation == "rename":
+            tree.rename("book/page.md", "new.md")
+        elif operation == "list":
+            tree.list("book")
+        else:
+            tree.delete_tree("book")
+
+    assert list(outside.iterdir()) == []
+
+
+def test_confined_tree_rejects_final_symlinks_without_touching_targets(tmp_path: Path):
+    docs = tmp_path / "docs"
+    book = docs / "book"
+    docs.mkdir()
+    book.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("secret", encoding="utf-8")
+    (book / "page.md").symlink_to(outside)
+    tree = ConfinedTree(docs)
+
+    with pytest.raises(UnsafePath):
+        tree.unlink("book/page.md")
+    with pytest.raises(UnsafePath):
+        tree.rename("book/page.md", "book/other.md")
+    with pytest.raises(UnsafePath):
+        tree.list("book")
+    with pytest.raises(UnsafePath):
+        tree.delete_tree("book")
+
+    assert outside.read_text(encoding="utf-8") == "secret"
+    assert (book / "page.md").is_symlink()
 
 
 @pytest.mark.parametrize(

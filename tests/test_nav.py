@@ -3,13 +3,43 @@ from pathlib import Path
 import pytest
 
 from app.nav import (
+    Navigation,
     NavigationError,
     create_navigation,
+    parse_navigation,
     read_navigation,
     remove_stale_entry,
+    serialize_navigation,
     set_order,
     set_title,
 )
+
+
+def test_pure_parse_and_serialize_do_not_require_a_navigation_path():
+    navigation = parse_navigation(
+        "title: Operations\nnav:\n  - overview.md\ncollapse: true\n",
+        source="confined navigation",
+    )
+
+    assert navigation.values == {
+        "title": "Operations",
+        "nav": ["overview.md"],
+        "collapse": True,
+    }
+    assert parse_navigation(serialize_navigation(navigation)).values == navigation.values
+
+
+def test_pure_helpers_validate_and_identify_their_logical_source():
+    with pytest.raises(NavigationError, match="confined navigation: duplicate key"):
+        parse_navigation("title: One\ntitle: Two\n", source="confined navigation")
+
+    with pytest.raises(NavigationError, match="serialized navigation: nav must be a list"):
+        serialize_navigation(
+            # Navigation is intentionally a transparent container so callers
+            # cannot bypass validation simply by constructing it themselves.
+            Navigation({"nav": "not-a-list"}),
+            source="serialized navigation",
+        )
 
 
 def test_title_and_order_preserve_operator_added_supported_keys(tmp_path: Path):
