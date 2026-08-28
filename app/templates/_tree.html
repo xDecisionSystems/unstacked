@@ -3,7 +3,7 @@
 <ul class="pages">
   {% for page in pages %}
   <li>
-    <a href="/pages/{{ page.path }}"{% if current_path is defined and current_path == page.path %} class="active"{% endif %}>{{ page.label }}</a>
+    <a href="/pages/{{ page.path }}"{% if current_path is defined and current_path == page.path %} class="active"{% endif %}>{{ page.label }}</a>{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}
   </li>
   {% endfor %}
 </ul>

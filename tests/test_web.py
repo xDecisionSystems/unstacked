@@ -230,3 +230,144 @@ def test_web_routes_require_a_session(client):
 
     assert client.get("/tree", follow_redirects=False).status_code == 401
     assert client.get("/pages/alice-book/secret", follow_redirects=False).status_code == 401
+
+
+# --------------------------------------------------------------------------
+# Editor and browser mutations
+# --------------------------------------------------------------------------
+
+
+def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Handbook", "handbook", admin)
+    repository.create_page("handbook", "Leave", "leave", "Old body", [], False, admin)
+    _login(client, "admin")
+
+    editor = client.get("/pages/handbook/leave/edit")
+    assert editor.status_code == 200
+    assert "EasyMDE" in editor.text
+    assert "/pages/handbook/leave/preview" in editor.text
+    csrf_token = _csrf_from(editor.text)
+    blob_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
+
+    saved = client.post(
+        "/pages/handbook/leave/edit",
+        data={
+            "csrf_token": csrf_token,
+            "base_blob_sha": blob_sha,
+            "markdown": "# Updated\n\nNew body",
+            "tags": "hr, policy",
+            "draft": "on",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/pages/handbook/leave"
+    metadata, markdown, _raw = repository.read_page("handbook/leave.md")
+    assert markdown == "# Updated\n\nNew body"
+    assert metadata["tags"] == ["hr", "policy"]
+    assert metadata["draft"] is True
+    assert "Draft" in client.get("/tree").text
+    assert "not included in the published site" in client.get("/pages/handbook/leave").text
+
+    preview = client.post(
+        "/pages/handbook/leave/preview",
+        data={"csrf_token": csrf_token, "markdown": "# Rendered preview"},
+    )
+    assert preview.status_code == 200
+    assert "Rendered preview" in preview.json()["html"]
+
+
+def test_editor_rejects_a_stale_save_without_overwriting(app_env, client):
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Handbook", "handbook", admin)
+    repository.create_page("handbook", "Leave", "leave", "Original", [], False, admin)
+    _login(client, "admin")
+    editor = client.get("/pages/handbook/leave/edit")
+    csrf_token = _csrf_from(editor.text)
+    stale_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
+    repository.update_page(
+        "handbook/leave.md",
+        "Changed elsewhere",
+        [],
+        False,
+        admin,
+        base_blob_sha=repository.page_blob_sha("handbook/leave.md"),
+    )
+
+    response = client.post(
+        "/pages/handbook/leave/edit",
+        data={
+            "csrf_token": csrf_token,
+            "base_blob_sha": stale_sha,
+            "markdown": "Would overwrite",
+            "tags": "",
+        },
+    )
+    assert response.status_code == 409
+    assert "changed since you opened it" in response.text
+    assert repository.read_page("handbook/leave.md")[1] == "Changed elsewhere"
+
+
+def test_editor_preview_is_csrf_and_write_gated(app_env, client, content):
+    app, _settings, _admin, _token = app_env
+    reader = _make_user(app, "reader")
+    _grant(app, reader.id, "alice-book", group_name="reader-group")
+    _login(client, "reader")
+
+    denied = client.post("/pages/alice-book/secret/preview", data={"markdown": "# Nope"})
+    assert denied.status_code == 403
+    form = client.get("/pages/alice-book/secret/edit")
+    assert form.status_code == 404
+
+
+def test_browser_create_move_and_delete_use_the_existing_acl_rules(app_env, client):
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Source", "source", admin)
+    repository.create_book("Destination", "destination", admin)
+    _login(client, "admin")
+    manage = client.get("/manage")
+    csrf_token = _csrf_from(manage.text)
+    created = client.post(
+        "/pages/new",
+        data={
+            "csrf_token": csrf_token,
+            "parent": "source",
+            "title": "A page",
+            "markdown": "Body",
+            "tags": "",
+        },
+        follow_redirects=False,
+    )
+    assert created.headers["location"] == "/pages/source/a-page"
+
+    move_form = client.get("/pages/source/a-page/move")
+    moved = client.post(
+        "/pages/source/a-page/move",
+        data={
+            "csrf_token": _csrf_from(move_form.text),
+            "parent": "destination",
+            "slug": "moved-page",
+        },
+        follow_redirects=False,
+    )
+    assert moved.headers["location"] == "/pages/destination/moved-page"
+    page = client.get("/pages/destination/moved-page")
+    deleted = client.post(
+        "/pages/destination/moved-page/delete",
+        data={"csrf_token": _csrf_from(page.text)},
+        follow_redirects=False,
+    )
+    assert deleted.headers["location"] == "/tree"
+    assert not (repository.docs / "destination" / "moved-page.md").exists()
+
+
+def test_manage_content_is_admin_only_and_csrf_protected(app_env, client):
+    app, _settings, _admin, _token = app_env
+    _make_user(app, "editor")
+    _login(client, "editor")
+    assert client.get("/manage").status_code == 404
+    assert client.post("/manage/book", data={"title": "Nope"}).status_code == 403

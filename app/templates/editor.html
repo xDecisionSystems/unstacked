@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{% if editing_path %}Edit{% else %}New page{% endif %} · Unstacked{% endblock %}
+{% block content %}
+<h1>{% if editing_path %}Edit page{% else %}New page{% endif %}</h1>
+{% if error %}<p class="error-message">{{ error }}</p>{% endif %}
+<form class="editor-form" method="post" action="{% if editing_path %}/pages/{{ editing_path.removesuffix('.md') }}/edit{% else %}/pages/new{% endif %}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if editing_path %}<input type="hidden" name="base_blob_sha" value="{{ form.base_blob_sha }}">{% endif %}
+  <label>Parent path<input name="parent" required value="{{ form.parent }}" {% if editing_path %}readonly{% endif %}></label>
+  <label>Title<input name="title" value="{{ form.title }}" {% if editing_path %}readonly{% endif %}></label>
+  {% if not editing_path %}<label>URL slug (optional)<input name="slug" value="{{ form.slug or '' }}"></label>{% endif %}
+  <label>Tags (comma-separated)<input name="tags" value="{{ form.tags }}"></label>
+  <label class="checkbox"><input type="checkbox" name="draft" {% if form.draft %}checked{% endif %}> Draft — exclude from the published site</label>
+  <label>Markdown<textarea id="markdown-editor" name="markdown">{{ form.markdown }}</textarea></label>
+  <div class="form-actions"><button type="submit">Save</button>{% if editing_path %}<a class="button" href="/pages/{{ editing_path.removesuffix('.md') }}">Cancel</a>{% endif %}</div>
+</form>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<script>
+(() => {
+  const element = document.getElementById('markdown-editor');
+  if (!element || !window.EasyMDE) return;
+  const previewUrl = {% if editing_path %}"/pages/{{ editing_path.removesuffix('.md') }}/preview"{% else %}"/pages/preview"{% endif %};
+  new EasyMDE({element, spellChecker: false, previewRender(plainText, preview) {
+    const body = new URLSearchParams({csrf_token: {{ csrf_token|tojson }}, markdown: plainText, parent: document.querySelector('[name=parent]').value});
+    fetch(previewUrl, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body})
+      .then(r => r.ok ? r.json() : Promise.reject()).then(data => { preview.innerHTML = data.html; }).catch(() => { preview.textContent = 'Preview unavailable.'; });
+    return 'Rendering preview…';
+  }});
+})();
+</script>
+{% endblock %}

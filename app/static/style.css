@@ -201,3 +201,62 @@ a {
 .empty-state {
   color: var(--muted);
 }
+
+.draft-badge {
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  color: #774500;
+  background: #fff0c2;
+  font-size: 0.72rem;
+}
+
+.page-actions, .form-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 1rem;
+}
+
+.page-actions form { margin: 0; }
+
+button, .button {
+  display: inline-block;
+  padding: 0.42rem 0.65rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button.danger { background: var(--danger); border-color: var(--danger); }
+
+.editor-form, .manage-grid form { max-width: 760px; }
+
+.editor-form label, .manage-grid label {
+  display: block;
+  margin: 0.8rem 0;
+}
+
+.editor-form input, .manage-grid input, .editor-form textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+}
+
+.editor-form textarea {
+  min-height: 22rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.editor-form .checkbox input { display: inline; width: auto; margin-right: 0.4rem; }
+.manage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.25rem; }
+.manage-grid form { border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
+.manage-grid h2 { margin-top: 0; font-size: 1.05rem; }

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Manage content · Unstacked{% endblock %}
+{% block content %}
+<h1>Manage content</h1>
+{% if error %}<p class="error-message">{{ error }}</p>{% endif %}
+<p>Container changes are administrator-only because they can affect path-based permissions.</p>
+<div class="manage-grid">
+  <form method="post" action="/manage/book"><h2>New book</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Title<input name="title" required></label><label>Slug (optional)<input name="slug"></label><button>Create book</button></form>
+  <form method="post" action="/manage/chapter"><h2>New chapter</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Book slug<input name="book_slug" required></label><label>Title<input name="title" required></label><label>Slug (optional)<input name="slug"></label><button>Create chapter</button></form>
+  <form method="post" action="/manage/book/rename"><h2>Rename book URL</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Current book slug<input name="book_slug" required></label><label>New slug<input name="new_slug" required></label><button>Rename book</button></form>
+  <form method="post" action="/manage/chapter/rename"><h2>Rename chapter URL</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Book slug<input name="book_slug" required></label><label>Current chapter slug<input name="chapter_slug" required></label><label>New slug<input name="new_slug" required></label><button>Rename chapter</button></form>
+  <form method="post" action="/manage/book/delete" onsubmit="return confirm('Delete this book and all its pages? Git history will retain them.');"><h2>Delete book</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Book slug<input name="book_slug" required></label><button class="danger">Delete book</button></form>
+  <form method="post" action="/manage/chapter/delete" onsubmit="return confirm('Delete this chapter and all its pages? Git history will retain them.');"><h2>Delete chapter</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Book slug<input name="book_slug" required></label><label>Chapter slug<input name="chapter_slug" required></label><button class="danger">Delete chapter</button></form>
+</div>
+{% endblock %}

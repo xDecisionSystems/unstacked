@@ -332,10 +332,11 @@ first-password-change session cannot reach the tree, and two users with
 different grants see different trees on the same instance.
 **Note:** `app/web.py` + `app/templates/`. The `/auth/*` JSON routes in `app/web_auth.py` are reused directly (not reimplemented) — the browser-form login/logout/change-password handlers call those functions as plain Python with a `RedirectResponse` standing in for the `Response` they set the cookie on, so credential verification, CSRF, and cookie issuance stay in one place. Verified independently, not just via the report: constructed a book/page with a hostile title (`<script>…`) and confirmed Jinja2 autoescaping renders it inert in both the sidebar and the breadcrumb (only the pre-sanitized page `body` uses `|safe`); confirmed a logout POST without a CSRF token is genuinely rejected (403) and the session survives. `/pages/{path}` returns 404 identically for "doesn't exist" and "can't read it".
 
-#### T5.3 — Editor & save flow **[P]**
+#### [x] T5.3 — Editor & save flow
 `sonnet` / `terra` · **L** · **high** · depends: T5.2, T3.3
 EasyMDE editor, live preview via `render`, save posting the base SHA for conflict detection, create/rename/move/delete UI, and a **draft toggle** that sets `draft: true` in front matter, with a visible draft badge on the page and in the tree so nobody mistakes an unpublished page for a live one.
 **Done when:** an edit saves, commits, and re-renders; a stale save shows a conflict screen instead of overwriting; toggling draft is reflected in the badge and keeps the page out of the next build.
+**Note:** Browser routes in `app/web.py` use the existing `AIContentService` mutation methods, preserving ACL checks, Git commits, and optimistic blob-SHA conflict detection. EasyMDE uses the server's `MarkdownRenderer` preview route; create, move/slug rename, delete, and admin-only book/chapter management are server-rendered forms with CSRF protection. Drafts visibly badge both the page and tree. Focused web tests: 32 passing; ruff clean; production Compose healthy on port 18054.
 
 #### T5.4 — History UI **[P]**
 `sonnet` / `terra` · **M** · **medium** · depends: T3.4, T5.2

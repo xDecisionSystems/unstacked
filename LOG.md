@@ -10,6 +10,25 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 20:53 UTC — Codex
+Completed T5.3's server-rendered editor and content-management browser flow.
+The EasyMDE editor previews through the same sanitized Markdown renderer as
+page display, and saves use the existing ACL-aware content service with the
+loaded blob SHA, so a stale submission returns a conflict page rather than
+overwriting a newer Git commit. Added browser forms for page creation, moves/
+slug renames and deletion, plus admin-only book/chapter management; all
+state-changing forms require the session CSRF token. Drafts now have visible
+badges in both the page view and ACL-filtered tree.
+
+Focused web tests: 32 passing; ruff clean. Production Compose rebuilt and
+became healthy on port 18054; `/healthz` returned `{"status":"ok"}` and the
+stack was stopped without `-v`.
+- Files: `app/web.py`, `app/web_auth.py`, `app/templates/base.html`,
+  `app/templates/_tree.html`, `app/templates/page.html`,
+  `app/templates/editor.html`, `app/templates/move_page.html`,
+  `app/templates/manage.html`, `app/static/style.css`, `tests/test_web.py`,
+  `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 20:18 UTC — Codex
 T6.4 backend completed from the pushed WIP snapshot and merged with `--no-ff`.
 Preserved its typed JSON persistence, owner-only managed-token storage, admin
@@ -245,35 +264,3 @@ settled four-table scope intact; save immediately re-validates via
 the API-token screen's precedent) and referenced it from T5.5's admin UI
 card. Plan is now 40 tasks (was 39).
 - Files: `plans/plan_initial.md`, `AGENTS.md`, `LOG.md`
-
-## 2026-08-27 04:33 UTC — Claude Code
-T6.1 (GitHub remote credential handling) landed — the last of the three
-parallel subagents, and the most security-sensitive: HTTPS PAT via a
-generated repo-local credential helper (never the URL, `.git/config`, or
-a process argument), SSH via a pinned repo-local `core.sshCommand`, error
-scrubbing, force-push made structurally impossible. Branched before the
-T1.2/T2.3 merges, so real conflicts this time (config.py: both added
-fields at the same insertion point; content.py: an import line) —
-resolved on a scratch branch, verified `git_backend.py`'s three-way
-auto-merge actually combined T2.3's commit_paths fix with this task's
-push/fetch/configure_remote rewrite correctly (it did) before finalizing.
-
-Didn't stop at reading the code and running its tests: configured a real
-local repo with a fake token file and checked by hand — `.git/config` and
-`git remote -v` never contain the token value, the helper file is
-owner-only (0600), and `git credential fill` retrieves the token
-correctly through git's real credential protocol. That's the strongest
-verification of the three merges today, matching the stakes.
-
-Marked T6.1 `[x]` with one honest caveat carried into the plan: "verified
-private" is an operator affirmation, not a live GitHub API check — nothing
-in this codebase makes real network calls, so that's a documented
-interpretation, not a gap I found. Real coverage gaps needing an actual
-GitHub account (SSH host-key enforcement, a live authenticated push) are
-also recorded rather than papered over. Full suite 200 passing, ruff
-clean. All three subagents from this dispatch are now merged; cleaned up
-the last worktree.
-- Files: `app/config.py`, `app/content.py`, `app/git_backend.py`,
-  `docker-compose.yaml`, `.env.example`, `tests/test_config.py`,
-  `tests/test_git_backend.py` (merged from subagent, conflicts resolved
-  by me); `plans/plan_initial.md`, `LOG.md`

@@ -182,7 +182,7 @@ def require_normal_web_user(
     return user
 
 
-async def _csrf_from_form(request: Request) -> str | None:
+async def _csrf_from_form(request: Request, *, max_bytes: int = MAX_FORM_BYTES) -> str | None:
     """Pull the token out of a urlencoded body without Starlette's form parser.
 
     HTML forms cannot set headers, so the field has to be accepted, but
@@ -193,12 +193,12 @@ async def _csrf_from_form(request: Request) -> str | None:
     if not request.headers.get("content-type", "").startswith(FORM_CONTENT_TYPE):
         return None
     try:
-        if int(request.headers.get("content-length", "0")) > MAX_FORM_BYTES:
+        if int(request.headers.get("content-length", "0")) > max_bytes:
             return None
     except ValueError:
         return None
     body = await request.body()
-    if len(body) > MAX_FORM_BYTES:
+    if len(body) > max_bytes:
         return None
     for field, value in parse_qsl(body.decode("utf-8", "replace"), keep_blank_values=True):
         if field == CSRF_FORM_FIELD:
@@ -217,7 +217,14 @@ async def require_csrf(request: Request) -> None:
     if request.method.upper() in SAFE_METHODS:
         return
     payload = _read_session_cookie(request)
-    supplied = request.headers.get(CSRF_HEADER_NAME) or await _csrf_from_form(request)
+    # Most forms are tiny.  The page editor is deliberately allowed to carry
+    # one configured-size Markdown document, though, so the CSRF parser must
+    # not reject a valid save before the content layer can apply its own page
+    # size limit.  This remains a finite, settings-controlled buffer.
+    editor_form_limit = request.app.state.settings.max_page_bytes + 16_384
+    supplied = request.headers.get(CSRF_HEADER_NAME) or await _csrf_from_form(
+        request, max_bytes=max(MAX_FORM_BYTES, editor_form_limit)
+    )
     if not supplied:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "CSRF token missing")
     settings: Settings = request.app.state.settings
@@ -314,9 +321,10 @@ def change_password(
 
     with Session(request.app.state.engine) as session:
         persisted = session.get(User, user.id)
-        if persisted is None or authenticate(
-            session, user.username, payload.current_password
-        ) is None:
+        if (
+            persisted is None
+            or authenticate(session, user.username, payload.current_password) is None
+        ):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect")
         persisted.password_hash = hash_password(payload.new_password)
         persisted.must_change_password = False

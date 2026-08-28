@@ -27,12 +27,12 @@ from typing import Annotated
 from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 
-from app.acl import AuthorizationContext
-from app.content import ContentMissing
+from app.acl import AccessDenied, AuthorizationContext
+from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
 from app.models import User
 from app.nav import NavigationError, read_navigation
 from app.paths import UnsafePath
@@ -55,9 +55,10 @@ router = APIRouter(tags=["Web UI"])
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+EDITOR_FORM_OVERHEAD = 16_384
 
 
-async def _read_form(request: Request) -> dict[str, str]:
+async def _read_form(request: Request, *, max_bytes: int = MAX_FORM_BYTES) -> dict[str, str]:
     """Parse a urlencoded form body without requiring ``python-multipart``.
 
     Mirrors ``app.web_auth._csrf_from_form``: Starlette's ``request.form()``
@@ -70,7 +71,7 @@ async def _read_form(request: Request) -> dict[str, str]:
     if not request.headers.get("content-type", "").startswith(FORM_CONTENT_TYPE):
         return {}
     body = await request.body()
-    if len(body) > MAX_FORM_BYTES:
+    if len(body) > max_bytes:
         return {}
     return dict(parse_qsl(body.decode("utf-8", "replace"), keep_blank_values=True))
 
@@ -104,12 +105,20 @@ def _container_title(docs: Path, *parts: str) -> str:
     return _slug_title(parts[-1])
 
 
-def _page_view(path: str) -> dict[str, str]:
+def _page_view(content, path: str) -> dict[str, str | bool]:
     slug = path.rsplit("/", 1)[-1].removesuffix(".md")
-    return {"path": path.removesuffix(".md"), "label": _slug_title(slug)}
+    try:
+        metadata, _markdown, _raw = content.read_page(path)
+        draft = bool(metadata.get("draft"))
+        label = metadata.get("title") or _slug_title(slug)
+    except (ContentError, UnsafePath):
+        # A hand-edited broken page must not make every authenticated view
+        # fail.  The page route will present the actual error when opened.
+        draft, label = False, _slug_title(slug)
+    return {"path": path.removesuffix(".md"), "label": label, "draft": draft}
 
 
-def _tree_view_model(docs: Path, raw_tree: list[dict]) -> list[dict]:
+def _tree_view_model(content, raw_tree: list[dict]) -> list[dict]:
     """Turn ``AIContentService.tree()``'s raw dicts into a display-ready shape.
 
     Container titles come from each book/chapter's ``.pages`` file rather
@@ -123,15 +132,15 @@ def _tree_view_model(docs: Path, raw_tree: list[dict]) -> list[dict]:
     for book in raw_tree:
         chapters = [
             {
-                "title": _container_title(docs, book["slug"], chapter["slug"]),
-                "pages": [_page_view(p) for p in chapter["pages"]],
+                "title": _container_title(content.docs, book["slug"], chapter["slug"]),
+                "pages": [_page_view(content, p) for p in chapter["pages"]],
             }
             for chapter in book.get("chapters", [])
         ]
         books.append(
             {
-                "title": _container_title(docs, book["slug"]),
-                "pages": [_page_view(p) for p in book["pages"]],
+                "title": _container_title(content.docs, book["slug"]),
+                "pages": [_page_view(content, p) for p in book["pages"]],
                 "chapters": chapters,
             }
         )
@@ -156,7 +165,8 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
         "request": request,
         "current_user": user,
         "csrf_token": read_session(request, user).csrf_token,
-        "tree": _tree_view_model(content.docs, raw_tree),
+        "tree": _tree_view_model(content, raw_tree),
+        "is_admin": user.is_admin,
     }
 
 
@@ -283,6 +293,383 @@ def tree_view(
     return templates.TemplateResponse(request, "tree.html", context)
 
 
+def _tags(value: str) -> list[str]:
+    """Parse the compact comma-separated field used by the HTML editor."""
+
+    tags = [tag.strip() for tag in value.split(",") if tag.strip()]
+    if len(tags) > 100 or any(len(tag) > 100 for tag in tags):
+        raise ValueError("Use at most 100 tags of 100 characters each")
+    return tags
+
+
+def _web_error(exc: Exception) -> str:
+    if isinstance(exc, ContentConflict):
+        return "This page changed since you opened it. Reload it before saving."
+    if isinstance(exc, ContentExists):
+        return "That location is already in use."
+    if isinstance(exc, AccessDenied):
+        return "That content does not exist, or you do not have access to it."
+    if isinstance(exc, (ContentError, UnsafePath, ValueError)):
+        return str(exc) or "The requested change is not valid."
+    return "The requested change could not be completed."
+
+
+def _editor_context(
+    request: Request,
+    session: Session,
+    user: User,
+    *,
+    path: str | None = None,
+    form: dict[str, str] | None = None,
+    error: str | None = None,
+    status_code: int = 200,
+) -> Response:
+    context = _base_context(request, session, user)
+    content = request.app.state.content
+    if path is not None and form is None:
+        authorization = _authorization(session, user)
+        metadata, markdown, _raw = request.app.state.ai_service.get_page(authorization, path)
+        form = {
+            "title": str(metadata.get("title") or _slug_title(path.rsplit("/", 1)[-1])),
+            "markdown": markdown,
+            "tags": ", ".join(str(tag) for tag in metadata.get("tags", [])),
+            "draft": "on" if metadata.get("draft") else "",
+            "base_blob_sha": content.page_blob_sha(path),
+            "parent": path.rsplit("/", 1)[0],
+        }
+    context.update({"form": form or {}, "error": error, "editing_path": path})
+    return templates.TemplateResponse(request, "editor.html", context, status_code=status_code)
+
+
+@router.get("/pages/{page_path:path}/edit", response_class=HTMLResponse, include_in_schema=False)
+def edit_page(
+    request: Request,
+    page_path: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_write(target)
+            return _editor_context(request, session, user, path=target)
+        except (AccessDenied, ContentError, UnsafePath):
+            context = _base_context(request, session, user)
+            return templates.TemplateResponse(request, "404.html", context, status_code=404)
+
+
+@router.post(
+    "/pages/{page_path:path}/edit", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+async def save_page(
+    request: Request,
+    page_path: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    form = await _read_form(
+        request, max_bytes=request.app.state.settings.max_page_bytes + EDITOR_FORM_OVERHEAD
+    )
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        try:
+            request.app.state.ai_service.update_page(
+                _authorization(session, user),
+                target,
+                form.get("markdown", ""),
+                _tags(form.get("tags", "")),
+                form.get("draft") == "on",
+                base_blob_sha=form.get("base_blob_sha", ""),
+            )
+        except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
+            return _editor_context(
+                request,
+                session,
+                user,
+                path=target,
+                form=form,
+                error=_web_error(exc),
+                status_code=409 if isinstance(exc, ContentConflict) else 422,
+            )
+    return RedirectResponse(f"/pages/{target.removesuffix('.md')}", status_code=303)
+
+
+@router.post(
+    "/pages/{page_path:path}/preview", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+async def preview_page(
+    request: Request,
+    page_path: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    form = await _read_form(
+        request, max_bytes=request.app.state.settings.max_page_bytes + EDITOR_FORM_OVERHEAD
+    )
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_write(target)
+            html = MarkdownRenderer(request.app.state.content.root).render(
+                target, form.get("markdown", "")
+            )
+        except (AccessDenied, UnsafePath):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found") from None
+        except RenderConfigurationError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "Preview is unavailable"
+            ) from exc
+    return JSONResponse({"html": html})
+
+
+@router.post("/pages/preview", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def preview_new_page(
+    request: Request,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    """Render an unsaved page in a writable parent with the normal renderer."""
+
+    form = await _read_form(
+        request, max_bytes=request.app.state.settings.max_page_bytes + EDITOR_FORM_OVERHEAD
+    )
+    with Session(request.app.state.engine) as session:
+        try:
+            parent = _authorization(session, user).require_write(form.get("parent", ""))
+            html = MarkdownRenderer(request.app.state.content.root).render(
+                f"{parent}/preview.md", form.get("markdown", "")
+            )
+        except (AccessDenied, UnsafePath):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found") from None
+        except RenderConfigurationError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "Preview is unavailable"
+            ) from exc
+    return JSONResponse({"html": html})
+
+
+@router.get("/pages/new", response_class=HTMLResponse, include_in_schema=False)
+def new_page(
+    request: Request, parent: str, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    with Session(request.app.state.engine) as session:
+        try:
+            parent = _authorization(session, user).require_write(parent)
+        except (AccessDenied, UnsafePath):
+            context = _base_context(request, session, user)
+            return templates.TemplateResponse(request, "404.html", context, status_code=404)
+        return _editor_context(
+            request,
+            session,
+            user,
+            form={"title": "", "markdown": "", "tags": "", "draft": "", "parent": parent},
+        )
+
+
+@router.post("/pages/new", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def create_page_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(
+        request, max_bytes=request.app.state.settings.max_page_bytes + EDITOR_FORM_OVERHEAD
+    )
+    with Session(request.app.state.engine) as session:
+        try:
+            created = request.app.state.ai_service.create_page(
+                _authorization(session, user),
+                parent=form.get("parent", ""),
+                title=form.get("title", ""),
+                slug=form.get("slug") or None,
+                markdown=form.get("markdown", ""),
+                tags=_tags(form.get("tags", "")),
+                draft=form.get("draft") == "on",
+            )
+        except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
+            return _editor_context(
+                request, session, user, form=form, error=_web_error(exc), status_code=422
+            )
+    return RedirectResponse(f"/pages/{created.path.removesuffix('.md')}", status_code=303)
+
+
+@router.get("/pages/{page_path:path}/move", response_class=HTMLResponse, include_in_schema=False)
+def move_page_form(
+    request: Request, page_path: str, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_admin()
+            _authorization(session, user).require_ungranted_subtree(target)
+        except (AccessDenied, UnsafePath):
+            context = _base_context(request, session, user)
+            return templates.TemplateResponse(request, "404.html", context, status_code=404)
+        context = _base_context(request, session, user)
+        context.update({"moving_path": target.removesuffix(".md"), "error": None})
+        return templates.TemplateResponse(request, "move_page.html", context)
+
+
+@router.post(
+    "/pages/{page_path:path}/move", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+async def move_page_submit(
+    request: Request, page_path: str, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        try:
+            moved = request.app.state.ai_service.move_page(
+                _authorization(session, user),
+                target,
+                form.get("parent") or None,
+                form.get("slug") or None,
+            )
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            context = _base_context(request, session, user)
+            context.update({"moving_path": target.removesuffix(".md"), "error": _web_error(exc)})
+            return templates.TemplateResponse(request, "move_page.html", context, status_code=422)
+    return RedirectResponse(f"/pages/{moved.path.removesuffix('.md')}", status_code=303)
+
+
+@router.post(
+    "/pages/{page_path:path}/delete", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+def delete_page_submit(
+    request: Request, page_path: str, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        try:
+            request.app.state.ai_service.delete_page(_authorization(session, user), target)
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            context = _base_context(request, session, user)
+            context.update({"error": _web_error(exc)})
+            return templates.TemplateResponse(request, "page_error.html", context, status_code=422)
+    return RedirectResponse("/tree", status_code=303)
+
+
+def _manage_error_response(
+    request: Request, session: Session, user: User, exc: Exception
+) -> Response:
+    context = _base_context(request, session, user)
+    context.update({"error": _web_error(exc)})
+    return templates.TemplateResponse(request, "manage.html", context, status_code=422)
+
+
+@router.get("/manage", response_class=HTMLResponse, include_in_schema=False)
+def manage_content(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_admin()
+        except AccessDenied:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found") from None
+        context = _base_context(request, session, user)
+    context.update({"error": None})
+    return templates.TemplateResponse(request, "manage.html", context)
+
+
+@router.post("/manage/book", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def create_book_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            created = request.app.state.ai_service.create_book(
+                _authorization(session, user),
+                title=form.get("title", ""),
+                slug=form.get("slug") or None,
+            )
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse(f"/pages/new?parent={created.path}", status_code=303)
+
+
+@router.post("/manage/chapter", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def create_chapter_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            created = request.app.state.ai_service.create_chapter(
+                _authorization(session, user),
+                book_slug=form.get("book_slug", ""),
+                title=form.get("title", ""),
+                slug=form.get("slug") or None,
+            )
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse(f"/pages/new?parent={created.path}", status_code=303)
+
+
+@router.post("/manage/book/rename", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def rename_book_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            moved = request.app.state.ai_service.rename_book(
+                _authorization(session, user), form.get("book_slug", ""), form.get("new_slug", "")
+            )
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse(f"/pages/new?parent={moved.path}", status_code=303)
+
+
+@router.post(
+    "/manage/chapter/rename", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+async def rename_chapter_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            moved = request.app.state.ai_service.rename_chapter(
+                _authorization(session, user),
+                form.get("book_slug", ""),
+                form.get("chapter_slug", ""),
+                form.get("new_slug", ""),
+            )
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse(f"/pages/new?parent={moved.path}", status_code=303)
+
+
+@router.post("/manage/book/delete", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def delete_book_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            request.app.state.ai_service.delete_book(
+                _authorization(session, user), form.get("book_slug", "")
+            )
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse("/tree", status_code=303)
+
+
+@router.post(
+    "/manage/chapter/delete", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+async def delete_chapter_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            request.app.state.ai_service.delete_chapter(
+                _authorization(session, user),
+                form.get("book_slug", ""),
+                form.get("chapter_slug", ""),
+            )
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse("/tree", status_code=303)
+
+
 @router.get("/pages/{page_path:path}", response_class=HTMLResponse, include_in_schema=False)
 def page_view(
     request: Request,
@@ -312,9 +699,7 @@ def page_view(
                     "configuration.",
                 }
             )
-            return templates.TemplateResponse(
-                request, "page_error.html", context, status_code=500
-            )
+            return templates.TemplateResponse(request, "page_error.html", context, status_code=500)
         context = _base_context(request, session, user)
         context.update(
             {
