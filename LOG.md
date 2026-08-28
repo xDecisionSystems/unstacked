@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-28 23:10 UTC — Codex
+Added a bounded, lock-protected per-user throttle for authenticated AI content
+requests and exhaustive finite-domain ACL regression coverage. Token rotation
+shares a user budget while users behind one proxy remain isolated.
+- Files: `app/ai_api.py`, `app/config.py`, `tests/test_ai_api.py`,
+  `tests/test_acl_properties.py`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 23:07 UTC — Codex
 Extended the T2.1 descriptor-confined migration to existing-page updates and
 page/container retitles. Navigation control-file reads, writes, and rollback
@@ -128,31 +135,3 @@ stack was stopped without `-v`.
   `app/templates/editor.html`, `app/templates/move_page.html`,
   `app/templates/manage.html`, `app/static/style.css`, `tests/test_web.py`,
   `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-28 20:18 UTC — Codex
-T6.4 backend completed from the pushed WIP snapshot and merged with `--no-ff`.
-Preserved its typed JSON persistence, owner-only managed-token storage, admin
-routes, tombstone precedence, and runtime worker/manual-service wiring, then
-finished and independently reviewed the security/transaction contracts.
-
-Review found two material gaps: the claimed immediate validation never
-contacted the target, and failure rollback re-called `configure_remote`, whose
-intentional no-op for "no target" left the refused URL/auth wiring in
-`.git/config`. Saving now performs `git ls-remote` and a non-mutating dry-run
-push, catching reachability, auth/write permission, and incompatible history
-before persistence. Git config, credential-helper bytes/mode, managed-token
-files, and token environment state are restored byte-exactly on update/clear
-failure, including preservation of an operator-owned origin. Status exposes
-credential kind but never credential values or key/token paths; rejected URLs
-and validation bodies cannot echo embedded credentials. A broken persisted
-credential is reported to admins but cannot block app startup.
-
-Added 12 runtime-config tests plus a Git probe test. Full suite 370 passing,
-focused backup/Git suite 58 passing, ruff clean. Production Compose rebuilt,
-became healthy, returned `{"status":"ok"}` on port 18053, and confirmed the
-record path `/app/data/backup_config.json`; stopped without `-v`.
-- Files: `.env.example`, `README.md`, `app/admin_api.py`, `app/backup_api.py`,
-  `app/backup_config.py`, `app/backup_runtime.py`, `app/config.py`,
-  `app/content.py`, `app/git_backend.py`, `app/main.py`, `docker-compose.yaml`,
-  `tests/conftest.py`, `tests/test_backup_config.py`,
-  `tests/test_git_backend.py`, `plans/plan_initial.md`, `LOG.md`

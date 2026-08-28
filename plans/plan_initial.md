@@ -454,10 +454,10 @@ MCP server exposing search/list/get/download and create-book/chapter/page tools 
 
 ### Phase 10 — Testing, CI, docs
 
-#### [~] T10.1 — ACL & path-safety test suites
+#### [x] T10.1 — ACL & path-safety test suites
 `opus` / `sol` · **L** · **high** · depends: T4.2, T2.1
 Consolidate the task-level ACL/path tests into exhaustive security regression suites, including segment-aware matching, conflicting equal-depth rules, inactive users, ancestor visibility, Unicode/case behavior, URL decoding, symlinks, and route/service authorization coverage. Add property-based tests where they improve boundary coverage.
-**Remaining:** `tests/test_acl.py` (truth table), `tests/test_paths.py` (adversarial), and `tests/test_authorization_coverage.py` cover pure, route, and service boundaries. Remaining: property-based boundary tests.
+**Note:** `tests/test_acl.py` (truth table), `tests/test_paths.py` (adversarial), and `tests/test_authorization_coverage.py` cover pure, route, and service boundaries. `tests/test_acl_properties.py` exhaustively checks finite specificity, equal-depth tie, and container-visibility domains against an independent oracle.
 
 #### [x] T10.2 — Content round-trip integration test **[P]**
 `sonnet` / `terra` · **L** · **high** · depends: T2.3, T3.2, T4.2

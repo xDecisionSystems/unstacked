@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     backup_sync_debounce_seconds: float = 10.0
     backup_sync_max_backoff_seconds: float = 300.0
     login_attempts_per_minute: int = 5
+    # Authenticated content operations can be substantially more expensive
+    # than token exchange (Git, search, or archive creation).  Keep their
+    # throttle separate from the IP-and-username login limiter: an API token
+    # identifies a principal, even when many principals share a proxy.
+    ai_requests_per_minute: int = 120
     # Number of trusted reverse proxies in front of the app.  0 means the
     # socket peer is the client; behind a proxy this must be set or every
     # client shares one rate-limit bucket.
@@ -145,6 +150,8 @@ class Settings(BaseSettings):
             raise ValueError("session lifetime must be at least 60 seconds")
         if self.login_attempts_per_minute < 1:
             raise ValueError("login rate limit must be positive")
+        if self.ai_requests_per_minute < 1:
+            raise ValueError("AI API rate limit must be positive")
         if self.trusted_proxy_hops < 0:
             raise ValueError("trusted proxy hops cannot be negative")
         if not self.mkdocs_executable or "\x00" in self.mkdocs_executable:

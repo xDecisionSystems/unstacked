@@ -1,4 +1,7 @@
 import re
+from collections import defaultdict, deque
+from threading import Lock
+from time import monotonic
 from typing import Annotated
 from urllib.parse import quote
 
@@ -52,6 +55,77 @@ MAX_PAGE_MARKDOWN_CHARS = 2_000_000
 # room for file headers and context, but never stream an unbounded Git result
 # into an API response.
 DIFF_RESPONSE_OVERHEAD_BYTES = 65_536
+
+
+class AIUserRateLimiter:
+    """Bounded in-process throttle for authenticated AI content requests.
+
+    The key is a persisted user id, never a bearer token or client IP.  Token
+    rotation therefore cannot escape the limit, and users behind one proxy do
+    not consume each other's budget.  A lock covers both housekeeping and the
+    check/record operation so simultaneous requests cannot pass the same last
+    available slot.
+    """
+
+    def __init__(self, requests: int, window_seconds: int = 60, max_keys: int = 10_000):
+        self.requests = requests
+        self.window_seconds = window_seconds
+        self.max_keys = max_keys
+        self._requests: dict[int, deque[float]] = defaultdict(deque)
+        self._lock = Lock()
+
+    def check(self, user_id: int) -> None:
+        now = monotonic()
+        with self._lock:
+            self._evict_expired(now)
+            history = self._requests[user_id]
+            while history and history[0] <= now - self.window_seconds:
+                history.popleft()
+            if len(history) >= self.requests:
+                retry_after = max(1, int(history[0] + self.window_seconds - now) + 1)
+                raise HTTPException(
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    "Too many AI API requests",
+                    headers={"Retry-After": str(retry_after)},
+                )
+            history.append(now)
+
+    def _evict_expired(self, now: float) -> None:
+        if len(self._requests) < self.max_keys:
+            return
+        cutoff = now - self.window_seconds
+        expired = [
+            user_id
+            for user_id, history in self._requests.items()
+            if not history or history[-1] <= cutoff
+        ]
+        for user_id in expired:
+            del self._requests[user_id]
+        if len(self._requests) >= self.max_keys:
+            oldest = min(self._requests, key=lambda user_id: self._requests[user_id][-1])
+            del self._requests[oldest]
+
+
+_ai_limiter_initialization_lock = Lock()
+
+
+def _ai_limiter(request: Request) -> AIUserRateLimiter:
+    """Get the app-local limiter without requiring a main.py wiring change."""
+
+    limiter = getattr(request.app.state, "ai_user_limiter", None)
+    if limiter is None:
+        # ASGI apps may serve concurrent first requests.  Install exactly one
+        # limiter for this app so those requests share a budget.
+        with _ai_limiter_initialization_lock:
+            limiter = getattr(request.app.state, "ai_user_limiter", None)
+            if limiter is None:
+                settings = request.app.state.settings
+                limiter = AIUserRateLimiter(
+                    settings.ai_requests_per_minute,
+                    max_keys=settings.max_rate_limit_keys,
+                )
+                request.app.state.ai_user_limiter = limiter
+    return limiter
 
 
 def _disposition(kind: str, filename: str, fallback: str) -> str:
@@ -211,6 +285,18 @@ def _authorization(request: Request, session: Session, user: User) -> Authorizat
     return AuthorizationContext(session, user)
 
 
+def get_rate_limited_ai_user(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Authenticate then account for one AI content request for this user."""
+
+    if user.id is None:  # Defensive: ``get_current_user`` only returns persisted users.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid bearer token")
+    _ai_limiter(request).check(user.id)
+    return user
+
+
 def _bounded_diff(diff: str, max_page_bytes: int) -> str:
     """Refuse a Git diff that would exceed the REST response budget.
 
@@ -294,7 +380,7 @@ def revoke_api_tokens(
 
 
 @router.get("/ai/tree")
-def get_tree(request: Request, user: Annotated[User, Depends(get_current_user)]):
+def get_tree(request: Request, user: Annotated[User, Depends(get_rate_limited_ai_user)]):
     with Session(request.app.state.engine) as session:
         return {"books": request.app.state.ai_service.tree(_authorization(request, session, user))}
 
@@ -302,7 +388,7 @@ def get_tree(request: Request, user: Annotated[User, Depends(get_current_user)])
 @router.get("/ai/search", response_model=SearchPageResponse)
 def search_content(
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
     query: str = Query(),
     page: int = Query(1),
     page_size: int | None = Query(None),
@@ -339,7 +425,7 @@ def search_content(
 
 
 @router.get("/ai/export")
-def download_export(request: Request, user: Annotated[User, Depends(get_current_user)]):
+def download_export(request: Request, user: Annotated[User, Depends(get_rate_limited_ai_user)]):
     try:
         with Session(request.app.state.engine) as session:
             archive = request.app.state.ai_service.export(_authorization(request, session, user))
@@ -356,7 +442,7 @@ def download_export(request: Request, user: Annotated[User, Depends(get_current_
 def get_page_diff(
     content_path: str,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
     from_revision: str = Query(min_length=7, max_length=64, pattern=r"^[0-9a-fA-F]+$"),
     to_revision: str = Query(min_length=7, max_length=64, pattern=r"^[0-9a-fA-F]+$"),
 ):
@@ -381,7 +467,7 @@ def restore_page_revision(
     content_path: str,
     payload: RestoreRequest,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     try:
         path = normalize_relative_path(content_path)
@@ -398,7 +484,7 @@ def restore_page_revision(
 def get_page_history(
     content_path: str,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     try:
         path = normalize_relative_path(content_path)
@@ -414,7 +500,7 @@ def get_page_history(
 def get_content(
     content_path: str,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
     download: bool = Query(False),
 ):
     try:
@@ -438,7 +524,7 @@ def get_content(
 def create_book(
     payload: ContainerCreate,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     try:
         with Session(request.app.state.engine) as session:
@@ -460,7 +546,7 @@ def create_chapter(
     book_slug: str,
     payload: ContainerCreate,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     try:
         with Session(request.app.state.engine) as session:
@@ -502,7 +588,7 @@ def create_book_page(
     book_slug: str,
     payload: PageCreate,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     try:
         parent = make_slug(book_slug, book_slug)
@@ -521,7 +607,7 @@ def create_chapter_page(
     chapter_slug: str,
     payload: PageCreate,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     try:
         parent = f"{make_slug(book_slug, book_slug)}/{make_slug(chapter_slug, chapter_slug)}"
@@ -555,7 +641,7 @@ def _store_asset(request: Request, user: User, book_slug: str, filename: str, da
 async def upload_asset(
     book_slug: str,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
     file: Annotated[UploadFile, File()],
 ):
     """Accept one image for a book, identified by its bytes rather than its name.
@@ -583,7 +669,7 @@ async def upload_asset(
 def list_assets(
     book_slug: str,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     try:
         with Session(request.app.state.engine) as session:
@@ -600,7 +686,7 @@ def delete_asset(
     book_slug: str,
     filename: str,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     try:
         with Session(request.app.state.engine) as session:
@@ -618,7 +704,7 @@ def delete_asset(
 def serve_asset(
     asset_path: str,
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_rate_limited_ai_user)],
 ):
     """Serve one asset for the live preview only.
 

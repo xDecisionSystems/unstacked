@@ -435,6 +435,36 @@ def test_password_exchange_is_rate_limited(client):
     assert response.headers["retry-after"] == "60"
 
 
+def test_ai_requests_are_rate_limited_per_authenticated_user(client, app_env):
+    """Token rotation and a shared client address cannot evade or share a budget."""
+
+    app, settings, _admin, admin_token = app_env
+    settings.ai_requests_per_minute = 2
+    with Session(app.state.engine) as session:
+        second_user = User(
+            username="second-user",
+            email="second@example.com",
+            password_hash=hash_password("another correct horse battery staple"),
+            display_name="Second User",
+        )
+        session.add(second_user)
+        session.commit()
+        session.refresh(second_user)
+        second_token = create_api_token(second_user, settings)
+
+    for token in (admin_token, create_api_token(_admin, settings)):
+        assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 200
+
+    limited = client.get("/api/ai/tree", headers=bearer(admin_token))
+    assert limited.status_code == 429
+    assert limited.json() == {"detail": "Too many AI API requests"}
+    assert limited.headers["retry-after"]
+
+    # TestClient uses one client address for both accounts; the second account
+    # must still retain its own principal-keyed budget.
+    assert client.get("/api/ai/tree", headers=bearer(second_token)).status_code == 200
+
+
 def test_incrementing_token_generation_revokes_existing_token(client, app_env):
     app, _settings, admin, token = app_env
     assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 200
