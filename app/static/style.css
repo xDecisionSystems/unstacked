@@ -209,11 +209,8 @@ a {
 .page-back { min-width: 2.2rem; padding-left: 0; padding-right: 0; text-align: center; }
 #inline-editor[hidden] { display: none; }
 .page-title { margin: 1.25rem 0 .75rem; }
-.page-title button { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.page-title button:hover, .page-title button:focus-visible { color: var(--accent); text-decoration: underline; }
-.title-editor { display: flex; align-items: center; gap: .5rem; margin: -.35rem 0 1rem; }
-.title-editor[hidden] { display: none; }
-.title-editor input { font: inherit; padding: .35rem .5rem; }
+.editable-title { cursor: text; border-radius: 3px; }
+.editable-title:hover, .editable-title:focus { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 button, .button {
   display: inline-block;
