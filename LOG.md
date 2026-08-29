@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 08:02 UTC — Codex
+Aligned floating Save/Cancel with the Markdown editor, made viewed draft status
+an italic “(Draft)” beside the title, and show its checkbox there only while
+editing.
+- Files: `app/templates/page.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 07:58 UTC — Codex
 Moved Save/Cancel to the left of the editor box and replaced the draft notice
 with a compact Draft badge immediately beside the title for draft pages.
@@ -92,11 +99,5 @@ reserved vertical space so a hovered card's lift and shadow are not clipped.
 Fixed chapter collapse behavior: explicit hidden styling now overrides the
 page-card grid, the diamond chapter-drag handle is gone, and the triangle has
 a larger 2.2rem hit target.
-- Files: `app/templates/book.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 06:32 UTC — Codex
-Placed each chapter's collapse control immediately before its title and sized
-the down/right triangle to match the compact add-page icon.
 - Files: `app/templates/book.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`

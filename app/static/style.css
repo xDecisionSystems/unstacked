@@ -211,7 +211,7 @@ a {
 .inline-editor-actions {
   position: absolute;
   right: calc(100% + .75rem);
-  top: 5rem;
+  top: 9rem;
   left: auto;
   flex-direction: column;
   margin: 0;
@@ -226,7 +226,7 @@ a {
 .editable-title { cursor: text; border-radius: 3px; }
 .editable-title:hover, .editable-title:focus { outline: 2px solid var(--accent); outline-offset: 3px; }
 .draft-toggle { font-weight: 600; color: var(--muted); white-space: nowrap; }
-.page-draft-badge { font-size: .9rem; }
+.page-draft-status { font-size: .9rem; color: var(--muted); }
 
 button, .button {
   display: inline-block;

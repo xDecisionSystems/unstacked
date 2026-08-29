@@ -500,7 +500,7 @@ def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, c
     assert 'id="inline-editor" hidden' in response.text
     assert 'class="form-actions inline-editor-actions"' in response.text
     assert '<section id="inline-editor" hidden>' in response.text
-    assert response.text.index('class="draft-toggle"') > response.text.index('id="inline-editor"')
+    assert 'id="draft-toggle" class="draft-toggle" hidden' in response.text
     assert "Draft — exclude from the published site" not in response.text
     assert 'href="/books/handbook" title="Back to book"' in response.text
     assert "font-awesome/4.7.0/css/font-awesome.min.css" in response.text
@@ -572,7 +572,7 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
     assert metadata["tags"] == ["hr", "policy"]
     assert metadata["draft"] is True
     assert "Draft" in client.get("/books/handbook").text
-    assert 'class="draft-badge page-draft-badge">Draft</span>' in client.get(
+    assert 'class="page-draft-status">(Draft)</em>' in client.get(
         "/pages/handbook/leave"
     ).text
 
