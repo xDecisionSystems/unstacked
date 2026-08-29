@@ -141,7 +141,9 @@ def _page_view(content, path: str) -> dict[str, str | bool]:
     return {"path": path.removesuffix(".md"), "label": label, "draft": draft}
 
 
-def _tree_view_model(content, raw_tree: list[dict]) -> list[dict]:
+def _tree_view_model(
+    content, authorization: AuthorizationContext, raw_tree: list[dict]
+) -> list[dict]:
     """Turn ``AIContentService.tree()``'s raw dicts into a display-ready shape.
 
     Container titles come from each book/chapter's ``.pages`` file rather
@@ -149,14 +151,24 @@ def _tree_view_model(content, raw_tree: list[dict]) -> list[dict]:
     pages, and the sidebar renders on every authenticated request. Page
     labels use the slug rather than the front-matter title for the same
     reason -- the full title is still shown once the page itself is open.
+
+    ``can_write`` per chapter drives whether its "add a page" button renders:
+    unlike book/chapter creation (admin-only), page creation only requires a
+    write grant, so a non-admin editor must still see it for chapters they
+    can actually write to. A non-throwing policy check, same as
+    ``can_restore`` above -- there is nothing to deny here, only to hide.
     """
 
     books = []
     for book in raw_tree:
         chapters = [
             {
+                "slug": chapter["slug"],
                 "title": _container_title(content.docs, book["slug"], chapter["slug"]),
                 "pages": [_page_view(content, p) for p in chapter["pages"]],
+                "can_write": authorization.policy.decide(
+                    f"{book['slug']}/{chapter['slug']}"
+                ).can_write,
             }
             for chapter in book.get("chapters", [])
         ]
@@ -191,7 +203,7 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
         "request": request,
         "current_user": user,
         "csrf_token": read_session(request, user).csrf_token,
-        "tree": _tree_view_model(content, raw_tree),
+        "tree": _tree_view_model(content, authorization, raw_tree),
         "is_admin": user.is_admin,
     }
 
@@ -877,7 +889,8 @@ async def create_chapter_submit(
             )
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
-    return RedirectResponse(f"/pages/new?parent={created.path}", status_code=303)
+    book_slug = created.path.rsplit("/", 1)[0]
+    return RedirectResponse(f"/books/{book_slug}", status_code=303)
 
 
 @router.post("/manage/book/rename", include_in_schema=False, dependencies=[Depends(require_csrf)])

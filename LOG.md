@@ -10,6 +10,33 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 05:32 UTC — Claude Code
+Two follow-ups to the book overview page. Chapter creation
+(`create_chapter_submit` in `app/web.py`) now redirects to `/books/{slug}`
+on success instead of straight into `/pages/new` -- book creation still
+redirects into the editor since starting the first page is the point there,
+but a new chapter has nothing to write yet, so landing back on the book page
+(where the new chapter's row, with its own "+", is now visible) is more
+useful.
+
+Added a "+" inside each chapter row to add a page to it
+(`/pages/new?parent=<book>/<chapter>`), gated on `chapter.can_write` rather
+than `is_admin` -- unlike book/chapter creation, `AIContentService.create_page`
+only requires a write grant, not admin, so an admin-only gate would have
+hidden the button from a legitimate non-admin editor. Computed via
+`authorization.policy.decide(path).can_write`, the same non-throwing
+pattern `can_restore` already uses for the history view -- extended
+`_tree_view_model` to take `authorization` and added `slug`/`can_write` to
+each chapter's view-model dict.
+
+3 new tests (`tests/test_web.py`): the redirect target, and the write-gated
+button visibility across an admin, a read-only user, and a user with an
+actual write grant on just that one chapter (not the whole book) -- the
+case an `is_admin` gate would have gotten wrong. `_grant` test helper gained
+a `can_write` kwarg. Full suite green, ruff clean.
+- Files: `app/web.py`, `app/templates/book.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 05:23 UTC — Claude Code
 User asked for a book overview page: clicking a book card now opens
 `/books/{slug}` instead of jumping straight to its first page, showing one
@@ -286,9 +313,3 @@ reject symlink traversal for lifecycle primitives, and navigation now has pure
 parse/serialize helpers for confined callers.
 - Files: `app/paths.py`, `app/nav.py`, `tests/test_paths.py`,
   `tests/test_nav.py`, `LOG.md`
-
-## 2026-08-28 22:50 UTC — Codex
-Integrated T9.3 REST bounds: reject obviously oversized page JSON before any
-content write and cap Git diff responses by UTF-8 bytes, including historical
-oversized/non-ASCII content.
-- Files: `app/ai_api.py`, `tests/test_ai_api.py`, `LOG.md`

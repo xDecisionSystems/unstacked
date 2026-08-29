@@ -332,8 +332,10 @@ button.danger:hover { background: #922019; border-color: #922019; }
   line-height: 1;
   cursor: pointer;
   user-select: none;
+  text-decoration: none;
 }
 .icon-button:hover { background: var(--accent-dark); }
+.icon-button-small { width: 1.6rem; height: 1.6rem; font-size: 1.1rem; }
 .new-book-form {
   position: absolute;
   right: 0;
@@ -396,7 +398,8 @@ button.danger:hover { background: #922019; border-color: #922019; }
 .book-card-stat-primary { color: var(--accent); font-weight: 600; }
 
 .chapter-row { margin-bottom: 2rem; }
-.chapter-row-title { margin: 0 0 .75rem; font-size: 1.1rem; }
+.chapter-row-header { display: flex; align-items: center; gap: .6rem; margin-bottom: .75rem; }
+.chapter-row-title { margin: 0; font-size: 1.1rem; }
 .page-cards {
   list-style: none;
   margin: 0;

@@ -52,14 +52,20 @@ def _make_user(app, username, *, password=PASSWORD, must_change_password=False) 
         return user
 
 
-def _grant(app, user_id: int, path_prefix: str, *, group_name: str) -> None:
+def _grant(
+    app, user_id: int, path_prefix: str, *, group_name: str, can_write: bool = False
+) -> None:
     with Session(app.state.engine) as session:
         group = Group(name=group_name)
         session.add(group)
         session.commit()
         session.refresh(group)
         session.add(UserGroup(user_id=user_id, group_id=group.id))
-        session.add(Permission(group_id=group.id, path_prefix=path_prefix, can_read=True))
+        session.add(
+            Permission(
+                group_id=group.id, path_prefix=path_prefix, can_read=True, can_write=can_write
+            )
+        )
         session.commit()
 
 
@@ -298,6 +304,51 @@ def test_the_add_chapter_button_is_admin_only(app_env, client, book_with_chapter
     _login(client, "handbook-reader")
     reader_page = client.get("/books/handbook")
     assert "new-book-popover" not in reader_page.text
+
+
+def test_creating_a_chapter_redirects_back_to_the_book_page(app_env, client):
+    app, _settings, admin, _token = app_env
+    app.state.content.create_book("Handbook", "handbook", admin)
+
+    _login(client, "admin")
+    page = client.get("/books/handbook")
+    csrf_token = _csrf_from(page.text)
+    response = client.post(
+        "/manage/chapter",
+        data={"csrf_token": csrf_token, "book_slug": "handbook", "title": "Policies"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/handbook"
+
+
+def test_the_add_page_button_follows_write_access_not_admin_status(
+    app_env, client, book_with_chapters
+):
+    """Page creation only needs a write grant (see AIContentService.create_page),
+    unlike book/chapter creation which is admin-only -- the button must track
+    that, not just is_admin, or a non-admin editor with a real write grant
+    would never see it."""
+
+    app, _settings, _admin, _token = app_env
+    read_only = _make_user(app, "read-only")
+    _grant(app, read_only.id, "handbook", group_name="read-only-group")
+    editor = _make_user(app, "editor")
+    _grant(app, editor.id, "handbook/policies", group_name="editor-group", can_write=True)
+
+    _login(client, "admin")
+    admin_page = client.get("/books/handbook")
+    assert 'href="/pages/new?parent=handbook/policies"' in admin_page.text
+    client.cookies.clear()
+
+    _login(client, "read-only")
+    reader_page = client.get("/books/handbook")
+    assert 'href="/pages/new?parent=handbook/policies"' not in reader_page.text
+    client.cookies.clear()
+
+    _login(client, "editor")
+    editor_page = client.get("/books/handbook")
+    assert 'href="/pages/new?parent=handbook/policies"' in editor_page.text
 
 
 def test_book_page_empty_state_for_a_book_with_nothing_in_it(app_env, client):
