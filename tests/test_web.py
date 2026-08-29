@@ -299,6 +299,16 @@ def test_book_page_rows_have_a_collapse_toggle(client, book_with_chapters):
     assert 'id="empty-chapter-pages"' in page.text
 
 
+def test_chapter_collapse_toggle_precedes_its_title(client, book_with_chapters):
+    """The small down/right triangle belongs directly before the chapter name."""
+
+    _login(client, "admin")
+    page = client.get("/books/handbook")
+    toggle = page.text.index('aria-controls="policies-pages"')
+    title = page.text.index('<h2 class="chapter-row-title">Policies</h2>')
+    assert toggle < title
+
+
 def test_creation_popovers_have_no_slug_field(client, book_with_chapters):
     """Slug is always derived from the title now -- see make_slug."""
 

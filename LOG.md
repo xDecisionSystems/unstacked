@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 06:32 UTC — Codex
+Placed each chapter's collapse control immediately before its title and sized
+the down/right triangle to match the compact add-page icon.
+- Files: `app/templates/book.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 06:15 UTC — Claude Code
 Three requests: drag-reorder for chapters/pages, a collapse toggle per row,
 and dropping the slug field from creation popovers. Confirmed reorder scope
@@ -405,9 +411,3 @@ navigation edits and rollback. Ancestor-symlink adversarial tests confirm that
 the operations do not delete or publish an outside sentinel.
 - Files: `app/content.py`, `tests/test_content_symlink_races.py`,
   `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-28 23:31 UTC — Codex
-Removed MCP from the MVP at the user's request. The existing signed-bearer
-REST/OpenAPI surface is now the sole AI transport, avoiding a second protocol
-and its client-context overhead.
-- Files: `README.md`, `plans/plan_initial.md`, `LOG.md`

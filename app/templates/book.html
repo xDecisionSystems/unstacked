@@ -41,6 +41,7 @@
 <section class="chapter-row" draggable="true" data-key="{{ chapter.slug }}">
   <div class="chapter-row-header">
     <span class="drag-handle" title="Drag to reorder" aria-hidden="true">&#10021;</span>
+    {{ row_toggle(chapter.slug ~ '-pages') }}
     <h2 class="chapter-row-title">{{ chapter.title }}</h2>
     {% if chapter.can_write %}
     <details class="new-book-popover">
@@ -53,7 +54,6 @@
       </form>
     </details>
     {% endif %}
-    {{ row_toggle(chapter.slug ~ '-pages') }}
   </div>
   {% if chapter.pages %}
   {{ page_cards(chapter.pages, book.slug ~ '/' ~ chapter.slug, chapter.slug ~ '-pages') }}

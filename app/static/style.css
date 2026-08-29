@@ -352,13 +352,18 @@ button.danger:hover { background: #922019; border-color: #922019; }
 .chapter-row-title { margin: 0; font-size: 1.1rem; }
 .drag-handle { cursor: grab; color: var(--muted); font-size: .95rem; user-select: none; }
 .row-toggle {
-  margin-left: auto;
   background: none;
   border: none;
   cursor: pointer;
   color: var(--muted);
-  font-size: .85rem;
-  padding: .2rem .3rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .row-toggle:hover { color: var(--text); }
 .page-cards {
