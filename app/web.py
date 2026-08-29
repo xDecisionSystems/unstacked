@@ -687,6 +687,28 @@ async def save_page(
 
 
 @router.post(
+    "/pages/{page_path:path}/title", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+async def save_page_title(
+    request: Request,
+    page_path: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    """Retitle a page without leaving its reader view."""
+
+    form = await _read_form(request)
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        try:
+            request.app.state.ai_service.set_page_title(
+                _authorization(session, user), target, form.get("title", "")
+            )
+        except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, _web_error(exc)) from exc
+    return RedirectResponse(f"/pages/{target.removesuffix('.md')}", status_code=303)
+
+
+@router.post(
     "/pages/{page_path:path}/preview", include_in_schema=False, dependencies=[Depends(require_csrf)]
 )
 async def preview_page(

@@ -14,7 +14,17 @@
     <button class="danger" type="submit">Delete</button>
   </form>
 </div>
-<h1 class="page-title"><a href="/pages/{{ current_path }}/edit" title="Edit page title">{{ page_title }}</a></h1>
+<h1 class="page-title">
+  {% if can_write %}<button type="button" id="title-toggle" aria-expanded="false" aria-controls="title-editor" title="Edit page title">{{ page_title }}</button>{% else %}{{ page_title }}{% endif %}
+</h1>
+{% if can_write %}
+<form id="title-editor" class="title-editor" method="post" action="/pages/{{ current_path }}/title" hidden>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label class="visually-hidden" for="page-title-input">Page title</label>
+  <input id="page-title-input" name="title" value="{{ page_title }}" required>
+  <button type="submit">Save title</button><button type="button" id="title-cancel">Cancel</button>
+</form>
+{% endif %}
 {% if can_write %}
 <section id="inline-editor" hidden>
   <form class="editor-form" method="post" action="/pages/{{ current_path }}/edit">
@@ -50,6 +60,18 @@
     }
   });
   document.getElementById('edit-cancel').addEventListener('click', closeEditor);
+  const titleButton = document.getElementById('title-toggle');
+  const titleEditor = document.getElementById('title-editor');
+  if (titleButton && titleEditor) {
+    titleButton.addEventListener('click', () => {
+      titleEditor.hidden = !titleEditor.hidden;
+      titleButton.setAttribute('aria-expanded', String(!titleEditor.hidden));
+      if (!titleEditor.hidden) document.getElementById('page-title-input').focus();
+    });
+    document.getElementById('title-cancel').addEventListener('click', () => {
+      titleEditor.hidden = true; titleButton.setAttribute('aria-expanded', 'false');
+    });
+  }
 })();
 </script>
 {% endif %}

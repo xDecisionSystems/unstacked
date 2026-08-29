@@ -200,6 +200,11 @@ class AIContentService:
             authorization.require_write(path), *args, authorization.user, **kwargs
         )
 
+    def set_page_title(self, authorization: AuthorizationContext, path: str, title: str) -> str:
+        return self.content.set_page_title(
+            authorization.require_write(path), title, authorization.user
+        )
+
     def delete_page(self, authorization: AuthorizationContext, path: str) -> str:
         return self.content.delete_page(
             authorization.require_ungranted_subtree(path), authorization.user

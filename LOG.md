@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 07:26 UTC — Codex
+Made page-title editing genuinely inline: clicking the title opens a local
+title field saved through the shared ACL-aware service, rather than following
+the legacy full-page editor link.
+- Files: `app/ai_service.py`, `app/web.py`, `app/templates/page.html`,
+  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 07:16 UTC — Codex
 Made page editing inline: Edit opens an in-place EasyMDE editor backed by the
 existing CSRF/blob-conflict-protected save path. Added an up-arrow back-to-book
@@ -280,19 +287,3 @@ matching that route's own admin-only enforcement.
 link, admin-only "+", empty-tree state). Full suite green, ruff clean.
 - Files: `app/web.py`, `app/templates/tree.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 03:41 UTC — Claude Code
-User couldn't log in as `admin`/`admin` on a deployed instance ("Invalid
-username or password"). Root cause wasn't a code bug: no `admin` row existed
-because `python -m app.bootstrap` had never been run there (this local
-checkout was in the same state — `data/app.db` didn't exist). Confirmed the
-fix by running `unstacked-bootstrap` here and logging in successfully.
-
-While tracing it, found `README.md`'s Quick Start and Coolify sections
-documented a bootstrap CLI that doesn't exist — `--email`/`--display-name`
-flags, a password prompt, `--password-stdin`, a printed API token. The real
-`app/bootstrap.py` (unchanged, correct) takes no arguments and always creates
-`admin`/`admin`, matching `plans/plan_initial.md`'s T1.4 spec; only the
-README had drifted. Corrected both sections to describe the actual, argument-
-free command.
-- Files: `README.md`, `LOG.md`
