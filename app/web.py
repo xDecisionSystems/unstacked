@@ -152,11 +152,13 @@ def _tree_view_model(
     labels use the slug rather than the front-matter title for the same
     reason -- the full title is still shown once the page itself is open.
 
-    ``can_write`` per chapter drives whether its "add a page" button renders:
-    unlike book/chapter creation (admin-only), page creation only requires a
-    write grant, so a non-admin editor must still see it for chapters they
-    can actually write to. A non-throwing policy check, same as
-    ``can_restore`` above -- there is nothing to deny here, only to hide.
+    ``can_write`` per book/chapter drives whether its "add a chapter"/"add a
+    page" button renders: unlike creating a book itself (unavoidably
+    admin-only -- there is no existing path to hold a grant on), both of
+    those only require a write grant on the container they're added to, so a
+    non-admin editor must still see them wherever they actually have one. A
+    non-throwing policy check, same as ``can_restore`` above -- there is
+    nothing to deny here, only to hide.
     """
 
     books = []
@@ -180,6 +182,7 @@ def _tree_view_model(
                 "pages": pages,
                 "chapters": chapters,
                 "page_count": len(pages) + sum(len(chapter["pages"]) for chapter in chapters),
+                "can_write": authorization.policy.decide(book["slug"]).can_write,
             }
         )
     return books

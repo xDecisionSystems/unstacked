@@ -3,7 +3,7 @@
 {% block content %}
 <div class="dashboard-header">
   <h1>{{ book.title }}</h1>
-  {% if is_admin %}
+  {% if book.can_write %}
   <details class="new-book-popover">
     <summary class="icon-button" title="Add a new chapter" aria-label="Add a new chapter">+</summary>
     <form method="post" action="/manage/chapter" class="new-book-form">
@@ -54,6 +54,6 @@
 </section>
 {% endfor %}
 {% if not book.pages and not book.chapters %}
-<p class="empty-state">Nothing here yet.{% if is_admin %} Use the + button above to add the first chapter.{% endif %}</p>
+<p class="empty-state">Nothing here yet.{% if book.can_write %} Use the + button above to add the first chapter.{% endif %}</p>
 {% endif %}
 {% endblock %}

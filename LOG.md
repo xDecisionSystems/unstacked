@@ -10,6 +10,51 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 05:59 UTC — Claude Code
+User asked to remove the "Manage content" topbar link and make every "+"
+button follow actual write permission rather than admin status. Confirmed
+with the user first that this meant loosening chapter creation's backend
+authorization too (not just hiding/showing a button), since
+`AIContentService.create_chapter` was `require_admin()`-gated, unlike page
+creation which was already write-gated -- the codebase's own stated reason
+("container changes are administrator-only because they can affect
+path-based permissions") was a deliberate choice, not an oversight, so this
+needed confirming rather than assuming.
+
+Changed `create_chapter` to `require_write(book_slug)`, mirroring
+`create_page`'s existing shape exactly. Its API route
+(`POST /api/ai/books/{book}/chapters`) previously returned a bespoke 403
+"Administrator access required" on denial; now folds `AccessDenied` into
+the same indistinguishable-from-missing 404 `create_page`'s route already
+uses, since the denial is now path-specific (a caller with read-only access
+to a real book must not be able to use a different status code to confirm
+it exists) rather than a global admin fact. Book creation is unchanged and
+still admin-only -- there is no existing path to hold a grant on when the
+book doesn't exist yet, so "write permission" has nothing to check there.
+
+Discovered and fixed a real bug this surfaced: `ContentRepository.tree()`
+built a non-admin's book/chapter list *only* from pages they can already
+read, so a book or chapter they'd just been granted write (or even read) on
+-- but which has no pages yet -- was invisible to them, everywhere,
+permanently. `AccessPolicy.can_view_container()` already existed and was
+fully unit-tested for exactly this (three test files), but was never
+actually called from application code. Wired it into `tree()`'s directory
+walk, which also let the admin-only branch collapse into the same walk
+(the predicate already returns `True` unconditionally for an admin).
+
+`_tree_view_model` now computes `can_write` per book too (not just per
+chapter), and both the dashboard's per-chapter "+" and the book page's
+"add chapter" + "add page" buttons key off it instead of `is_admin`.
+
+9 new/updated tests across `test_web.py` (topbar link gone; a non-admin
+editor with a write grant can both see and actually use the chapter button)
+and `test_authorization_coverage.py` (403 -> 404 for the now-write-gated
+route). Full suite green, ruff clean (one pre-existing, unrelated
+formatting deviation in `test_authorization_coverage.py` left alone).
+- Files: `app/ai_service.py`, `app/ai_api.py`, `app/content.py`,
+  `app/web.py`, `app/templates/base.html`, `app/templates/book.html`,
+  `tests/test_web.py`, `tests/test_authorization_coverage.py`, `LOG.md`
+
 ## 2026-08-29 05:44 UTC — Claude Code
 Two user requests handled together (the second arrived mid-turn on the
 first): a lightweight page-creation popover matching the book/chapter
@@ -329,12 +374,3 @@ requests and exhaustive finite-domain ACL regression coverage. Token rotation
 shares a user budget while users behind one proxy remain isolated.
 - Files: `app/ai_api.py`, `app/config.py`, `tests/test_ai_api.py`,
   `tests/test_acl_properties.py`, `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-28 23:07 UTC — Codex
-Extended the T2.1 descriptor-confined migration to existing-page updates and
-page/container retitles. Navigation control-file reads, writes, and rollback
-now use a fixed `.pages` descriptor API; adversarial ancestor-symlink swaps
-cannot rewrite outside sentinels.
-- Files: `app/content.py`, `app/paths.py`, `tests/test_content_lifecycle.py`,
-  `tests/test_content_symlink_races.py`, `tests/test_paths.py`,
-  `plans/plan_initial.md`, `LOG.md`

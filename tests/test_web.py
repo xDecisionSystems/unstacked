@@ -291,7 +291,13 @@ def test_book_page_404s_rather_than_leaking_an_inaccessible_book(app_env, client
     assert client.get("/books/alice-book").status_code == 404
 
 
-def test_the_add_chapter_button_is_admin_only(app_env, client, book_with_chapters):
+def test_the_add_chapter_button_follows_write_access_not_admin_status(
+    app_env, client, book_with_chapters
+):
+    """Chapter creation only needs a write grant on the book (see
+    AIContentService.create_chapter), same as the page button one level down
+    -- a non-admin editor with an actual write grant must still see it."""
+
     app, _settings, _admin, _token = app_env
 
     _login(client, "admin")
@@ -300,10 +306,17 @@ def test_the_add_chapter_button_is_admin_only(app_env, client, book_with_chapter
     client.cookies.clear()
 
     reader = _make_user(app, "handbook-reader")
-    _grant(app, reader.id, "handbook", group_name="handbook-group")
+    _grant(app, reader.id, "handbook", group_name="handbook-reader-group")
     _login(client, "handbook-reader")
     reader_page = client.get("/books/handbook")
     assert "new-book-popover" not in reader_page.text
+    client.cookies.clear()
+
+    editor = _make_user(app, "handbook-editor")
+    _grant(app, editor.id, "handbook", group_name="handbook-editor-group", can_write=True)
+    _login(client, "handbook-editor")
+    editor_page = client.get("/books/handbook")
+    assert "new-book-popover" in editor_page.text
 
 
 def test_creating_a_chapter_redirects_back_to_the_book_page(app_env, client):
@@ -320,6 +333,33 @@ def test_creating_a_chapter_redirects_back_to_the_book_page(app_env, client):
     )
     assert response.status_code == 303
     assert response.headers["location"] == "/books/handbook"
+
+
+def test_a_non_admin_with_a_write_grant_can_actually_create_a_chapter(app_env, client):
+    """The button being visible has to match what the backend actually allows."""
+
+    app, _settings, admin, _token = app_env
+    app.state.content.create_book("Handbook", "handbook", admin)
+    editor = _make_user(app, "handbook-editor")
+    _grant(app, editor.id, "handbook", group_name="handbook-editor-group", can_write=True)
+
+    _login(client, "handbook-editor")
+    page = client.get("/books/handbook")
+    csrf_token = _csrf_from(page.text)
+    response = client.post(
+        "/manage/chapter",
+        data={"csrf_token": csrf_token, "book_slug": "handbook", "title": "Policies"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/handbook"
+
+
+def test_the_topbar_has_no_manage_content_link(client):
+    _login(client, "admin")
+    page = client.get("/tree")
+    assert "Manage content" not in page.text
+    assert 'href="/admin"' in page.text
 
 
 def test_creating_a_page_quick_redirects_to_the_book_page_with_its_new_card(

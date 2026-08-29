@@ -123,15 +123,17 @@ def test_service_and_api_keep_admin_and_write_operations_behind_authorization(ap
         client.post("/api/ai/books", json={"title": "Forbidden"}, headers=headers).status_code
         == 403
     )
+    # A readable-but-read-only parent must not be writable through the route,
+    # for a chapter same as a page -- both need a write grant, not admin, so
+    # both fold AccessDenied into the same indistinguishable-from-missing 404.
     assert (
         client.post(
             "/api/ai/books/shared/chapters",
             json={"title": "Forbidden"},
             headers=headers,
         ).status_code
-        == 403
+        == 404
     )
-    # A readable-but-read-only parent must not be writable through the route.
     assert (
         client.post(
             "/api/ai/books/shared/pages",

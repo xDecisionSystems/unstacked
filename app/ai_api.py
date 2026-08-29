@@ -605,9 +605,12 @@ def create_chapter(
                     slug=payload.slug,
                 )
             )
-    except AccessDenied as exc:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required") from exc
-    except (ContentError, UnsafePath) as exc:
+    except (AccessDenied, ContentError, UnsafePath) as exc:
+        # Unlike book creation (a global, admin-only capability), a chapter's
+        # authorization is now write access to a specific book -- the same
+        # indistinguishable-from-missing shape create_page already uses, so a
+        # caller who can read but not write a book cannot use the denial to
+        # confirm it exists.
         raise _content_error(exc) from exc
 
 

@@ -88,8 +88,13 @@ class AIContentService:
         title: str,
         slug: str | None,
     ) -> CreatedContent:
-        authorization.require_admin()
+        """A chapter is scoped under one book, unlike a book itself: a write
+        grant on that book is enough, the same requirement page creation
+        already has -- there is no reason a book-level editor needs an admin
+        to structure their own book into chapters."""
+
         book_slug = make_slug(book_slug, book_slug)
+        authorization.require_write(book_slug)
         target = f"{book_slug}/{make_slug(title, slug)}"
         authorization.reject_orphaned_exact_grant(target)
         return self.content.create_chapter(book_slug, title, slug, authorization.user)

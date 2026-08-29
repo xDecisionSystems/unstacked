@@ -1125,22 +1125,40 @@ class ContentRepository:
         return pages
 
     def tree(self, session: Session, user: User) -> list[dict]:
+        """A caller's full navigable structure: every book/chapter they can
+        at least *see*, not only ones already holding a page they can read.
+
+        The directory walk is gated by ``can_view_container`` rather than
+        being admin-only: that predicate already returns ``True``
+        unconditionally for an admin, so one walk covers both cases. Without
+        it, a book or chapter a non-admin has just been granted write (or
+        read) access to -- but which has no pages in it yet -- would never
+        appear here at all, since the pages loop below is the only other
+        source of a book/chapter entry. That would make a freshly granted,
+        still-empty container permanently unreachable through this tree for
+        anyone but an admin.
+        """
+
         pages = self.authorized_pages(session, user)
+        policy = load_policy(session, user)
         books: dict[str, dict] = {}
-        if user.is_admin:
-            for book_path in sorted(self.docs.iterdir()):
-                if (
-                    not book_path.is_dir()
-                    or book_path.name == "assets"
-                    or book_path.name.startswith(".")
-                ):
-                    continue
-                book = books.setdefault(
-                    book_path.name,
-                    {"slug": book_path.name, "pages": [], "chapters": {}},
-                )
-                for chapter_path in sorted(book_path.iterdir()):
-                    if chapter_path.is_dir() and not chapter_path.name.startswith("."):
+        for book_path in sorted(self.docs.iterdir()):
+            if (
+                not book_path.is_dir()
+                or book_path.name == "assets"
+                or book_path.name.startswith(".")
+            ):
+                continue
+            if not policy.can_view_container(book_path.name):
+                continue
+            book = books.setdefault(
+                book_path.name,
+                {"slug": book_path.name, "pages": [], "chapters": {}},
+            )
+            for chapter_path in sorted(book_path.iterdir()):
+                if chapter_path.is_dir() and not chapter_path.name.startswith("."):
+                    chapter_relative = f"{book_path.name}/{chapter_path.name}"
+                    if policy.can_view_container(chapter_relative):
                         book["chapters"].setdefault(
                             chapter_path.name,
                             {"slug": chapter_path.name, "pages": []},
