@@ -59,3 +59,26 @@
 .toastui-editor-md-preview {
   background: var(--surface) !important;
 }
+
+/* Page-create forms live beside a horizontally scrolling card row. Anchor
+ * their popover to the full chapter header—not the tiny plus button—so it
+ * remains inside the visible page at every viewport width. */
+.chapter-row-header {
+  position: relative;
+  overflow: visible;
+}
+.chapter-row-header .new-book-popover {
+  position: static;
+}
+.chapter-row-header .new-book-form {
+  right: 0;
+  left: auto;
+  width: min(16rem, calc(100vw - 3rem));
+  max-width: calc(100vw - 3rem);
+}
+@media (max-width: 680px) {
+  .chapter-row-header .new-book-form {
+    right: auto;
+    left: 0;
+  }
+}

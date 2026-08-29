@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 22:58 UTC — Codex
+Anchored chapter page-creation popovers to their full headers and constrained
+their width so they remain visible beside scrollable page-card rows.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-08-29 22:42 UTC — Codex
 Replaced EasyMDE with TOAST UI Editor in both editing surfaces, loading its
 chart, syntax-highlighting, color, merged-table, and UML plugins while keeping
@@ -91,9 +96,3 @@ with a bottom horizontal layout on narrow screens.
 Loaded Font Awesome explicitly for EasyMDE so its toolbar icons render in
 Safari, and removed the page-path breadcrumb row from page views.
 - Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:35 UTC — Codex
-Replaced the title popup with direct in-place editing: click the displayed
-title, type, then press Enter or blur to save; Escape restores its old value.
-- Files: `app/templates/page.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
