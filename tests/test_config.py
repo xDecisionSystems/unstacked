@@ -107,3 +107,37 @@ def test_a_blank_remote_url_or_token_is_treated_as_unset(tmp_path: Path):
     )
     assert settings.github_remote_url is None
     assert settings.github_token is None
+
+
+def test_public_base_url_is_unset_by_default(tmp_path: Path):
+    """No base URL means the AI OpenAPI schema omits `servers` rather than
+    guessing one — see build_ai_openapi_schema."""
+
+    assert _settings(tmp_path, environment="development").public_base_url is None
+
+
+def test_blank_public_base_url_is_treated_as_unset(tmp_path: Path):
+    settings = _settings(tmp_path, environment="development", public_base_url="   ")
+    assert settings.public_base_url is None
+
+
+def test_public_base_url_drops_a_trailing_slash(tmp_path: Path):
+    settings = _settings(
+        tmp_path, environment="development", public_base_url="https://wiki.example.com/"
+    )
+    assert settings.public_base_url == "https://wiki.example.com"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "not-a-url",
+        "ftp://wiki.example.com",
+        "wiki.example.com",
+        "https://",
+        "https://wiki.example.com?token=x",
+    ],
+)
+def test_a_malformed_public_base_url_is_rejected(tmp_path: Path, value: str):
+    with pytest.raises(ValueError, match="public base URL"):
+        _settings(tmp_path, environment="development", public_base_url=value)

@@ -35,6 +35,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx2>=2.12,<3",
+  "openapi-spec-validator>=0.7,<1",
   "pytest>=8.4,<10",
   "pytest-cov>=7.0,<8",
   "ruff>=0.12,<1",

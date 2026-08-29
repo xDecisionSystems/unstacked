@@ -3,6 +3,7 @@ import secrets
 import stat
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -122,6 +123,12 @@ class Settings(BaseSettings):
     mkdocs_executable: str = "mkdocs"
     static_export_timeout_seconds: int = 120
     static_export_output_limit_bytes: int = 65_536
+    # The AI-facing OpenAPI schema declares this as its one `servers` entry.
+    # A ChatGPT Action resolves every call against that URL, so the schema is
+    # unusable as an Action without it; unset, the schema simply omits
+    # `servers` and stays valid for local tooling (Swagger UI, curl) that
+    # doesn't need one.
+    public_base_url: str | None = None
 
     @field_validator(
         "github_token_path",
@@ -138,6 +145,13 @@ class Settings(BaseSettings):
         the current directory and be read as if it were a secret file.
         """
 
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("public_base_url", mode="before")
+    @classmethod
+    def blank_public_base_url_is_unset(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
         return value
@@ -166,6 +180,13 @@ class Settings(BaseSettings):
             raise ValueError("backup sync debounce must be positive")
         if self.backup_sync_max_backoff_seconds < self.backup_sync_debounce_seconds:
             raise ValueError("backup sync maximum backoff must be at least the debounce")
+        if self.public_base_url is not None:
+            self.public_base_url = self.public_base_url.rstrip("/")
+            parts = urlsplit(self.public_base_url)
+            if parts.scheme not in ("http", "https") or not parts.netloc or parts.query:
+                raise ValueError(
+                    "public base URL must be an absolute http(s) URL with no query string"
+                )
         if self.max_upload_bytes < 1:
             raise ValueError("upload size limit must be positive")
         if self.max_upload_dimension < 1:

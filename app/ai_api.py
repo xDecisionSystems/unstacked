@@ -16,6 +16,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlmodel import Session
@@ -285,6 +286,40 @@ def _authorization(request: Request, session: Session, user: User) -> Authorizat
     return AuthorizationContext(session, user)
 
 
+def build_ai_openapi_schema(public_base_url: str | None) -> dict:
+    """A provider-neutral OpenAPI document scoped to just the AI content surface.
+
+    The whole app's own ``/openapi.json`` also carries the browser UI, the
+    admin console, and backup/auth-cookie routes — none of that belongs in
+    front of an AI client, and the combined operation count comfortably
+    exceeds what a ChatGPT Action accepts in one schema. This document is
+    built straight from ``router``'s own route objects (not `app.routes`,
+    whose shape is a FastAPI-internal detail this file should not depend on)
+    filtered to the ``/api/ai/`` paths, so it can never drift from what those
+    routes actually accept and return.
+
+    ``/auth/token`` and ``/auth/tokens/revoke`` are deliberately excluded: an
+    Action is configured with one bearer token obtained out of band, not by
+    calling a credential-issuing endpoint as one of its own operations.
+    """
+
+    ai_routes = [route for route in router.routes if route.path.startswith("/api/ai/")]
+    schema = get_openapi(
+        title="Unstacked AI Content API",
+        version="0.1.0",
+        description=(
+            "Permission-aware read, search, and create access to a "
+            "Git-backed Markdown wiki, scoped to what an AI agent may call. "
+            "Every operation requires `Authorization: Bearer <token>` "
+            "obtained separately from `POST /api/auth/token`."
+        ),
+        routes=ai_routes,
+    )
+    if public_base_url:
+        schema["servers"] = [{"url": public_base_url}]
+    return schema
+
+
 def get_rate_limited_ai_user(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
@@ -377,6 +412,18 @@ def revoke_api_tokens(
             user_id=target.id,
             api_token_generation=target.api_token_generation,
         )
+
+
+@router.get("/ai/openapi.json", include_in_schema=False)
+def ai_openapi_schema(request: Request) -> dict:
+    """The AI-only OpenAPI document — what a ChatGPT Action should import.
+
+    Deliberately unauthenticated: the schema describes the API's shape, not
+    any wiki content, and an Action needs to fetch it before it has a bearer
+    token configured. Every operation it documents still requires one.
+    """
+
+    return build_ai_openapi_schema(request.app.state.settings.public_base_url)
 
 
 @router.get("/ai/tree")
