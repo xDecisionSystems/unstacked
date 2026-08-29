@@ -19,10 +19,17 @@
 <ul class="book-cards" id="book-cards">
   {% for book in tree %}
   <li class="book-card" draggable="true" data-slug="{{ book.slug }}">
-    <a draggable="false" href="{% if book.first_page %}/pages/{{ book.first_page }}{% else %}/pages/new?parent={{ book.slug }}{% endif %}">
-      <span class="book-card-title">{{ book.title }}</span>
-      <span class="book-card-meta">{{ book.page_count }} page{{ '' if book.page_count == 1 else 's' }} &middot; {{ book.chapters|length }} chapter{{ '' if book.chapters|length == 1 else 's' }}</span>
-    </a>
+    <a
+      class="book-card-link"
+      draggable="false"
+      aria-label="{{ book.title }}"
+      href="{% if book.first_page %}/pages/{{ book.first_page }}{% else %}/pages/new?parent={{ book.slug }}{% endif %}"
+    ></a>
+    <span class="book-card-title">{{ book.title }}</span>
+    <span class="book-card-footer">
+      <span class="book-card-stat book-card-stat-primary">{{ book.page_count }} page{{ '' if book.page_count == 1 else 's' }}</span>
+      <span class="book-card-stat">{{ book.chapters|length }} chapter{{ '' if book.chapters|length == 1 else 's' }}</span>
+    </span>
   </li>
   {% endfor %}
 </ul>
