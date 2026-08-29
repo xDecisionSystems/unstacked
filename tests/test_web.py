@@ -498,6 +498,7 @@ def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, c
     assert "Move or rename" not in response.text
     assert 'id="edit-toggle"' in response.text
     assert 'id="inline-editor" hidden' in response.text
+    assert 'class="form-actions inline-editor-actions"' in response.text
     assert 'href="/books/handbook" title="Back to book"' in response.text
     assert "font-awesome/4.7.0/css/font-awesome.min.css" in response.text
     assert 'aria-label="Breadcrumb"' not in response.text
