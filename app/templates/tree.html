@@ -23,7 +23,7 @@
       class="book-card-link"
       draggable="false"
       aria-label="{{ book.title }}"
-      href="{% if book.first_page %}/pages/{{ book.first_page }}{% else %}/pages/new?parent={{ book.slug }}{% endif %}"
+      href="/books/{{ book.slug }}"
     ></a>
     <span class="book-card-title">{{ book.title }}</span>
     <span class="book-card-footer">

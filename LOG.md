@@ -10,6 +10,35 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 05:23 UTC — Claude Code
+User asked for a book overview page: clicking a book card now opens
+`/books/{slug}` instead of jumping straight to its first page, showing one
+horizontally-scrollable row of page cards per chapter (plus a "Pages" row
+for pages directly in the book), and an admin-only "+" that creates a
+chapter instead of a book.
+
+New `book_view` route in `app/web.py` reuses the same ACL-filtered `tree`
+context every page already builds -- looks up the requested slug in it
+rather than a second query, so a nonexistent book and one this user can't
+read collapse to the same 404, matching every other route in this module.
+New `book.html` template; `+` posts to the existing `/manage/chapter` route
+unchanged, just like the dashboard's book "+" already reuses
+`/manage/book`. Removed `_tree_view_model`'s now-unused `first_page` field
+and `_first_book_page` helper -- the dashboard card no longer needs a
+first-page target now that it links to the book page instead.
+
+Page cards reuse the same shadow/radius/hover language as the dashboard's
+book cards but as a `flex` row with `overflow-x: auto` rather than a
+wrapping subgrid, since a chapter row has no cross-card alignment need --
+just scroll.
+
+Updated the two dashboard tests that asserted the old first-page-link
+behavior, added 7 new tests for the book page (chapter rows, loose pages,
+draft badges, empty chapter/book states, 404 on unknown/inaccessible book,
+admin-only "+"). Full suite green, ruff clean.
+- Files: `app/web.py`, `app/templates/tree.html`, `app/templates/book.html`,
+  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 05:16 UTC — Claude Code
 User shared a screenshot of a CSS-subgrid card demo and asked for similar
 style/spacing/drop-shadow on the book dashboard cards added earlier this
@@ -263,10 +292,3 @@ Integrated T9.3 REST bounds: reject obviously oversized page JSON before any
 content write and cap Git diff responses by UTF-8 bytes, including historical
 oversized/non-ASCII content.
 - Files: `app/ai_api.py`, `tests/test_ai_api.py`, `LOG.md`
-
-## 2026-08-28 22:32 UTC — Codex
-Completed T5.5's admin console: confirmed user/group/grant actions, browser
-token revocation, backup controls, and a CSRF-protected acknowledged static
-export download backed by the safe ZIP packager.
-- Files: `app/web.py`, `app/templates/admin.html`, `app/static/style.css`,
-  `tests/test_web.py`, `plans/plan_initial.md`, `LOG.md`

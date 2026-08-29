@@ -195,24 +195,14 @@ def test_two_users_with_different_grants_see_different_trees(app_env, client, co
 # --------------------------------------------------------------------------
 
 
-def test_dashboard_renders_a_card_per_book_linked_to_its_first_page(client, content):
+def test_dashboard_renders_a_card_per_book_linked_to_its_book_page(client, content):
     _login(client, "admin")
     page = client.get("/tree")
     assert page.status_code == 200
     assert 'data-slug="alice-book"' in page.text
     assert 'data-slug="bob-book"' in page.text
-    assert 'href="/pages/alice-book/secret"' in page.text
-    assert 'href="/pages/bob-book/other"' in page.text
-
-
-def test_a_book_with_no_pages_links_to_creating_its_first_page(app_env, client):
-    app, _settings, admin, _token = app_env
-    app.state.content.create_book("Empty Book", "empty-book", admin)
-
-    _login(client, "admin")
-    page = client.get("/tree")
-    assert 'data-slug="empty-book"' in page.text
-    assert 'href="/pages/new?parent=empty-book"' in page.text
+    assert 'href="/books/alice-book"' in page.text
+    assert 'href="/books/bob-book"' in page.text
 
 
 def test_the_add_book_button_is_admin_only(app_env, client, content):
@@ -237,6 +227,86 @@ def test_dashboard_empty_state_when_no_books_are_visible(app_env, client):
     page = client.get("/tree")
     assert "Nothing here yet" in page.text
     assert 'id="book-cards"' not in page.text
+
+
+# --------------------------------------------------------------------------
+# Book overview page (chapter rows of page cards)
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def book_with_chapters(app_env):
+    """A book with a loose page, a chapter with pages, and an empty chapter."""
+
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Handbook", "handbook", admin)
+    repository.create_page("handbook", "Overview", "overview", "# Overview", [], False, admin)
+    repository.create_chapter("handbook", "Policies", "policies", admin)
+    repository.create_page("handbook/policies", "Leave", "leave", "# Leave", [], False, admin)
+    repository.create_page("handbook/policies", "Travel", "travel", "# Travel", [], True, admin)
+    repository.create_chapter("handbook", "Empty Chapter", "empty-chapter", admin)
+    return repository
+
+
+def test_book_page_renders_a_row_per_chapter_with_page_cards(client, book_with_chapters):
+    _login(client, "admin")
+    page = client.get("/books/handbook")
+    assert page.status_code == 200
+    assert "Policies" in page.text
+    assert "Empty Chapter" in page.text
+    assert 'href="/pages/handbook/policies/leave"' in page.text
+    assert 'href="/pages/handbook/policies/travel"' in page.text
+    assert "No pages yet" in page.text  # the empty chapter's row
+
+
+def test_book_page_shows_loose_pages_under_a_pages_row(client, book_with_chapters):
+    _login(client, "admin")
+    page = client.get("/books/handbook")
+    assert 'href="/pages/handbook/overview"' in page.text
+
+
+def test_book_page_marks_drafts(client, book_with_chapters):
+    _login(client, "admin")
+    page = client.get("/books/handbook")
+    assert "Draft" in page.text
+
+
+def test_book_page_404s_for_an_unknown_book(client):
+    _login(client, "admin")
+    assert client.get("/books/no-such-book").status_code == 404
+
+
+def test_book_page_404s_rather_than_leaking_an_inaccessible_book(app_env, client, content):
+    app, _settings, _admin, _token = app_env
+    _make_user(app, "reader")
+
+    _login(client, "reader")
+    assert client.get("/books/alice-book").status_code == 404
+
+
+def test_the_add_chapter_button_is_admin_only(app_env, client, book_with_chapters):
+    app, _settings, _admin, _token = app_env
+
+    _login(client, "admin")
+    admin_page = client.get("/books/handbook")
+    assert "new-book-popover" in admin_page.text
+    client.cookies.clear()
+
+    reader = _make_user(app, "handbook-reader")
+    _grant(app, reader.id, "handbook", group_name="handbook-group")
+    _login(client, "handbook-reader")
+    reader_page = client.get("/books/handbook")
+    assert "new-book-popover" not in reader_page.text
+
+
+def test_book_page_empty_state_for_a_book_with_nothing_in_it(app_env, client):
+    app, _settings, admin, _token = app_env
+    app.state.content.create_book("Empty Book", "empty-book", admin)
+
+    _login(client, "admin")
+    page = client.get("/books/empty-book")
+    assert "Nothing here yet" in page.text
 
 
 def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, client):

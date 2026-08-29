@@ -167,25 +167,10 @@ def _tree_view_model(content, raw_tree: list[dict]) -> list[dict]:
                 "title": _container_title(content.docs, book["slug"]),
                 "pages": pages,
                 "chapters": chapters,
-                "first_page": _first_book_page(pages, chapters),
                 "page_count": len(pages) + sum(len(chapter["pages"]) for chapter in chapters),
             }
         )
     return books
-
-
-def _first_book_page(pages: list[dict], chapters: list[dict]) -> str | None:
-    """The page a book's dashboard card links to: its own first page, else its
-    first chapter's first page, else ``None`` for a book with nothing in it
-    yet. Mirrors the order the sidebar already renders in (book pages before
-    chapter pages)."""
-
-    if pages:
-        return pages[0]["path"]
-    for chapter in chapters:
-        if chapter["pages"]:
-            return chapter["pages"][0]["path"]
-    return None
 
 
 def _breadcrumbs(docs: Path, path: str, metadata: dict) -> list[str]:
@@ -362,6 +347,29 @@ def tree_view(
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     return templates.TemplateResponse(request, "tree.html", context)
+
+
+@router.get("/books/{book_slug}", response_class=HTMLResponse, include_in_schema=False)
+def book_view(
+    request: Request,
+    book_slug: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    """A single book's chapters and pages, one scrollable row per chapter.
+
+    Reuses the same ACL-filtered ``tree`` context every page already builds
+    rather than a second query -- a book absent from it is either nonexistent
+    or unreadable by this user, and the two must stay indistinguishable, so
+    both collapse to the same 404 as everywhere else in this module.
+    """
+
+    with Session(request.app.state.engine) as session:
+        context = _base_context(request, session, user)
+    book = next((entry for entry in context["tree"] if entry["slug"] == book_slug), None)
+    if book is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+    context["book"] = book
+    return templates.TemplateResponse(request, "book.html", context)
 
 
 @router.get("/search", response_class=HTMLResponse, include_in_schema=False)

@@ -395,6 +395,28 @@ button.danger:hover { background: #922019; border-color: #922019; }
 .book-card-stat { color: var(--muted); }
 .book-card-stat-primary { color: var(--accent); font-weight: 600; }
 
+.chapter-row { margin-bottom: 2rem; }
+.chapter-row-title { margin: 0 0 .75rem; font-size: 1.1rem; }
+.page-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 .6rem;
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+}
+.page-card {
+  flex: 0 0 auto;
+  width: 11rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-alt);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.09), 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.page-card:hover { box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14); transform: translateY(-2px); }
+.page-card a { display: block; padding: 1rem; color: var(--text); text-decoration: none; font-weight: 600; }
+
 .theme-option { display: flex; align-items: center; gap: .35rem; margin: .4rem 0; }
 .swatch-dot { display: inline-block; width: .85rem; height: .85rem; border-radius: 50%; border: 1px solid var(--border); }
 .theme-custom { display: flex; flex-wrap: wrap; gap: .75rem; margin: .6rem 0; }

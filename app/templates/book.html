@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ book.title }} · Unstacked{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+  <h1>{{ book.title }}</h1>
+  {% if is_admin %}
+  <details class="new-book-popover">
+    <summary class="icon-button" title="Add a new chapter" aria-label="Add a new chapter">+</summary>
+    <form method="post" action="/manage/chapter" class="new-book-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="book_slug" value="{{ book.slug }}">
+      <label>Title<input name="title" required></label>
+      <label>Slug (optional)<input name="slug"></label>
+      <button type="submit">Create chapter</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% macro page_cards(pages) %}
+<ul class="page-cards">
+  {% for page in pages %}
+  <li class="page-card"><a href="/pages/{{ page.path }}">{{ page.label }}{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}</a></li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+{% if book.pages %}
+<section class="chapter-row">
+  <h2 class="chapter-row-title">Pages</h2>
+  {{ page_cards(book.pages) }}
+</section>
+{% endif %}
+{% for chapter in book.chapters %}
+<section class="chapter-row">
+  <h2 class="chapter-row-title">{{ chapter.title }}</h2>
+  {% if chapter.pages %}
+  {{ page_cards(chapter.pages) }}
+  {% else %}
+  <p class="empty-state">No pages yet.</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% if not book.pages and not book.chapters %}
+<p class="empty-state">Nothing here yet.{% if is_admin %} Use the + button above to add the first chapter.{% endif %}</p>
+{% endif %}
+{% endblock %}
