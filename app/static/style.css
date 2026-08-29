@@ -314,6 +314,62 @@ button.danger:hover { background: #922019; border-color: #922019; }
 .admin-members { margin: .35rem 0 0; padding-left: 1.25rem; }
 .admin-members button { margin-left: .35rem; padding: .2rem .4rem; font-size: .85rem; }
 
+.dashboard-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+.dashboard-header h1 { margin: 0; }
+.new-book-popover { position: relative; }
+.new-book-popover summary { list-style: none; }
+.new-book-popover summary::-webkit-details-marker { display: none; }
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+.icon-button:hover { background: var(--accent-dark); }
+.new-book-form {
+  position: absolute;
+  right: 0;
+  top: calc(100% + .5rem);
+  z-index: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  width: 16rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+.new-book-form label { display: block; margin: 0 0 .6rem; font-size: .85rem; }
+.new-book-form input { display: block; width: 100%; margin-top: .25rem; padding: .4rem; border: 1px solid var(--border); border-radius: 4px; font: inherit; }
+
+.book-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+.book-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+  cursor: grab;
+  transition: box-shadow .15s ease, opacity .15s ease;
+}
+.book-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+.book-card.dragging { opacity: .4; }
+.book-card a { display: block; padding: 1rem; color: var(--text); text-decoration: none; }
+.book-card-title { display: block; font-weight: 600; margin-bottom: .35rem; }
+.book-card-meta { display: block; color: var(--muted); font-size: .82rem; }
+
 .theme-option { display: flex; align-items: center; gap: .35rem; margin: .4rem 0; }
 .swatch-dot { display: inline-block; width: .85rem; height: .85rem; border-radius: 50%; border: 1px solid var(--border); }
 .theme-custom { display: flex; flex-wrap: wrap; gap: .75rem; margin: .6rem 0; }

@@ -190,6 +190,55 @@ def test_two_users_with_different_grants_see_different_trees(app_env, client, co
     assert "Alice Book" not in bob_tree.text
 
 
+# --------------------------------------------------------------------------
+# Book dashboard (cards)
+# --------------------------------------------------------------------------
+
+
+def test_dashboard_renders_a_card_per_book_linked_to_its_first_page(client, content):
+    _login(client, "admin")
+    page = client.get("/tree")
+    assert page.status_code == 200
+    assert 'data-slug="alice-book"' in page.text
+    assert 'data-slug="bob-book"' in page.text
+    assert 'href="/pages/alice-book/secret"' in page.text
+    assert 'href="/pages/bob-book/other"' in page.text
+
+
+def test_a_book_with_no_pages_links_to_creating_its_first_page(app_env, client):
+    app, _settings, admin, _token = app_env
+    app.state.content.create_book("Empty Book", "empty-book", admin)
+
+    _login(client, "admin")
+    page = client.get("/tree")
+    assert 'data-slug="empty-book"' in page.text
+    assert 'href="/pages/new?parent=empty-book"' in page.text
+
+
+def test_the_add_book_button_is_admin_only(app_env, client, content):
+    app, _settings, _admin, _token = app_env
+    _make_user(app, "reader")
+
+    _login(client, "admin")
+    admin_page = client.get("/tree")
+    assert "new-book-popover" in admin_page.text
+    client.cookies.clear()
+
+    _login(client, "reader")
+    reader_page = client.get("/tree")
+    assert "new-book-popover" not in reader_page.text
+
+
+def test_dashboard_empty_state_when_no_books_are_visible(app_env, client):
+    app, _settings, _admin, _token = app_env
+    _make_user(app, "reader")
+
+    _login(client, "reader")
+    page = client.get("/tree")
+    assert "Nothing here yet" in page.text
+    assert 'id="book-cards"' not in page.text
+
+
 def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, client):
     app, _settings, admin, _token = app_env
     app.state.content.create_book("Handbook", "handbook", admin)

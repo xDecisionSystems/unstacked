@@ -10,6 +10,34 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 05:07 UTC — Claude Code
+User asked for a book dashboard: cards on the post-login main page (`/tree`),
+default alphabetical order, drag-to-reorder, and a "+" to add a book.
+Clarified two design forks before building: reorder is per-user/browser-local
+(not a shared wiki-wide order — user chose this over persisting to
+`docs/.pages` and touching every user's view), and a card click opens the
+book's first page.
+
+Extended `_tree_view_model` (already the sole source for the sidebar) with
+`slug`, `first_page` (own first page, else first chapter's first page, else
+`None`), and `page_count`, reusing the same `tree` context already built for
+every page rather than adding a second query. Rewrote `tree.html`: a card
+grid from that same data, native HTML5 drag-and-drop (vanilla JS, no
+library) persisting the dragged order to `localStorage` and reapplying it on
+load -- books outside the saved order (new ones) sort after it. `<a
+draggable="false">` inside a `draggable="true"` `<li>`, since links are
+natively draggable and would otherwise hijack the drag before it reaches the
+card. A book with no pages yet links to `/pages/new?parent=<slug>` instead
+of a dead card. The "+" is a `<details>`-based popover (CSS/HTML only, no JS
+state) posting to the existing `/manage/book` route unchanged -- admin-gated
+in the template the same way the topbar's Manage/Admin links already are,
+matching that route's own admin-only enforcement.
+
+4 new tests in `tests/test_web.py` (card slugs/hrefs, empty-book fallback
+link, admin-only "+", empty-tree state). Full suite green, ruff clean.
+- Files: `app/web.py`, `app/templates/tree.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 03:41 UTC — Claude Code
 User couldn't log in as `admin`/`admin` on a deployed instance ("Invalid
 username or password"). Root cause wasn't a code bug: no `admin` row existed
@@ -226,9 +254,3 @@ Integrated safe static-export packaging for the forthcoming admin download:
 admin-only, lock-protected, synthetic archive paths, and no symlinks or server
 paths in the ZIP.
 - Files: `app/export.py`, `tests/test_export.py`, `LOG.md`
-
-## 2026-08-28 22:35 UTC — Codex
-Integrated exhaustive ACL boundary tests for segment matching, deepest-rule
-resolution, write-implies-read, equal-depth denial, order independence, and
-sibling non-leakage.
-- Files: `tests/test_acl_boundaries.py`, `LOG.md`

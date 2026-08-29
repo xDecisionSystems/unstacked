@@ -160,14 +160,32 @@ def _tree_view_model(content, raw_tree: list[dict]) -> list[dict]:
             }
             for chapter in book.get("chapters", [])
         ]
+        pages = [_page_view(content, p) for p in book["pages"]]
         books.append(
             {
+                "slug": book["slug"],
                 "title": _container_title(content.docs, book["slug"]),
-                "pages": [_page_view(content, p) for p in book["pages"]],
+                "pages": pages,
                 "chapters": chapters,
+                "first_page": _first_book_page(pages, chapters),
+                "page_count": len(pages) + sum(len(chapter["pages"]) for chapter in chapters),
             }
         )
     return books
+
+
+def _first_book_page(pages: list[dict], chapters: list[dict]) -> str | None:
+    """The page a book's dashboard card links to: its own first page, else its
+    first chapter's first page, else ``None`` for a book with nothing in it
+    yet. Mirrors the order the sidebar already renders in (book pages before
+    chapter pages)."""
+
+    if pages:
+        return pages[0]["path"]
+    for chapter in chapters:
+        if chapter["pages"]:
+            return chapter["pages"][0]["path"]
+    return None
 
 
 def _breadcrumbs(docs: Path, path: str, metadata: dict) -> list[str]:
