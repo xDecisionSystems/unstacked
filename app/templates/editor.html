@@ -14,19 +14,26 @@
   <label>Markdown<textarea id="markdown-editor" name="markdown">{{ form.markdown }}</textarea></label>
   <div class="form-actions"><button type="submit">Save</button>{% if editing_path %}<a class="button" href="/pages/{{ editing_path.removesuffix('.md') }}">Cancel</a>{% endif %}</div>
 </form>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
-<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
+<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-chart/latest/toastui-editor-plugin-chart.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-code-syntax-highlight/latest/toastui-editor-plugin-code-syntax-highlight-all.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-color-syntax/latest/toastui-editor-plugin-color-syntax-all.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-table-merged-cell/latest/toastui-editor-plugin-table-merged-cell.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-uml/latest/toastui-editor-plugin-uml.min.js"></script>
 <script>
 (() => {
   const element = document.getElementById('markdown-editor');
-  if (!element || !window.EasyMDE) return;
+  if (!element || !window.toastui?.Editor) return;
   const previewUrl = {% if editing_path %}"/pages/{{ editing_path.removesuffix('.md') }}/preview"{% else %}"/pages/preview"{% endif %};
-  new EasyMDE({element, spellChecker: false, previewRender(plainText, preview) {
-    const body = new URLSearchParams({csrf_token: {{ csrf_token|tojson }}, markdown: plainText, parent: document.querySelector('[name=parent]').value});
-    fetch(previewUrl, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body})
-      .then(r => r.ok ? r.json() : Promise.reject()).then(data => { preview.innerHTML = data.html; }).catch(() => { preview.textContent = 'Preview unavailable.'; });
-    return 'Rendering preview…';
-  }});
+  const mount = document.createElement('div');
+  mount.id = 'toast-editor'; element.before(mount); element.hidden = true;
+  const plugins = Object.values(window.toastui.Editor.plugin || {});
+  const editor = new window.toastui.Editor({
+    el: mount, height: '640px', initialEditType: 'markdown', previewStyle: 'vertical',
+    initialValue: element.value, plugins, usageStatistics: false,
+  });
+  element.closest('form').addEventListener('submit', () => { element.value = editor.getMarkdown(); });
 })();
 </script>
 {% endblock %}

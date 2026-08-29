@@ -503,7 +503,9 @@ def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, c
     assert 'id="draft-toggle" class="draft-toggle" hidden' in response.text
     assert "Draft — exclude from the published site" not in response.text
     assert 'href="/books/handbook" title="Back to book"' in response.text
-    assert "font-awesome/4.7.0/css/font-awesome.min.css" in response.text
+    assert "toastui-editor-all.min.js" in response.text
+    assert "editor-plugin-table-merged-cell" in response.text
+    assert "editor-plugin-uml" in response.text
     assert 'aria-label="Breadcrumb"' not in response.text
 
     changed = client.post(
@@ -549,8 +551,13 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
 
     editor = client.get("/pages/handbook/leave/edit")
     assert editor.status_code == 200
-    assert "EasyMDE" in editor.text
-    assert "/pages/handbook/leave/preview" in editor.text
+    assert "toastui-editor-all.min.js" in editor.text
+    assert "getMarkdown" in editor.text
+    assert "editor-plugin-chart" in editor.text
+    assert "editor-plugin-code-syntax-highlight" in editor.text
+    assert "editor-plugin-color-syntax" in editor.text
+    assert "editor-plugin-table-merged-cell" in editor.text
+    assert "editor-plugin-uml" in editor.text
     csrf_token = _csrf_from(editor.text)
     blob_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
 

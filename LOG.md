@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 22:42 UTC — Codex
+Replaced EasyMDE with TOAST UI Editor in both editing surfaces, loading its
+chart, syntax-highlighting, color, merged-table, and UML plugins while keeping
+the existing Markdown form submission intact.
+- Files: `app/templates/page.html`, `app/templates/editor.html`,
+  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 22:30 UTC — Codex
 Forced EasyMDE toolbar glyphs and their text fallbacks to a high-contrast
 black so they remain visible against the pale Markdown toolbar.
@@ -90,10 +97,3 @@ Replaced the title popup with direct in-place editing: click the displayed
 title, type, then press Enter or blur to save; Escape restores its old value.
 - Files: `app/templates/page.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:26 UTC — Codex
-Made page-title editing genuinely inline: clicking the title opens a local
-title field saved through the shared ACL-aware service, rather than following
-the legacy full-page editor link.
-- Files: `app/ai_service.py`, `app/web.py`, `app/templates/page.html`,
-  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
