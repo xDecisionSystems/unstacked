@@ -171,3 +171,80 @@ def test_move_rejects_source_parent_swapped_after_confined_snapshot(
         seeded.move_page("ops/overview.md", "ops/runbooks", "summary", actor)
 
     assert outside_page.read_text(encoding="utf-8") == "outside move sentinel\n"
+
+
+# --- Recursive container delete/rename ---------------------------------
+#
+# A book/chapter delete or rename walks and then mutates a whole subtree
+# through ConfinedTree rather than a single file, so the race to close is an
+# ancestor swapped in between the confined walk and the confined delete/rename
+# that follows it, rather than between a single read and a single write.
+
+
+def _swap_after_walk(monkeypatch, container: Path, outside: Path, relative: str) -> None:
+    """Inject an ancestor substitution between the confined subtree walk and
+    the delete/rename that consumes its result — the container-level
+    counterpart to :func:`_swap_after_read` above."""
+
+    original_walk = ConfinedTree.walk_files
+    swapped = False
+
+    def walk_then_swap(self, candidate: str) -> list[str]:
+        nonlocal swapped
+        result = original_walk(self, candidate)
+        if not swapped and candidate == relative:
+            _swap_for_symlink(container, outside)
+            swapped = True
+        return result
+
+    monkeypatch.setattr(ConfinedTree, "walk_files", walk_then_swap)
+
+
+@pytest.fixture
+def seeded_chapter(content, actor):
+    """A book with a chapter, for exercising the container-level races above."""
+
+    content.create_book("Ops", None, actor)
+    content.create_chapter("ops", "Runbooks", None, actor)
+    content.create_page("ops/runbooks", "Restart", None, "restart body", [], False, actor)
+    return content
+
+
+def test_delete_chapter_rejects_book_swapped_after_confined_walk(
+    seeded_chapter, docs, actor, monkeypatch, tmp_path: Path
+):
+    """A recursive delete must not follow a book substituted after its walk."""
+
+    book = docs / "ops"
+    outside = tmp_path / "outside-delete-chapter"
+    outside.mkdir()
+    (outside / "runbooks").mkdir()
+    sentinel = outside / "runbooks" / "restart.md"
+    sentinel.write_text("outside chapter delete sentinel\n", encoding="utf-8")
+    _swap_after_walk(monkeypatch, book, outside, "ops/runbooks")
+
+    with pytest.raises(_UNSAFE_MUTATION):
+        seeded_chapter.delete_chapter("ops", "runbooks", actor)
+
+    assert sentinel.read_text(encoding="utf-8") == "outside chapter delete sentinel\n"
+    assert book.is_symlink()
+
+
+def test_rename_chapter_rejects_book_swapped_after_confined_walk(
+    seeded_chapter, docs, actor, monkeypatch, tmp_path: Path
+):
+    """A recursive rename must not follow a book substituted after its walk."""
+
+    book = docs / "ops"
+    outside = tmp_path / "outside-rename-chapter"
+    outside.mkdir()
+    (outside / "runbooks").mkdir()
+    sentinel = outside / "runbooks" / "restart.md"
+    sentinel.write_text("outside chapter rename sentinel\n", encoding="utf-8")
+    _swap_after_walk(monkeypatch, book, outside, "ops/runbooks")
+
+    with pytest.raises(_UNSAFE_MUTATION):
+        seeded_chapter.rename_chapter("ops", "runbooks", "playbooks", actor)
+
+    assert sentinel.read_text(encoding="utf-8") == "outside chapter rename sentinel\n"
+    assert book.is_symlink()

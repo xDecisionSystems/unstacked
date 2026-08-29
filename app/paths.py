@@ -490,6 +490,48 @@ class ConfinedTree:
         except OSError as exc:
             raise UnsafePath("path is missing or unsafe") from exc
 
+    def walk_files(self, relative: str) -> list[str]:
+        """List every regular file beneath ``relative``, confined throughout.
+
+        Used to snapshot a whole subtree before a recursive delete or rename,
+        so a caller can restore exact bytes on rollback without ever having
+        resolved an ancestor through anything but a held descriptor. A
+        symlink anywhere in the subtree is rejected, matching
+        :meth:`delete_tree` and :meth:`list` rather than silently skipped.
+
+        Defined ahead of :meth:`list` in this class body on purpose: once a
+        method literally named ``list`` exists, that name is shadowed for
+        every annotation evaluated afterward in the same class body, and
+        ``list[str]`` below would no longer mean the builtin.
+        """
+
+        def walk(directory_fd: int, prefix: str) -> list[str]:
+            found: list[str] = []
+            for name in sorted(os.listdir(directory_fd)):
+                info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                child = f"{prefix}/{name}" if prefix else name
+                if stat.S_ISREG(info.st_mode):
+                    found.append(child)
+                elif stat.S_ISDIR(info.st_mode):
+                    child_fd = os.open(
+                        name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory_fd
+                    )
+                    try:
+                        found.extend(walk(child_fd, child))
+                    finally:
+                        os.close(child_fd)
+                else:
+                    raise UnsafePath("directory contains an unsafe entry")
+            return found
+
+        try:
+            with self._directory(relative) as directory_fd:
+                return walk(directory_fd, relative)
+        except UnsafePath:
+            raise
+        except OSError as exc:
+            raise UnsafePath("path is missing or unsafe") from exc
+
     def list(self, relative: str | None = None) -> list[str]:
         """List direct children, rejecting symlinks and non-file/non-directory entries."""
 

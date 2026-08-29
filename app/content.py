@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from io import BytesIO
@@ -31,10 +32,7 @@ from app.nav import (
     NavigationError,
     create_navigation,
     parse_navigation,
-    read_navigation,
-    remove_stale_entry,
     serialize_navigation,
-    set_order,
 )
 from app.paths import (
     RESERVED_ROOT_NAMES,
@@ -181,13 +179,12 @@ class _Rollback:
 
 
 class _ConfinedRollback:
-    """Restore a small page transaction through its held tree boundary.
+    """Restore a page or container transaction through its held tree boundary.
 
     This deliberately records docs-relative names, rather than ``Path``
     objects.  A path object would resolve a newly substituted ancestor during
     rollback, which is exactly the race the descriptor-rooted lifecycle work
-    is intended to close.  It is purposefully narrow: container operations
-    still use their existing tree snapshot until they are migrated too.
+    is intended to close.
     """
 
     def __init__(self, tree: ConfinedTree) -> None:
@@ -207,8 +204,28 @@ class _ConfinedRollback:
 
         self._files.setdefault(relative, None)
 
-    def navigation(self, parent: str, original: str) -> None:
-        self._navigation.setdefault(parent, original)
+    def navigation(self, parent: str | None, original: str) -> None:
+        self._navigation.setdefault(parent or "", original)
+
+    def snapshot_tree(self, relative: str) -> list[str]:
+        """Snapshot every regular file under ``relative`` for a recursive delete.
+
+        ``.pages`` control files are routed to the navigation snapshot (its
+        own restore path) rather than the plain-file one, since
+        ``normalize_relative_path`` rejects dot-prefixed segments and a plain
+        ``write_bytes`` on a ``.pages`` path would raise on restore. Returns
+        the full file list so the caller can build its commit's affected-path
+        set without a second walk.
+        """
+
+        paths = self.tree.walk_files(relative)
+        for path in paths:
+            parent, _, name = path.rpartition("/")
+            if name == ".pages":
+                self.navigation(parent or None, self.tree.read_internal_text(parent or None))
+            else:
+                self.file(path)
+        return paths
 
     def undo(self) -> None:
         # A move restores its source only after the new destination is gone.
@@ -226,12 +243,20 @@ class _ConfinedRollback:
         for relative, original in self._files.items():
             if original is not None:
                 try:
+                    parent = relative.rpartition("/")[0]
+                    if parent:
+                        # A recursive delete's rollback restores files whose
+                        # parent directories no longer exist; recreating them
+                        # first is a no-op for the ordinary single-file case.
+                        self.tree.mkdir(parent, parents=True, exist_ok=True)
                     self.tree.write_bytes(relative, original, overwrite=True)
                 except UnsafePath:
                     pass
         for parent, original in self._navigation.items():
             try:
-                self.tree.write_internal_text(parent, original, overwrite=True)
+                if parent:
+                    self.tree.mkdir(parent, parents=True, exist_ok=True)
+                self.tree.write_internal_text(parent or None, original, overwrite=True)
             except UnsafePath:
                 pass
 
@@ -864,6 +889,16 @@ class ContentRepository:
             f"{book_slug}/{make_slug(chapter_slug, chapter_slug)}", new_slug, actor
         )
 
+    def _container_ref(self, relative: str) -> str:
+        """Validate and normalize a book/chapter path without resolving it."""
+
+        relative = normalize_relative_path(relative)
+        if path_depth(relative) not in {1, 2}:
+            raise ContentError("only books and chapters are containers")
+        if relative.split("/")[0] in RESERVED_ROOT_NAMES:
+            raise ContentError("reserved location")
+        return relative
+
     def _delete_container(self, relative: str, actor: User) -> str:
         """Delete a book or chapter recursively, as one commit.
 
@@ -872,105 +907,165 @@ class ContentRepository:
         and forcing a client to delete N children first would turn one logical
         action into N commits that cannot be undone together.  Every removed
         path stays in Git history, so nothing is actually lost.
+
+        Descriptor-confined throughout: every read, the recursive delete, and
+        the rollback restore all resolve through a held directory descriptor
+        rather than a ``Path`` computed once and reused, so an ancestor
+        swapped for a symlink after validation cannot redirect the delete.
         """
 
-        rollback = _Rollback()
         with self.git.write_lock():
-            container = self._container_path(relative)
+            relative = self._container_ref(relative)
+            if not is_confined_directory(self.docs, relative):
+                raise ContentMissing("book or chapter not found")
             kind = self._kind(relative)
-            # Snapshot the whole subtree before it goes, and declare exactly
-            # those paths to the commit.
-            affected = rollback.tree(container)
-            asset_container = None
-            if kind == "book":
-                asset_relative = f"{ASSETS_ROOT}/{relative}"
-                if is_confined_directory(self.docs, asset_relative):
-                    asset_container = safe_join(self.docs, asset_relative)
-                    affected.extend(rollback.tree(asset_container))
+            tree = ConfinedTree(self.docs)
+            rollback = _ConfinedRollback(tree)
             try:
-                affected = list(affected)
-                affected.extend(self._changed_nav(rollback, container.parent, old=container.name))
-                shutil.rmtree(container)
-                if asset_container is not None:
-                    shutil.rmtree(asset_container)
+                # Snapshot the whole subtree before it goes, and declare
+                # exactly those paths to the commit.
+                affected = [f"docs/{path}" for path in rollback.snapshot_tree(relative)]
+            except UnsafePath as exc:
+                raise ContentMissing("book or chapter not found") from exc
+            asset_relative = f"{ASSETS_ROOT}/{relative}" if kind == "book" else None
+            has_assets = asset_relative is not None and is_confined_directory(
+                self.docs, asset_relative
+            )
+            if has_assets:
+                affected.extend(f"docs/{path}" for path in rollback.snapshot_tree(asset_relative))
+            parent = relative.rsplit("/", 1)[0] if "/" in relative else None
+            name = relative.rsplit("/", 1)[-1]
+            try:
+                affected.extend(self._changed_nav_confined(tree, rollback, parent, old=name))
+                tree.delete_tree(relative)
+                if has_assets:
+                    tree.delete_tree(asset_relative)
                 return self.git.commit_paths(
                     affected,
                     name=actor.display_name,
                     email=actor.email,
-                    message=f"Delete {kind}: {container.relative_to(self.docs).as_posix()}",
+                    message=f"Delete {kind}: {relative}",
                 )
             except Exception:
                 rollback.undo()
                 raise
 
     def _rename_container(self, relative: str, new_slug: str, actor: User) -> MovedContent:
-        rollback = _Rollback()
+        """Give a book or chapter a new slug, keeping history through the move.
+
+        Descriptor-confined throughout, mirroring :meth:`_delete_container`.
+        A directory rename is one atomic filesystem operation with nothing to
+        copy, so its rollback is just the reverse rename rather than a
+        byte-for-byte restore; only the in-place asset-reference rewrite below
+        touches file contents and needs its own snapshot.
+        """
+
         with self.git.write_lock():
-            container = self._container_path(relative)
+            relative = self._container_ref(relative)
+            if not is_confined_directory(self.docs, relative):
+                raise ContentMissing("book or chapter not found")
             kind = self._kind(relative)
-            previous_path = container.relative_to(self.docs).as_posix()
-            slug = make_slug(container.name, new_slug)
-            parent = container.parent
-            # A book's parent is ``docs`` itself, which has no relative name.
-            target_relative = (
-                slug
-                if parent == self.docs
-                else f"{parent.relative_to(self.docs).as_posix()}/{slug}"
-            )
-            target = safe_join(self.docs, target_relative)
-            if target == container:
+            parent = relative.rsplit("/", 1)[0] if "/" in relative else None
+            name = relative.rsplit("/", 1)[-1]
+            slug = make_slug(name, new_slug)
+            target_relative = f"{parent}/{slug}" if parent else slug
+            if target_relative == relative:
                 raise ContentError("container already has that slug")
-            if target.exists():
+            if is_confined_directory(self.docs, target_relative):
                 raise ContentExists("a book or chapter already exists at that location")
-            sources = rollback.tree(container)
-            rollback.created_directory(target)
-            asset_source = asset_target = None
-            if kind == "book":
-                asset_relative = f"{ASSETS_ROOT}/{previous_path}"
-                if is_confined_directory(self.docs, asset_relative):
-                    asset_source = safe_join(self.docs, asset_relative)
-                    asset_target = safe_join(self.docs, f"{ASSETS_ROOT}/{slug}")
-                    if asset_target.exists():
-                        raise ContentExists("assets already exist for the destination book slug")
-                    sources.extend(rollback.tree(asset_source))
-                    rollback.created_directory(asset_target)
+
+            tree = ConfinedTree(self.docs)
+            rollback = _ConfinedRollback(tree)
             try:
-                affected = list(sources)
+                source_files = tree.walk_files(relative)
+            except UnsafePath as exc:
+                raise ContentMissing("book or chapter not found") from exc
+
+            asset_relative = f"{ASSETS_ROOT}/{relative}" if kind == "book" else None
+            asset_target_relative = f"{ASSETS_ROOT}/{target_relative}" if kind == "book" else None
+            has_assets = asset_relative is not None and is_confined_directory(
+                self.docs, asset_relative
+            )
+            if has_assets and is_confined_directory(self.docs, asset_target_relative):
+                raise ContentExists("assets already exist for the destination book slug")
+            asset_files = tree.walk_files(asset_relative) if has_assets else []
+
+            # Undone in reverse as a plain stack: each entry knows how to
+            # reverse exactly the one filesystem change it followed, so the
+            # unwind order is correct without a shared byte-snapshot model
+            # that a metadata-only directory rename doesn't need.
+            undo_steps: list[Callable[[], None]] = []
+
+            def unwind() -> None:
+                for step in reversed(undo_steps):
+                    try:
+                        step()
+                    except UnsafePath:
+                        pass
+                rollback.undo()
+
+            try:
+                affected = [f"docs/{path}" for path in source_files]
                 affected.extend(
-                    target / source.relative_to(container)
-                    for source in sources
-                    if source.is_relative_to(container)
+                    f"docs/{target_relative}/{path[len(relative) + 1 :]}"
+                    for path in source_files
                 )
-                if asset_source is not None and asset_target is not None:
+                if has_assets:
+                    affected.extend(f"docs/{path}" for path in asset_files)
                     affected.extend(
-                        asset_target / source.relative_to(asset_source)
-                        for source in sources
-                        if source.is_relative_to(asset_source)
+                        f"docs/{asset_target_relative}/{path[len(asset_relative) + 1 :]}"
+                        for path in asset_files
                     )
-                affected.extend(self._changed_nav(rollback, parent, old=container.name, new=slug))
+                affected.extend(
+                    self._changed_nav_confined(tree, rollback, parent, old=name, new=slug)
+                )
+
                 # An in-place directory rename keeps every blob byte-identical,
-                # so Git records renames and `--follow` still reaches the pages'
-                # earlier history.
-                os.replace(container, target)
-                if asset_source is not None and asset_target is not None:
-                    os.replace(asset_source, asset_target)
-                    old_reference = f"assets/{previous_path}/".encode()
-                    new_reference = f"assets/{slug}/".encode()
-                    for page in target.rglob("*.md"):
-                        original = page.read_bytes()
+                # so Git records renames and `--follow` still reaches the
+                # pages' earlier history.
+                tree.rename(relative, target_relative, overwrite=False)
+                undo_steps.append(
+                    lambda: tree.rename(target_relative, relative, overwrite=False)
+                )
+
+                if has_assets:
+                    tree.rename(asset_relative, asset_target_relative, overwrite=False)
+                    undo_steps.append(
+                        lambda: tree.rename(
+                            asset_target_relative, asset_relative, overwrite=False
+                        )
+                    )
+                    old_reference = f"{ASSETS_ROOT}/{relative}/".encode()
+                    new_reference = f"{ASSETS_ROOT}/{target_relative}/".encode()
+                    for source in source_files:
+                        if not source.endswith(".md"):
+                            continue
+                        moved = f"{target_relative}/{source[len(relative) + 1 :]}"
+                        original = tree.read_bytes(moved)
                         rewritten = original.replace(old_reference, new_reference)
                         if rewritten != original:
-                            _atomic_write_bytes(page, rewritten)
+                            tree.write_bytes(moved, rewritten, overwrite=True)
+                            undo_steps.append(
+                                lambda path=moved, data=original: tree.write_bytes(
+                                    path, data, overwrite=True
+                                )
+                            )
+
                 commit = self.git.commit_paths(
                     affected,
                     name=actor.display_name,
                     email=actor.email,
-                    message=f"Rename {kind}: {previous_path} -> {target_relative}",
+                    message=f"Rename {kind}: {relative} -> {target_relative}",
                 )
+            except FileExistsError as exc:
+                unwind()
+                raise ContentExists(
+                    "a book or chapter already exists at that location"
+                ) from exc
             except Exception:
-                rollback.undo()
+                unwind()
                 raise
-        return MovedContent(kind, target_relative, slug, previous_path, commit)
+        return MovedContent(kind, target_relative, slug, relative, commit)
 
     def page_history(self, relative: str) -> list[Revision]:
         # Deliberately does not require the file to exist: a deleted page must
@@ -1319,19 +1414,6 @@ class ContentRepository:
             raise ContentError("reserved location")
         return parent
 
-    def _container_path(self, relative: str) -> Path:
-        """Resolve an existing book or chapter directory, enforcing the depth limit."""
-
-        relative = normalize_relative_path(relative)
-        if path_depth(relative) not in {1, 2}:
-            raise ContentError("only books and chapters are containers")
-        if relative.split("/")[0] in RESERVED_ROOT_NAMES:
-            raise ContentError("reserved location")
-        container = safe_join(self.docs, relative)
-        if not container.is_dir():
-            raise ContentMissing("book or chapter not found")
-        return container
-
     @staticmethod
     def _kind(relative: str) -> str:
         return "book" if path_depth(normalize_relative_path(relative)) == 1 else "chapter"
@@ -1360,71 +1442,22 @@ class ContentRepository:
             repaired["author"] = actor.email
         return repaired
 
-    def _changed_nav(
-        self,
-        rollback: "_Rollback",
-        container: Path,
-        *,
-        old: str | None = None,
-        new: str | None = None,
-    ) -> list[Path]:
-        """Keep an explicit ``.pages`` order in step with a rename or delete.
-
-        Unstacked writes wildcard navigation, so most operations need no nav
-        edit at all and this returns nothing.  An operator who pinned an
-        explicit order is the reason it exists: without it a rename would drop
-        the node out of the sidebar and a delete would leave an entry pointing
-        at a file that no longer exists, and ``mkdocs build --strict`` fails on
-        the second one.
-        """
-
-        navigation_path = container / ".pages"
-        if not navigation_path.is_file():
-            return []
-        try:
-            entries = read_navigation(navigation_path).entries
-        except NavigationError as exc:
-            # The message carries a server-absolute path, so it is not reused.
-            raise ContentError("navigation file is malformed") from exc
-        if entries is None or any(not isinstance(entry, str) for entry in entries):
-            # A nested mapping is a supported awesome-nav declaration whose
-            # target cannot be inferred; leave the operator's file verbatim.
-            return []
-        try:
-            if old is not None and old in entries:
-                if new is None:
-                    rollback.file(navigation_path)
-                    remove_stale_entry(navigation_path, old)
-                    return [navigation_path]
-                updated = list(entries)
-                updated[updated.index(old)] = new
-                rollback.file(navigation_path)
-                set_order(navigation_path, updated)
-                return [navigation_path]
-            if new is not None and "*" not in entries and new not in entries:
-                # No wildcard means an unlisted page would vanish from the nav.
-                rollback.file(navigation_path)
-                set_order(navigation_path, [*entries, new])
-                return [navigation_path]
-        except NavigationError as exc:
-            raise ContentError("navigation file is malformed") from exc
-        return []
-
     def _changed_nav_confined(
         self,
         tree: ConfinedTree,
         rollback: _ConfinedRollback,
-        parent: str,
+        parent: str | None,
         *,
         old: str | None = None,
         new: str | None = None,
     ) -> list[str]:
         """Apply the small explicit-nav adjustment through ``ConfinedTree``.
 
-        The old path-based helper remains for container operations until those
-        transactions are migrated.  Page delete/move must not route their nav
-        rewrite through it: a substituted parent after reading ``.pages``
-        would otherwise turn the write or rollback into an outside-tree I/O.
+        ``parent`` of ``None`` means the docs root's own ``.pages`` — a book
+        being deleted or renamed has no book/chapter parent, only the root.
+        ``ConfinedTree.list``/``read_internal_text``/``write_internal_text``
+        already treat ``None`` as the confined root; this just has to spell
+        the resulting git path correctly for that case too.
         """
 
         try:
@@ -1456,7 +1489,8 @@ class ContentRepository:
             raise ContentError("navigation file is malformed") from exc
         rollback.navigation(parent, original)
         tree.write_internal_text(parent, serialized, overwrite=True)
-        return [f"docs/{parent}/.pages"]
+        nav_relative = f"{parent}/.pages" if parent else ".pages"
+        return [f"docs/{nav_relative}"]
 
     def _page_ref(self, relative: str) -> str:
         """Validate a page path for history use without requiring it on disk."""

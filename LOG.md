@@ -10,6 +10,40 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 02:55 UTC — Claude Code
+User asked to complete the remaining two tasks; did T2.1 directly rather
+than dispatching a subagent (narrow finishing work on a codebase I already
+had full context on). Closed the last gap — recursive container
+delete/rename still used `shutil.rmtree`/`os.replace`/`safe_join` while
+every other content operation had already migrated to `ConfinedTree`.
+
+Added `ConfinedTree.walk_files` (recursive, descriptor-confined) and
+rewrote `_delete_container`/`_rename_container` to use it exclusively —
+confirmed by grep that zero raw Path-mutation calls remain in either.
+Rename's rollback doesn't need delete's byte-snapshot approach (a
+directory rename is one atomic op); it unwinds via a small ordered stack
+of closures instead. Removed the now-dead Path-based `_changed_nav` and
+`_container_path` rather than leaving unused code behind.
+
+Hit one real bug of my own making mid-implementation: naming a new method
+`walk_files -> list[str]` after the class already defines a method
+literally called `list` shadows the builtin for every annotation
+evaluated later in the same class body — `TypeError: 'function' object is
+not subscriptable` at import time. Fixed by reordering, not renaming, so
+future methods aren't left as a trap.
+
+Verified rather than assumed: added two adversarial tests swapping the
+parent book for a symlink between the confined walk and the delete/rename
+that follows it. A mutation test (temporarily reverting to raw
+`shutil.rmtree`) still passed them — an earlier confined step (the
+nav-parent check) independently catches the same race first — so also
+added a call-spy proving `ConfinedTree.delete_tree`/`.rename()` are
+genuinely invoked, not merely that the pipeline is safe via a different
+layer. Full suite 585 passing (was 583), ruff clean. T2.1 marked `[x]`.
+Starting T9.3 next.
+- Files: `app/content.py`, `app/paths.py`,
+  `tests/test_content_symlink_races.py`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-08-28 23:36 UTC — Claude Code
 User asked to remove the MCP server (T9.2) — too token-costly per call
 versus a plain API for the same operations, REST-only going forward.
@@ -116,9 +150,4 @@ identical bare-remote restore, verified recovery before divergent replacement,
 safe interruption rollback, and credential redaction on transport failure.
 - Files: `tests/test_backup_roundtrip.py`, `plans/plan_initial.md`, `LOG.md`
 
-## 2026-08-28 22:10 UTC — Codex
-Made manual backup/restore compatible with the browser admin console: these
-admin endpoints now accept either bearer tokens or authenticated cookies, and
-cookie requests require the existing synchronizer CSRF token.
-- Files: `app/backup_api.py`, `LOG.md`
 
