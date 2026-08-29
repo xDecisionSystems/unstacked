@@ -265,6 +265,7 @@ button.danger:hover { background: #922019; border-color: #922019; }
 .dashboard-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
 .dashboard-header h1 { margin: 0; }
 .new-book-popover { position: relative; }
+.new-book-popover[open] { z-index: 4; }
 .new-book-popover summary { list-style: none; }
 .new-book-popover summary::-webkit-details-marker { display: none; }
 .icon-button {
@@ -288,7 +289,7 @@ button.danger:hover { background: #922019; border-color: #922019; }
   position: absolute;
   right: 0;
   top: calc(100% + .5rem);
-  z-index: 1;
+  z-index: 5;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -374,7 +375,9 @@ button.danger:hover { background: #922019; border-color: #922019; }
   display: flex;
   gap: 1rem;
   overflow-x: auto;
+  scrollbar-width: none;
 }
+.page-cards::-webkit-scrollbar { display: none; }
 .page-scroll {
   position: absolute;
   z-index: 2;
