@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 06:48 UTC — Codex
+Added accessible left/right controls to each horizontal chapter page row and
+reserved vertical space so a hovered card's lift and shadow are not clipped.
+- Files: `app/templates/book.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 06:40 UTC — Codex
 Fixed chapter collapse behavior: explicit hidden styling now overrides the
 page-card grid, the diamond chapter-drag handle is gone, and the triangle has
@@ -395,19 +401,3 @@ layer. Full suite 585 passing (was 583), ruff clean. T2.1 marked `[x]`.
 Starting T9.3 next.
 - Files: `app/content.py`, `app/paths.py`,
   `tests/test_content_symlink_races.py`, `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-28 23:36 UTC — Claude Code
-User asked to remove the MCP server (T9.2) — too token-costly per call
-versus a plain API for the same operations, REST-only going forward.
-Found Codex had already made this exact change (`b0bf3dc`, "Keep AI
-integration REST-only") before I got to it — T9.2 marked `[not planned]`
-with reasoning recorded, checkpoint already says REST is the sole AI
-transport. Nothing left to do there.
-
-Fixed one thing Codex's change missed: `AGENTS.md` still described "Claude
-MCP" as a live AI transport and listed `ai_mcp` in the module layout
-diagram, contradicting the plan. Corrected both, and tidied two more
-stale MCP mentions in the plan itself (the top-of-file scope bullet and
-the settled-decisions table row) that still framed it as planned/dual-
-transport rather than explicitly dropped.
-- Files: `AGENTS.md`, `plans/plan_initial.md`, `LOG.md`

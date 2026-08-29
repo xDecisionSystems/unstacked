@@ -366,14 +366,33 @@ button.danger:hover { background: #922019; border-color: #922019; }
 }
 .row-toggle:hover { color: var(--text); }
 .page-cards[hidden], .empty-state[hidden] { display: none; }
+.page-scroller { position: relative; }
 .page-cards {
   list-style: none;
   margin: 0;
-  padding: 0 0 .6rem;
+  padding: 1rem 3rem 1rem;
   display: flex;
   gap: 1rem;
   overflow-x: auto;
 }
+.page-scroll {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1;
+}
+.page-scroll:hover { background: var(--bg-alt); }
+.page-scroll-left { left: .35rem; }
+.page-scroll-right { right: .35rem; }
 .page-card {
   flex: 0 0 auto;
   width: 11rem;

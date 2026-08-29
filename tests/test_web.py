@@ -284,6 +284,9 @@ def test_book_page_carries_page_drag_reorder_markup(client, book_with_chapters):
     assert 'class="page-card" draggable="true" data-key="handbook/policies/leave"' in page.text
     assert 'data-parent="handbook/policies"' in page.text
     assert 'data-parent="handbook"' in page.text  # the loose-pages row
+    assert 'aria-label="Scroll pages left"' in page.text
+    assert 'aria-label="Scroll pages right"' in page.text
+    assert 'data-scroll-target="policies-pages"' in page.text
 
 
 def test_book_page_rows_have_a_collapse_toggle(client, book_with_chapters):
