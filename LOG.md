@@ -10,6 +10,26 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 03:14 UTC — Claude Code
+Applied the user-supplied brand palette (Future Green #00CA8C, Bright
+Pastel Orange #FFB54C, Cyber Lime #8CD47E, Digital Gray #808080, Cosmic
+Blue #002E5D) to `app/static/style.css`, the web UI's one hand-written
+stylesheet. Remapped the existing CSS custom properties rather than
+introducing new hardcoded colors throughout: `--accent` → Future Green,
+`--muted`/`--text` → Digital Gray/Cosmic Blue, `--bg-alt` → a light
+Future Green tint, plus a new `--accent-secondary` (Cyber Lime) and
+`--warm` (Pastel Orange) for search-highlight/draft-badge/diff-table
+accents. Deliberately kept `--danger` a plain red rather than
+repurposing a brand color for destructive actions — none of the five
+reads as "danger", and legibility for delete/revoke controls matters
+more than palette purism there. Added a button hover state (darker
+green) since none existed before. Recolored the draft badge, search
+snippet highlight, and diff add/sub/chg backgrounds to match. Verified
+the stylesheet still serves correctly and the full web UI test suite
+(21 tests) still passes — styling doesn't affect any Python-level
+assertion, but confirmed nothing broke regardless.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-08-29 03:08 UTC — Claude Code
 Completed T9.3 (the plan's last open task) — every task is now `[x]` or
 `[not planned]`. Discovered a real gap while investigating "OpenAPI
@@ -171,13 +191,6 @@ ACL, exports, secrets, and token revocation.
   `plans/plan_initial.md`, `LOG.md`
 
 ## 2026-08-28 22:16 UTC — Codex
-Integrated reviewed search API and ACL authorization coverage from the parallel
-batch. Bearer callers can now search through the shared ACL-first service with
-bounded pagination/errors; new tests verify no unreadable-result leak and
-route/service mutation boundaries.
-- Files: `app/ai_api.py`, `tests/test_ai_api.py`,
-  `tests/test_authorization_coverage.py`, `app/web.py`,
-  `plans/plan_initial.md`, `LOG.md`
 
 
 

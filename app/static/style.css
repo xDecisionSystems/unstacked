@@ -6,12 +6,28 @@
 
 :root {
   color-scheme: light;
-  --border: #d7dbe0;
-  --muted: #5b6572;
-  --accent: #1b56d6;
+  /* Brand palette. --accent-dark and --bg-alt are tints/shades derived from
+   * Future Green and Cosmic Blue respectively, not new brand colors, so the
+   * five source colors stay the only ones this file introduces. */
+  --future-green: #00ca8c;
+  --pastel-orange: #ffb54c;
+  --cyber-lime: #8cd47e;
+  --digital-gray: #808080;
+  --cosmic-blue: #002e5d;
+
+  --border: #c7cdd1;
+  --muted: var(--digital-gray);
+  --accent: var(--future-green);
+  --accent-dark: #00a374;
+  --accent-secondary: var(--cyber-lime);
+  --warm: var(--pastel-orange);
   --bg: #ffffff;
-  --bg-alt: #f5f6f8;
-  --text: #1c2127;
+  --bg-alt: #eefaf5;
+  --text: var(--cosmic-blue);
+  /* Destructive actions stay unambiguously red regardless of brand palette:
+   * none of the five brand colors reads as "danger", and repurposing one
+   * for delete/revoke controls would be a legibility regression, not a
+   * brand win. */
   --danger: #b3261e;
 }
 
@@ -222,7 +238,7 @@ a {
 .search-results h2 { font-size: 1.1rem; margin: 0 0 0.25rem; }
 .search-results .breadcrumbs { margin-bottom: 0.35rem; }
 .search-snippet { margin: 0.35rem 0; white-space: pre-wrap; }
-.search-snippet mark { background: #fff0a3; color: inherit; padding: 0 0.08em; }
+.search-snippet mark { background: var(--warm); color: var(--text); padding: 0 0.08em; }
 .search-tags { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0; }
 .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 1.25rem; }
 
@@ -230,8 +246,8 @@ a {
   margin-left: 0.35rem;
   padding: 0.05rem 0.3rem;
   border-radius: 3px;
-  color: #774500;
-  background: #fff0c2;
+  color: #7a4a10;
+  background: #ffe5c0; /* Pastel Orange tinted toward white, for legible text on it */
   font-size: 0.72rem;
 }
 
@@ -256,7 +272,9 @@ button, .button {
   cursor: pointer;
 }
 
+button:hover, .button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
 button.danger { background: var(--danger); border-color: var(--danger); }
+button.danger:hover { background: #922019; border-color: #922019; }
 
 .editor-form, .manage-grid form { max-width: 760px; }
 
@@ -310,8 +328,8 @@ button.danger { background: var(--danger); border-color: var(--danger); }
 .diff-table table { border-collapse: collapse; width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
 .diff-table td, .diff-table th { padding: 0.2rem 0.35rem; vertical-align: top; white-space: pre-wrap; }
 .diff-table .diff_header { color: var(--muted); background: var(--bg-alt); }
-.diff-table .diff_add { background: #d9f5df; }
+.diff-table .diff_add { background: #e2f6db; } /* Cyber Lime tinted toward white */
 .diff-table .diff_sub { background: #ffe2e0; }
-.diff-table .diff_chg { background: #fff0c2; }
+.diff-table .diff_chg { background: #ffe5c0; } /* Pastel Orange tinted toward white */
 @media (max-width: 750px) { .history-layout { grid-template-columns: 1fr; } }
 @media (max-width: 750px) { .topbar { align-items: stretch; flex-wrap: wrap; } .topbar .site-search { order: 3; flex-basis: 100%; margin: 0.5rem 0 0; } }
