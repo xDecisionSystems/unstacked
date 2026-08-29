@@ -5,7 +5,7 @@
   <div><p class="eyebrow">BOOK</p><h1>{{ book.title }}</h1><p>{{ book.page_count }} pages across {{ book.chapters|length }} chapters.</p></div>
   {% if book.can_write %}
   <details class="new-book-popover">
-    <summary class="icon-button" title="Add a new chapter" aria-label="Add a new chapter">+</summary>
+    <summary class="add-content-button" title="Add a new chapter" aria-label="Add a new chapter">+ Add chapter</summary>
     <form method="post" action="/manage/chapter" class="new-book-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="book_slug" value="{{ book.slug }}">
@@ -49,7 +49,7 @@
     <h2 class="chapter-row-title">{{ chapter.title }}</h2>
     {% if chapter.can_write %}
     <details class="new-book-popover">
-      <summary class="icon-button icon-button-small" title="Add a page to {{ chapter.title }}" aria-label="Add a page to {{ chapter.title }}">+</summary>
+      <summary class="add-content-button" title="Add a page to {{ chapter.title }}" aria-label="Add a page to {{ chapter.title }}">+ Add page</summary>
       <form method="post" action="/manage/page" class="new-book-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="parent" value="{{ book.slug }}/{{ chapter.slug }}">

@@ -82,3 +82,39 @@
     left: 0;
   }
 }
+
+/* Figma administration workspace: a persistent task sidebar and structured
+ * access-management canvas instead of a collection of unrelated cards. */
+.admin-layout {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 48px;
+  margin: -44px -56px -48px;
+  min-height: calc(100vh - 80px);
+}
+.admin-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 32px 24px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+.admin-sidebar-brand { margin-bottom: 2px; color: var(--burgundy); font: 600 25px 'Source Serif 4', serif; text-decoration: none; }
+.admin-back { margin-bottom: 10px; color: var(--orange); font-size: 13px; text-decoration: none; }
+.admin-sidebar .eyebrow { margin: 0 0 4px; color: var(--muted); }
+.admin-sidebar > a:not(.admin-sidebar-brand):not(.admin-back) { padding: 11px 12px; border-radius: 9px; color: var(--burgundy-soft); font-size: 14px; text-decoration: none; }
+.admin-sidebar > a.is-active, .admin-sidebar > a:not(.admin-sidebar-brand):not(.admin-back):hover { background: var(--tag); color: var(--burgundy); font-weight: 600; }
+.admin-content { min-width: 0; padding: 42px 48px 48px 0; }
+.admin-header { display: flex; align-items: center; gap: 24px; margin-bottom: 24px; }
+.admin-header > div { flex: 1; }.admin-header h1 { margin: 0; font: 600 38px 'Source Serif 4', serif; }.admin-header p { margin: 6px 0 0; color: var(--burgundy-soft); font-size: 15px; }
+.admin-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 20px 0 24px; }
+.admin-metrics article { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.admin-metrics strong { font: 600 26px 'Source Serif 4', serif; }.admin-metrics span { color: var(--muted); font-size: 13px; }
+.admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.admin-grid .admin-panel-wide { grid-column: 1 / -1; }
+.admin-grid section { border-radius: 14px; }.admin-grid h2 { font-size: 22px; }.admin-grid > section > p { color: var(--burgundy-soft); font-size: 13px; }
+.add-content-button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--burgundy); font: 600 13px 'Source Sans 3', sans-serif; cursor: pointer; list-style: none; }
+.add-content-button:hover { border-color: var(--orange); background: var(--tag); color: var(--burgundy); }.add-content-button::-webkit-details-marker { display: none; }
+@media (max-width: 1000px) { .admin-layout { grid-template-columns: 1fr; gap: 0; margin: -32px -24px -48px; }.admin-sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 20px 24px; border-right: 0; border-bottom: 1px solid var(--border); }.admin-sidebar-brand { margin-right: 16px; }.admin-back { margin: 0 16px 0 0; }.admin-sidebar .eyebrow { display: none; }.admin-content { padding: 32px 24px 48px; } }
+@media (max-width: 680px) { .admin-header { align-items: flex-start; flex-direction: column; }.admin-metrics { grid-template-columns: 1fr; }.admin-grid { grid-template-columns: 1fr; }.admin-grid .admin-panel-wide { grid-column: auto; } }

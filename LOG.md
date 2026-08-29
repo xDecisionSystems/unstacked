@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 23:02 UTC — Codex
+Rebuilt the administration view around the Figma sidebar, access metrics, and
+structured management panels; replaced tiny chapter/page plus controls with
+clear labeled actions.
+- Files: `app/templates/admin.html`, `app/templates/book.html`,
+  `app/static/style.css`, `LOG.md`
+
 ## 2026-08-29 22:58 UTC — Codex
 Anchored chapter page-creation popovers to their full headers and constrained
 their width so they remain visible beside scrollable page-card rows.
@@ -91,8 +98,3 @@ Moved inline-editor Save and Cancel into a fixed floating group on the left,
 with a bottom horizontal layout on narrow screens.
 - Files: `app/templates/page.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:41 UTC — Codex
-Loaded Font Awesome explicitly for EasyMDE so its toolbar icons render in
-Safari, and removed the page-path breadcrumb row from page views.
-- Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
