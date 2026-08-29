@@ -322,6 +322,29 @@ def test_creating_a_chapter_redirects_back_to_the_book_page(app_env, client):
     assert response.headers["location"] == "/books/handbook"
 
 
+def test_creating_a_page_quick_redirects_to_the_book_page_with_its_new_card(
+    client, book_with_chapters
+):
+    """The quick-create popover makes a blank page (no markdown editor step)
+    and lands back where its card is now visible, matching the book/chapter
+    creation flow -- not the full editor's own /pages/new, which is a
+    separate route reserved for actually writing content."""
+
+    _login(client, "admin")
+    page = client.get("/books/handbook")
+    csrf_token = _csrf_from(page.text)
+    response = client.post(
+        "/manage/page",
+        data={"csrf_token": csrf_token, "parent": "handbook/policies", "title": "Holidays"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/handbook"
+
+    book_page = client.get("/books/handbook")
+    assert 'href="/pages/handbook/policies/holidays"' in book_page.text
+
+
 def test_the_add_page_button_follows_write_access_not_admin_status(
     app_env, client, book_with_chapters
 ):
@@ -338,17 +361,17 @@ def test_the_add_page_button_follows_write_access_not_admin_status(
 
     _login(client, "admin")
     admin_page = client.get("/books/handbook")
-    assert 'href="/pages/new?parent=handbook/policies"' in admin_page.text
+    assert 'name="parent" value="handbook/policies"' in admin_page.text
     client.cookies.clear()
 
     _login(client, "read-only")
     reader_page = client.get("/books/handbook")
-    assert 'href="/pages/new?parent=handbook/policies"' not in reader_page.text
+    assert 'name="parent" value="handbook/policies"' not in reader_page.text
     client.cookies.clear()
 
     _login(client, "editor")
     editor_page = client.get("/books/handbook")
-    assert 'href="/pages/new?parent=handbook/policies"' in editor_page.text
+    assert 'name="parent" value="handbook/policies"' in editor_page.text
 
 
 def test_book_page_empty_state_for_a_book_with_nothing_in_it(app_env, client):
@@ -438,7 +461,7 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
     assert markdown == "# Updated\n\nNew body"
     assert metadata["tags"] == ["hr", "policy"]
     assert metadata["draft"] is True
-    assert "Draft" in client.get("/tree").text
+    assert "Draft" in client.get("/books/handbook").text
     assert "not included in the published site" in client.get("/pages/handbook/leave").text
 
     preview = client.post(

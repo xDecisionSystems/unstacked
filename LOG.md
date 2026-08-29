@@ -10,6 +10,38 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 05:44 UTC — Claude Code
+Two user requests handled together (the second arrived mid-turn on the
+first): a lightweight page-creation popover matching the book/chapter
+pattern, and removing the sidebar from every page.
+
+**Sidebar removal.** Dropped `<nav class="sidebar">`/`{% include "_tree.html"
+%}` from `base.html`; deleted the now-unused `_tree.html` partial (confirmed
+nothing else referenced it) and the `.layout`/`.sidebar*` CSS rules,
+replacing them with `.content` centered at the same 900px max-width it
+already had, `min-height` moved onto it directly. `_base_context`'s `tree`
+context key is untouched -- `/tree` and `/books/{slug}` still need it for
+their card grids, only the sidebar rendering of it is gone. One test
+(`test_editor_saves_through_the_acl_service_and_marks_drafts`) asserted a
+draft badge on `/tree`, which only ever came from the sidebar's per-page
+listing; repointed it at `/books/{slug}`, where drafts are still visible.
+
+**Quick page creation.** The chapter-row "+" was a plain link straight into
+the full markdown editor (`/pages/new`) -- inconsistent with book/chapter
+creation's small title+slug popover, and skipped past "see the new card,
+then click into it." Added `POST /manage/page`, a new route deliberately
+separate from `/pages/new` (which stays exactly as-is for the "write real
+content" flow reached via a full editor, still used by book creation and
+the rename redirects) -- creates a page with blank markdown and redirects to
+`/books/{slug}`, same shape as chapter creation's own popover. Clicking the
+resulting card opens the ordinary page view, which already had an Edit
+button; nothing there needed to change.
+
+5 new/updated tests. Full suite green, ruff clean.
+- Files: `app/web.py`, `app/templates/base.html`, `app/templates/book.html`,
+  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
+- Deleted: `app/templates/_tree.html`
+
 ## 2026-08-29 05:32 UTC — Claude Code
 Two follow-ups to the book overview page. Chapter creation
 (`create_chapter_submit` in `app/web.py`) now redirects to `/books/{slug}`
@@ -306,10 +338,3 @@ cannot rewrite outside sentinels.
 - Files: `app/content.py`, `app/paths.py`, `tests/test_content_lifecycle.py`,
   `tests/test_content_symlink_races.py`, `tests/test_paths.py`,
   `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-28 23:00 UTC — Codex
-Integrated the T2.1 foundations: descriptor-rooted confined tree operations
-reject symlink traversal for lifecycle primitives, and navigation now has pure
-parse/serialize helpers for confined callers.
-- Files: `app/paths.py`, `app/nav.py`, `tests/test_paths.py`,
-  `tests/test_nav.py`, `LOG.md`

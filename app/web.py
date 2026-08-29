@@ -893,6 +893,35 @@ async def create_chapter_submit(
     return RedirectResponse(f"/books/{book_slug}", status_code=303)
 
 
+@router.post("/manage/page", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def create_page_quick_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    """A blank page, the same "create empty, fill in later" shape as a new
+    book or chapter -- unlike ``POST /pages/new``, which carries a full
+    markdown body from the editor and belongs to that flow alone. Lands back
+    on the book page so the new card is right there to click into, rather
+    than opening the editor immediately.
+    """
+
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            created = request.app.state.ai_service.create_page(
+                _authorization(session, user),
+                parent=form.get("parent", ""),
+                title=form.get("title", ""),
+                slug=form.get("slug") or None,
+                markdown="",
+                tags=[],
+                draft=False,
+            )
+        except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
+            return _manage_error_response(request, session, user, exc)
+    book_slug = created.path.split("/", 1)[0]
+    return RedirectResponse(f"/books/{book_slug}", status_code=303)
+
+
 @router.post("/manage/book/rename", include_in_schema=False, dependencies=[Depends(require_csrf)])
 async def rename_book_submit(
     request: Request, user: Annotated[User, Depends(require_normal_web_user)]

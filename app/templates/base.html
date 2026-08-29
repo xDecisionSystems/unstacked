@@ -22,13 +22,8 @@
       <button type="submit">Log out</button>
     </form>
   </header>
-  <div class="layout">
-    <nav class="sidebar" aria-label="Content tree">
-      {% include "_tree.html" %}
-    </nav>
-    <main class="content">
-      {% block content %}{% endblock %}
-    </main>
-  </div>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
 </body>
 </html>

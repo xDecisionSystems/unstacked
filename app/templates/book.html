@@ -34,12 +34,16 @@
   <div class="chapter-row-header">
     <h2 class="chapter-row-title">{{ chapter.title }}</h2>
     {% if chapter.can_write %}
-    <a
-      class="icon-button icon-button-small"
-      title="Add a page to {{ chapter.title }}"
-      aria-label="Add a page to {{ chapter.title }}"
-      href="/pages/new?parent={{ book.slug }}/{{ chapter.slug }}"
-    >+</a>
+    <details class="new-book-popover">
+      <summary class="icon-button icon-button-small" title="Add a page to {{ chapter.title }}" aria-label="Add a page to {{ chapter.title }}">+</summary>
+      <form method="post" action="/manage/page" class="new-book-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="parent" value="{{ book.slug }}/{{ chapter.slug }}">
+        <label>Title<input name="title" required></label>
+        <label>Slug (optional)<input name="slug"></label>
+        <button type="submit">Create page</button>
+      </form>
+    </details>
     {% endif %}
   </div>
   {% if chapter.pages %}
