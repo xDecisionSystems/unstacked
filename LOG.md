@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 07:41 UTC — Codex
+Loaded Font Awesome explicitly for EasyMDE so its toolbar icons render in
+Safari, and removed the page-path breadcrumb row from page views.
+- Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 07:35 UTC — Codex
 Replaced the title popup with direct in-place editing: click the displayed
 title, type, then press Enter or blur to save; Escape restores its old value.
@@ -243,25 +248,3 @@ draft badges, empty chapter/book states, 404 on unknown/inaccessible book,
 admin-only "+"). Full suite green, ruff clean.
 - Files: `app/web.py`, `app/templates/tree.html`, `app/templates/book.html`,
   `app/static/style.css`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 05:16 UTC — Claude Code
-User shared a screenshot of a CSS-subgrid card demo and asked for similar
-style/spacing/drop-shadow on the book dashboard cards added earlier this
-session. Restyled `.book-card` in `app/static/style.css`: resting drop
-shadow (not just on hover), larger radius/padding/gap, and -- the actual
-technique in the screenshot -- `grid-template-rows: subgrid` so every card's
-footer row aligns to the same baseline across a row of cards even when one
-title wraps to more lines than its neighbors (parent `.book-cards` defines
-the two row tracks; degrades harmlessly to independent per-card auto-height
-in browsers without subgrid support).
-
-Restructured the card markup to make that subgrid usable without nesting it
-two levels deep: the clickable link is now a separate absolutely-positioned
-overlay (`.book-card-link`, full-card click target via `aria-label`) rather
-than wrapping the title/footer, so title and footer stay direct grid
-children of the card and slot straight into its two subgrid row tracks.
-Footer split into two stats (page count, chapter count), the first
-accent-colored to echo the reference image's colored/muted footer pair.
-Existing `tests/test_web.py` assertions (href/data-slug substrings) needed
-no changes since those attributes' values didn't move. Full suite green.
-- Files: `app/templates/tree.html`, `app/static/style.css`, `LOG.md`

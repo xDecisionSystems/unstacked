@@ -1,9 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title or "Page" }} · Unstacked{% endblock %}
 {% block content %}
-<nav class="breadcrumbs" aria-label="Breadcrumb">
-  {% for crumb in breadcrumbs %}{% if not loop.first %}<span class="sep">/</span>{% endif %}<span>{{ crumb }}</span>{% endfor %}
-</nav>
 {% if draft %}<p class="error-message">Draft &mdash; not included in the published site.</p>{% endif %}
 <div class="page-actions">
   <a class="button page-back" href="/books/{{ current_path.split('/')[0] }}" title="Back to book" aria-label="Back to book">&#8593;</a>
@@ -36,6 +33,7 @@
 {% block scripts %}
 {% if can_write %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
 <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
 <script>
 (() => {
