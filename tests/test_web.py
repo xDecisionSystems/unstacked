@@ -572,7 +572,9 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
     assert metadata["tags"] == ["hr", "policy"]
     assert metadata["draft"] is True
     assert "Draft" in client.get("/books/handbook").text
-    assert "not included in the published site" in client.get("/pages/handbook/leave").text
+    assert 'class="draft-badge page-draft-badge">Draft</span>' in client.get(
+        "/pages/handbook/leave"
+    ).text
 
     preview = client.post(
         "/pages/handbook/leave/preview",

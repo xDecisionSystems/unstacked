@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title or "Page" }} · Unstacked{% endblock %}
 {% block content %}
-{% if draft %}<p class="error-message">Draft &mdash; not included in the published site.</p>{% endif %}
 <div class="page-actions">
   <a class="button page-back" href="/books/{{ current_path.split('/')[0] }}" title="Back to book" aria-label="Back to book">&#8593;</a>
   {% if can_write %}<button type="button" id="edit-toggle" aria-expanded="false" aria-controls="inline-editor">Edit</button>{% endif %}
@@ -15,6 +14,7 @@
   <h1 class="page-title">
     {% if can_write %}<span id="editable-title" class="editable-title" role="textbox" aria-label="Page title" title="Click to edit title">{{ page_title }}</span>{% else %}{{ page_title }}{% endif %}
   </h1>
+  {% if draft %}<span class="draft-badge page-draft-badge">Draft</span>{% endif %}
 </div>
 {% if can_write %}
 <section id="inline-editor" hidden>

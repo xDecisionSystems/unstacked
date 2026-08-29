@@ -210,8 +210,9 @@ a {
 #inline-editor[hidden] { display: none; }
 .inline-editor-actions {
   position: absolute;
-  left: calc(100% + .75rem);
+  right: calc(100% + .75rem);
   top: 5rem;
+  left: auto;
   flex-direction: column;
   margin: 0;
   white-space: nowrap;
@@ -225,6 +226,7 @@ a {
 .editable-title { cursor: text; border-radius: 3px; }
 .editable-title:hover, .editable-title:focus { outline: 2px solid var(--accent); outline-offset: 3px; }
 .draft-toggle { font-weight: 600; color: var(--muted); white-space: nowrap; }
+.page-draft-badge { font-size: .9rem; }
 
 button, .button {
   display: inline-block;
