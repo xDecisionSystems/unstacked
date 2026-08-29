@@ -491,10 +491,13 @@ def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, c
     assert response.status_code == 200
     assert "Leave policy" in response.text
     assert "Safe text." in response.text
-    assert "<script>" not in response.text
+    assert "<script>alert('xss')</script>" not in response.text
     assert "handbook" in response.text.lower()
     assert 'class="page-title"><a href="/pages/handbook/leave/edit"' in response.text
     assert "Move or rename" not in response.text
+    assert 'id="edit-toggle"' in response.text
+    assert 'id="inline-editor" hidden' in response.text
+    assert 'href="/books/handbook" title="Back to book"' in response.text
 
 
 def test_page_view_404s_for_a_missing_or_unreadable_path_never_403(app_env, client, content):

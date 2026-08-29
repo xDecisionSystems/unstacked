@@ -1032,6 +1032,13 @@ def page_view(
                 "breadcrumbs": _breadcrumbs(content.docs, target, metadata),
                 "current_path": target.removesuffix(".md"),
                 "draft": bool(metadata.get("draft")) if isinstance(metadata, dict) else False,
+                "can_write": authorization.policy.decide(target).can_write,
+                "edit_form": {
+                    "markdown": markdown_source,
+                    "tags": ", ".join(str(tag) for tag in metadata.get("tags", [])),
+                    "draft": bool(metadata.get("draft")),
+                    "base_blob_sha": content.page_blob_sha(target),
+                },
             }
         )
     return templates.TemplateResponse(request, "page.html", context)

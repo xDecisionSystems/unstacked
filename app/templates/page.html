@@ -6,7 +6,8 @@
 </nav>
 {% if draft %}<p class="error-message">Draft &mdash; not included in the published site.</p>{% endif %}
 <div class="page-actions">
-  <a class="button" href="/pages/{{ current_path }}/edit">Edit</a>
+  <a class="button page-back" href="/books/{{ current_path.split('/')[0] }}" title="Back to book" aria-label="Back to book">&#8593;</a>
+  {% if can_write %}<button type="button" id="edit-toggle" aria-expanded="false" aria-controls="inline-editor">Edit</button>{% endif %}
   <a class="button" href="/pages/{{ current_path }}/history">History</a>
   <form method="post" action="/pages/{{ current_path }}/delete" onsubmit="return confirm('Delete this page? Git history will retain it.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -14,7 +15,42 @@
   </form>
 </div>
 <h1 class="page-title"><a href="/pages/{{ current_path }}/edit" title="Edit page title">{{ page_title }}</a></h1>
+{% if can_write %}
+<section id="inline-editor" hidden>
+  <form class="editor-form" method="post" action="/pages/{{ current_path }}/edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="base_blob_sha" value="{{ edit_form.base_blob_sha }}">
+    <label>Tags (comma-separated)<input name="tags" value="{{ edit_form.tags }}"></label>
+    <label class="checkbox"><input type="checkbox" name="draft" {% if edit_form.draft %}checked{% endif %}> Draft — exclude from the published site</label>
+    <label>Markdown<textarea id="markdown-editor" name="markdown">{{ edit_form.markdown }}</textarea></label>
+    <div class="form-actions"><button type="submit">Save</button><button type="button" id="edit-cancel">Cancel</button></div>
+  </form>
+</section>
+{% endif %}
 <article class="page-body">
   {{ body | safe }}
 </article>
+{% endblock %}
+{% block scripts %}
+{% if can_write %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<script>
+(() => {
+  const button = document.getElementById('edit-toggle');
+  const editor = document.getElementById('inline-editor');
+  if (!button || !editor) return;
+  let easyMde;
+  function closeEditor() { editor.hidden = true; button.setAttribute('aria-expanded', 'false'); }
+  button.addEventListener('click', () => {
+    editor.hidden = !editor.hidden;
+    button.setAttribute('aria-expanded', String(!editor.hidden));
+    if (!easyMde && window.EasyMDE) {
+      easyMde = new EasyMDE({element: document.getElementById('markdown-editor'), spellChecker: false});
+    }
+  });
+  document.getElementById('edit-cancel').addEventListener('click', closeEditor);
+})();
+</script>
+{% endif %}
 {% endblock %}
