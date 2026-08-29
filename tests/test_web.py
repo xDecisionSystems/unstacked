@@ -272,16 +272,15 @@ def test_book_page_shows_loose_pages_under_a_pages_row(client, book_with_chapter
     assert 'href="/pages/handbook/overview"' in page.text
 
 
-def test_book_page_carries_drag_reorder_markup(client, book_with_chapters):
-    """Chapter rows and page cards must be individually draggable with a
-    stable key, and the shared reorder script must actually be loaded --
-    reordering here is client-side only (see app/static/reorder.js)."""
+def test_book_page_carries_page_drag_reorder_markup(client, book_with_chapters):
+    """Page cards are draggable with a stable key and load the shared script."""
 
     _login(client, "admin")
     page = client.get("/books/handbook")
     assert '<script src="/static/reorder.js"></script>' in page.text
-    assert "initDragReorder(document.querySelector('#chapter-rows')" in page.text
-    assert 'class="chapter-row" draggable="true" data-key="policies"' in page.text
+    assert "initDragReorder(document.querySelector('#chapter-rows')" not in page.text
+    assert 'class="drag-handle"' not in page.text
+    assert '<section class="chapter-row">' in page.text
     assert 'class="page-card" draggable="true" data-key="handbook/policies/leave"' in page.text
     assert 'data-parent="handbook/policies"' in page.text
     assert 'data-parent="handbook"' in page.text  # the loose-pages row

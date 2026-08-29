@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 06:40 UTC — Codex
+Fixed chapter collapse behavior: explicit hidden styling now overrides the
+page-card grid, the diamond chapter-drag handle is gone, and the triangle has
+a larger 2.2rem hit target.
+- Files: `app/templates/book.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 06:32 UTC — Codex
 Placed each chapter's collapse control immediately before its title and sized
 the down/right triangle to match the compact add-page icon.
@@ -404,10 +411,3 @@ stale MCP mentions in the plan itself (the top-of-file scope bullet and
 the settled-decisions table row) that still framed it as planned/dual-
 transport rather than explicitly dropped.
 - Files: `AGENTS.md`, `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-28 23:33 UTC — Codex
-Extended T2.1 confinement through page delete and move transactions, including
-navigation edits and rollback. Ancestor-symlink adversarial tests confirm that
-the operations do not delete or publish an outside sentinel.
-- Files: `app/content.py`, `tests/test_content_symlink_races.py`,
-  `plans/plan_initial.md`, `LOG.md`
