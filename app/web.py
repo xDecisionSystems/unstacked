@@ -1047,6 +1047,16 @@ def page_view(
             )
             return templates.TemplateResponse(request, "page_error.html", context, status_code=500)
         context = _base_context(request, session, user)
+        available_tags: set[str] = set()
+        if authorization.policy.decide(target).can_write:
+            for readable_path in content.authorized_pages(session, user):
+                try:
+                    page_metadata, _body, _raw = content.read_page(readable_path)
+                except (ContentError, UnsafePath):
+                    continue
+                available_tags.update(
+                    tag for tag in page_metadata.get("tags", []) if isinstance(tag, str) and tag
+                )
         context.update(
             {
                 "page_title": metadata.get("title") if isinstance(metadata, dict) else None,
@@ -1061,6 +1071,7 @@ def page_view(
                     "draft": bool(metadata.get("draft")),
                     "base_blob_sha": content.page_blob_sha(target),
                 },
+                "available_tags": sorted(available_tags, key=str.casefold),
             }
         )
     return templates.TemplateResponse(request, "page.html", context)

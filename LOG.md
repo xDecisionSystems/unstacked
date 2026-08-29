@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 19:45 UTC — Codex
+Reworked inline editing tags into a right-side one-at-a-time entry panel with
+removable current-tag bubbles and ACL-filtered previously-used tag bubbles.
+- Files: `app/web.py`, `app/templates/page.html`, `app/static/style.css`,
+  `LOG.md`
+
 ## 2026-08-29 08:05 UTC — Codex
 Added visible text/symbol fallbacks for every EasyMDE toolbar action, so Safari
 can show and use Markdown controls even when Font Awesome glyphs fail to load.
@@ -91,11 +97,5 @@ triangles, keeping the control's expanded/collapsed semantics unchanged.
 Made collapse hide the whole chapter page scroller (including arrows), hid
 native horizontal scrollbars, and raised open add-page forms above scroller
 controls.
-- Files: `app/templates/book.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 06:48 UTC — Codex
-Added accessible left/right controls to each horizontal chapter page row and
-reserved vertical space so a hovered card's lift and shadow are not clipped.
 - Files: `app/templates/book.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`

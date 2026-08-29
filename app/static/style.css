@@ -226,6 +226,15 @@ a {
 .editable-title { cursor: text; border-radius: 3px; }
 .editable-title:hover, .editable-title:focus { outline: 2px solid var(--accent); outline-offset: 3px; }
 .draft-toggle { font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tag-panel { position: absolute; left: calc(100% + .75rem); top: 0; width: 13rem; }
+.tag-panel label { margin-top: 0; }
+.tag-panel input { width: 100%; }
+.tag-panel-label { margin: 1rem 0 .4rem; font-size: .85rem; color: var(--muted); }
+.tag-bubbles { display: flex; flex-wrap: wrap; gap: .35rem; }
+.tag-bubble { padding: .2rem .45rem; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-alt); color: var(--text); font-size: .8rem; }
+.tag-bubble:hover { background: var(--accent); color: #fff; }
+.current-tag { background: var(--accent); color: #fff; }
+@media (max-width: 1200px) { .tag-panel { position: static; width: auto; margin: .75rem 0; } }
 .page-draft-status { font-size: .9rem; color: var(--muted); }
 
 /* EasyMDE's stock toolbar uses Font Awesome private glyphs. Safari can load

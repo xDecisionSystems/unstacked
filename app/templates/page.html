@@ -22,7 +22,12 @@
   <form id="inline-edit-form" class="editor-form" method="post" action="/pages/{{ current_path }}/edit">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="base_blob_sha" value="{{ edit_form.base_blob_sha }}">
-    <label>Tags (comma-separated)<input name="tags" value="{{ edit_form.tags }}"></label>
+    <input id="page-tags" type="hidden" name="tags" value="{{ edit_form.tags }}">
+    <aside class="tag-panel" aria-label="Page tags">
+      <label for="tag-entry">Add tag<input id="tag-entry" autocomplete="off" placeholder="Type a tag, then Enter"></label>
+      <div id="current-tags" class="tag-bubbles" aria-label="Current tags"></div>
+      {% if available_tags %}<p class="tag-panel-label">Previously used</p><div id="known-tags" class="tag-bubbles" aria-label="Previously used tags"></div>{% endif %}
+    </aside>
     <div class="form-actions inline-editor-actions"><button type="submit">Save</button><button type="button" id="edit-cancel">Cancel</button></div>
     <label>Markdown<textarea id="markdown-editor" name="markdown">{{ edit_form.markdown }}</textarea></label>
   </form>
@@ -56,6 +61,24 @@
   document.getElementById('edit-cancel').addEventListener('click', () => {
     closeEditor(); const draftToggle = document.getElementById('draft-toggle'); if (draftToggle) draftToggle.hidden = true;
   });
+  const tagsInput = document.getElementById('page-tags');
+  const tagEntry = document.getElementById('tag-entry');
+  const currentTags = document.getElementById('current-tags');
+  const knownTags = document.getElementById('known-tags');
+  if (tagsInput && tagEntry && currentTags) {
+    let tags = tagsInput.value.split(',').map((tag) => tag.trim()).filter(Boolean);
+    const known = {{ available_tags|tojson }};
+    function syncTags() { tagsInput.value = tags.join(', '); }
+    function addTag(tag) { tag = tag.trim(); if (tag && !tags.includes(tag)) { tags.push(tag); renderTags(); } }
+    function renderTags() {
+      currentTags.replaceChildren();
+      tags.forEach((tag) => { const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'tag-bubble current-tag'; chip.textContent = tag + ' ×'; chip.onclick = () => { tags = tags.filter((value) => value !== tag); renderTags(); }; currentTags.append(chip); });
+      if (knownTags) { knownTags.replaceChildren(); known.filter((tag) => !tags.includes(tag)).forEach((tag) => { const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'tag-bubble'; chip.textContent = tag; chip.onclick = () => addTag(tag); knownTags.append(chip); }); }
+      syncTags();
+    }
+    tagEntry.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addTag(tagEntry.value); tagEntry.value = ''; } });
+    renderTags();
+  }
   const title = document.getElementById('editable-title');
   if (title) {
     let original = title.textContent.trim();
