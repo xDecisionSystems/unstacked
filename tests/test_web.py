@@ -499,7 +499,8 @@ def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, c
     assert 'id="edit-toggle"' in response.text
     assert 'id="inline-editor" hidden' in response.text
     assert 'class="form-actions inline-editor-actions"' in response.text
-    assert 'class="draft-toggle"' in response.text
+    assert '<section id="inline-editor" hidden>' in response.text
+    assert response.text.index('class="draft-toggle"') > response.text.index('id="inline-editor"')
     assert "Draft — exclude from the published site" not in response.text
     assert 'href="/books/handbook" title="Back to book"' in response.text
     assert "font-awesome/4.7.0/css/font-awesome.min.css" in response.text

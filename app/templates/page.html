@@ -15,7 +15,6 @@
   <h1 class="page-title">
     {% if can_write %}<span id="editable-title" class="editable-title" role="textbox" aria-label="Page title" title="Click to edit title">{{ page_title }}</span>{% else %}{{ page_title }}{% endif %}
   </h1>
-  {% if can_write %}<label class="draft-toggle"><input form="inline-edit-form" type="checkbox" name="draft" {% if edit_form.draft %}checked{% endif %}> Draft</label>{% endif %}
 </div>
 {% if can_write %}
 <section id="inline-editor" hidden>
@@ -23,6 +22,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="base_blob_sha" value="{{ edit_form.base_blob_sha }}">
     <label>Tags (comma-separated)<input name="tags" value="{{ edit_form.tags }}"></label>
+    <label class="draft-toggle"><input type="checkbox" name="draft" {% if edit_form.draft %}checked{% endif %}> Draft</label>
     <div class="form-actions inline-editor-actions"><button type="submit">Save</button><button type="button" id="edit-cancel">Cancel</button></div>
     <label>Markdown<textarea id="markdown-editor" name="markdown">{{ edit_form.markdown }}</textarea></label>
   </form>
