@@ -10,6 +10,22 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 03:41 UTC — Claude Code
+User couldn't log in as `admin`/`admin` on a deployed instance ("Invalid
+username or password"). Root cause wasn't a code bug: no `admin` row existed
+because `python -m app.bootstrap` had never been run there (this local
+checkout was in the same state — `data/app.db` didn't exist). Confirmed the
+fix by running `unstacked-bootstrap` here and logging in successfully.
+
+While tracing it, found `README.md`'s Quick Start and Coolify sections
+documented a bootstrap CLI that doesn't exist — `--email`/`--display-name`
+flags, a password prompt, `--password-stdin`, a printed API token. The real
+`app/bootstrap.py` (unchanged, correct) takes no arguments and always creates
+`admin`/`admin`, matching `plans/plan_initial.md`'s T1.4 spec; only the
+README had drifted. Corrected both sections to describe the actual, argument-
+free command.
+- Files: `README.md`, `LOG.md`
+
 ## 2026-08-29 03:31 UTC — Claude Code
 User asked for admin-configurable theming: four standard palette options plus
 a custom one. Added `app/theme.py` (five-role `Palette`, four presets --
@@ -216,8 +232,3 @@ Integrated exhaustive ACL boundary tests for segment matching, deepest-rule
 resolution, write-implies-read, equal-depth denial, order independence, and
 sibling non-leakage.
 - Files: `tests/test_acl_boundaries.py`, `LOG.md`
-
-## 2026-08-28 22:30 UTC — Codex
-Made API-token revocation usable from the cookie-based admin console without
-weakening bearer support: browser requests now require the existing CSRF token.
-- Files: `app/ai_api.py`, `LOG.md`

@@ -55,15 +55,16 @@ Copy `.env.example` to `.env`, replace the API signing secret, then create the
 initial admin and content repository:
 
 ```bash
-uv run unstacked-bootstrap --email admin@example.com --display-name "Admin"
+uv run unstacked-bootstrap
 uv run uvicorn --factory app.main:create_app
 ```
 
-The bootstrap command prompts for a password and prints the initial expiring
-API token once. Clients can subsequently exchange the local password at
-`POST /api/auth/token`. Automation can pass `--password-stdin` to read the
-initial password from standard input; passwords are never accepted as command
-line arguments. Re-running bootstrap leaves existing users unchanged.
+Bootstrap takes no arguments: it always creates exactly one initial
+administrator, `admin` / `admin`, and forces a password change on first
+login before that account can access content or issue an API token. Clients
+subsequently exchange the (changed) password at `POST /api/auth/token`.
+Re-running bootstrap is safe — if any user already exists, it leaves them
+unchanged and does nothing.
 
 ## Local Docker deployment
 
@@ -295,11 +296,13 @@ deploy shouldn't silently create an admin account. After the first
 successful deploy, use Coolify's container terminal to run it once:
 
 ```bash
-python -m app.bootstrap --email you@example.com --display-name "Admin"
+python -m app.bootstrap
 ```
 
-This prints an initial API token once. Re-running it on a later deploy is
-safe — it leaves existing users untouched.
+It takes no arguments and always creates exactly one administrator,
+`admin` / `admin`, forced to change that password on first login. Re-running
+it on a later deploy is safe — if any user already exists, it leaves them
+untouched and does nothing.
 
 ### Backing up the wiki
 
