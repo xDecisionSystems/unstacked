@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 22:30 UTC — Codex
+Forced EasyMDE toolbar glyphs and their text fallbacks to a high-contrast
+black so they remain visible against the pale Markdown toolbar.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-08-29 22:22 UTC — Codex
 Kept the Page View’s accessible Back-to-book title metadata while applying its
 new Figma-style action treatment.
@@ -92,10 +97,3 @@ title field saved through the shared ACL-aware service, rather than following
 the legacy full-page editor link.
 - Files: `app/ai_service.py`, `app/web.py`, `app/templates/page.html`,
   `app/static/style.css`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:16 UTC — Codex
-Made page editing inline: Edit opens an in-place EasyMDE editor backed by the
-existing CSRF/blob-conflict-protected save path. Added an up-arrow back-to-book
-control before Edit.
-- Files: `app/web.py`, `app/templates/page.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`

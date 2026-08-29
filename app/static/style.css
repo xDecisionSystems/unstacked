@@ -17,3 +17,15 @@
 
 @media(max-width:1000px){.topbar{height:auto;flex-wrap:wrap;padding:16px 24px}.topbar .site-search{order:3;flex-basis:100%;max-width:none}.content{padding:32px 24px}.book-cards{grid-template-columns:repeat(2,minmax(0,1fr))}#inline-editor .editor-form{grid-template-columns:1fr;padding-left:0}.editor-form>label{grid-column:1}.tag-panel{grid-column:1;grid-row:2;min-height:0}.inline-editor-actions{position:static;grid-column:1;grid-row:3;flex-direction:row}.auth-brand{padding:48px}.auth-panel{padding:32px}.admin-grid{grid-template-columns:1fr}}
 @media(max-width:680px){.topbar{gap:12px}.topbar form:last-child{gap:9px}.whoami{display:none}.screen-heading{align-items:flex-start;flex-direction:column}.book-cards{grid-template-columns:1fr}.page-actions{flex-wrap:wrap}.actions-spacer{display:none;flex-basis:100%}.page-title-row{flex-wrap:wrap}.page-title{font-size:32px}.page-cards{padding-left:38px;padding-right:38px}.auth-page{display:block}.auth-brand{min-height:auto;padding:48px 32px}.auth-brand h1{font-size:36px}.auth-panel{padding:24px}.auth-card{padding:28px}.history-layout{grid-template-columns:1fr}}
+
+/* EasyMDE defaults its Font Awesome glyphs to white. The editor toolbar is
+ * intentionally pale, so force both the native glyphs and fallback labels to
+ * a high-contrast dark colour. */
+.editor-toolbar button,
+.editor-toolbar button.fa,
+.editor-toolbar button.fa::before,
+.editor-toolbar button .fa,
+.editor-toolbar i {
+  color: #1a1a1a !important;
+  opacity: 1 !important;
+}
