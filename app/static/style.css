@@ -228,6 +228,28 @@ a {
 .draft-toggle { font-weight: 600; color: var(--muted); white-space: nowrap; }
 .page-draft-status { font-size: .9rem; color: var(--muted); }
 
+/* EasyMDE's stock toolbar uses Font Awesome private glyphs. Safari can load
+ * the editor while refusing those remote font files, leaving only separators.
+ * These visible labels are an independent fallback; the buttons retain
+ * EasyMDE's native actions and tooltip text. */
+.editor-toolbar button.fa:before { font-family: inherit !important; font-size: .95rem; font-weight: 700; }
+.editor-toolbar button.fa-bold:before { content: "B" !important; }
+.editor-toolbar button.fa-italic:before { content: "I" !important; font-style: italic; }
+.editor-toolbar button.fa-strikethrough:before { content: "S" !important; text-decoration: line-through; }
+.editor-toolbar button.fa-heading:before { content: "H" !important; }
+.editor-toolbar button.fa-code:before { content: "</>" !important; font-size: .72rem; }
+.editor-toolbar button.fa-quote-left:before { content: "\201C" !important; font-size: 1.25rem; }
+.editor-toolbar button.fa-list-ul:before { content: "\2022\2261" !important; }
+.editor-toolbar button.fa-list-ol:before { content: "1." !important; }
+.editor-toolbar button.fa-link:before { content: "\2197" !important; }
+.editor-toolbar button.fa-image:before { content: "IMG" !important; font-size: .65rem; }
+.editor-toolbar button.fa-table:before { content: "\229E" !important; font-size: 1.15rem; }
+.editor-toolbar button.fa-minus:before { content: "\2014" !important; }
+.editor-toolbar button.fa-eye:before { content: "Preview" !important; font-size: .62rem; }
+.editor-toolbar button.fa-columns:before { content: "\25EB" !important; }
+.editor-toolbar button.fa-arrows-alt:before { content: "\26F6" !important; }
+.editor-toolbar button.fa-question-circle:before { content: "?" !important; }
+
 button, .button {
   display: inline-block;
   padding: 0.42rem 0.65rem;

@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 08:05 UTC — Codex
+Added visible text/symbol fallbacks for every EasyMDE toolbar action, so Safari
+can show and use Markdown controls even when Font Awesome glyphs fail to load.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-08-29 08:02 UTC — Codex
 Aligned floating Save/Cancel with the Markdown editor, made viewed draft status
 an italic “(Draft)” beside the title, and show its checkbox there only while
@@ -92,12 +97,5 @@ controls.
 ## 2026-08-29 06:48 UTC — Codex
 Added accessible left/right controls to each horizontal chapter page row and
 reserved vertical space so a hovered card's lift and shadow are not clipped.
-- Files: `app/templates/book.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 06:40 UTC — Codex
-Fixed chapter collapse behavior: explicit hidden styling now overrides the
-page-card grid, the diamond chapter-drag handle is gone, and the triangle has
-a larger 2.2rem hit target.
 - Files: `app/templates/book.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
