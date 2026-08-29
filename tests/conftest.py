@@ -21,6 +21,7 @@ def app_env(tmp_path: Path):
         # Kept inside the test's own directory: a route that writes a backup
         # target must never reach the repository's real `data/`.
         backup_config_path=tmp_path / "data" / "backup_config.json",
+        theme_config_path=tmp_path / "data" / "theme.json",
         api_token_secret="test-secret-that-is-long-and-random-enough",
     )
     app = create_app(settings)

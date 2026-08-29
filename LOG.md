@@ -10,6 +10,47 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 03:31 UTC — Claude Code
+User asked for admin-configurable theming: four standard palette options plus
+a custom one. Added `app/theme.py` (five-role `Palette`, four presets --
+Future Green, Ocean Blue, Sunset Coral, Slate Mono -- plus `darken`/`tint`
+helpers that derive `--accent-dark` and `--bg-alt` from `accent` so a custom
+palette never needs to supply a hover shade by hand) and
+`app/theme_config.py`, a runtime-editable JSON record under `data/`
+mirroring `app/backup_config.py`'s precedent: a color palette is cosmetic
+configuration, not wiki data, so it doesn't belong in a fifth DB table, and a
+malformed record degrades to the default preset rather than breaking every
+page render.
+
+Wired the effective palette into every template -- including `login.html`
+and `change_password.html`, which predate `_base_context` and never call
+it -- via one Jinja global (`theme_style(request)` in `app/web.py`) that
+injects a small inline `<style>{{ :root override }}</style>` block reading
+the JSON file fresh per request; no cache to invalidate, so a saved change
+is visible on the next page load with no restart. `style.css`'s own `:root`
+now documents that it's just the Future Green defaults, overridden per
+request.
+
+Added `GET`/`PUT /api/admin/theme` (admin-only, CSRF-guarded for the cookie
+transport, same as every other admin route) and an Appearance section in
+the admin console: radio options with live color swatches for the four
+presets plus "Custom", five `<input type=color>` fields, `location.reload()`
+after a successful save so the new palette applies immediately everywhere,
+not just in the panel that changed it.
+
+52 new tests (`tests/test_theme.py`, `tests/test_theme_api.py`): hex
+validation, every preset's internal consistency, `darken`/`tint` bounds
+math, JSON load/save round-trips, six variants of "a corrupt or unknown-shape
+record falls back to the default rather than raising," admin-only + CSRF
+route contracts, the preset/palette mutual-exclusion check, and two
+render-level assertions (`--accent:` appears correctly on both an
+authenticated page and the pre-login screen). Full suite green, ruff clean.
+- Files: `app/theme.py`, `app/theme_config.py`, `app/config.py`, `app/web.py`,
+  `app/admin_api.py`, `app/static/style.css`, `app/templates/base.html`,
+  `app/templates/login.html`, `app/templates/change_password.html`,
+  `app/templates/admin.html`, `tests/conftest.py`, `tests/test_theme.py`,
+  `tests/test_theme_api.py`, `LOG.md`
+
 ## 2026-08-29 03:14 UTC — Claude Code
 Applied the user-supplied brand palette (Future Green #00CA8C, Bright
 Pastel Orange #FFB54C, Cyber Lime #8CD47E, Digital Gray #808080, Cosmic
@@ -180,17 +221,3 @@ sibling non-leakage.
 Made API-token revocation usable from the cookie-based admin console without
 weakening bearer support: browser requests now require the existing CSRF token.
 - Files: `app/ai_api.py`, `LOG.md`
-
-## 2026-08-28 22:25 UTC — Codex
-Integrated the browser search UI and operator documentation. Search reuses the
-shared ACL-first service, escapes snippets before literal highlight markup, and
-keeps pagination filtered. README now documents deployment, recovery, backup,
-ACL, exports, secrets, and token revocation.
-- Files: `app/web.py`, `app/templates/base.html`, `app/templates/search.html`,
-  `app/static/style.css`, `tests/test_web.py`, `README.md`,
-  `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-28 22:16 UTC — Codex
-
-
-

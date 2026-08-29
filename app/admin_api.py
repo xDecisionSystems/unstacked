@@ -25,6 +25,7 @@ it with a central dependency; keeping the check in one helper
 
 import logging
 import re
+from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -36,7 +37,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
-from app import backup_config, backup_runtime
+from app import backup_config, backup_runtime, theme, theme_config
 from app.acl import Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
@@ -50,6 +51,7 @@ from app.paths import (
     path_depth,
     safe_join,
 )
+from app.theme import Palette
 from app.web_auth import get_current_web_user, invalidate_web_sessions, require_csrf
 
 router = APIRouter(prefix="/api/admin", tags=["Administration"])
@@ -207,6 +209,42 @@ class BackupConfigResponse(BaseModel):
 
 class DetailResponse(BaseModel):
     detail: str
+
+
+class PaletteModel(BaseModel):
+    """The five colors a palette is made of; see :mod:`app.theme`."""
+
+    accent: str
+    accent_secondary: str
+    warm: str
+    muted: str
+    text: str
+
+
+class PresetOption(BaseModel):
+    key: str
+    label: str
+    palette: PaletteModel
+
+
+class ThemeResponse(BaseModel):
+    mode: Literal["preset", "custom"]
+    preset: str | None
+    palette: PaletteModel
+    presets: list[PresetOption]
+    updated_at: str | None
+
+
+class ThemeUpdate(BaseModel):
+    """Exactly one of ``preset`` or ``palette`` is used, chosen by ``mode``.
+
+    Supplying both is refused rather than silently picking one -- the same
+    "either X or Y, not both" shape as :class:`BackupConfigUpdate`.
+    """
+
+    mode: Literal["preset", "custom"]
+    preset: str | None = None
+    palette: PaletteModel | None = None
 
 
 # --------------------------------------------------------------------------
@@ -1017,3 +1055,67 @@ def clear_backup_config(request: Request, actor: AdminActor) -> BackupConfigResp
     content.backup_config_error = None
     _audit("admin.backup.clear", actor, target_type=stored.type)
     return _backup_status_response(request)
+
+
+# --------------------------------------------------------------------------
+# Web UI color palette
+# --------------------------------------------------------------------------
+#
+# Cosmetic, not security-sensitive: unlike every other section in this file,
+# these routes change what a page looks like, never who can reach it. The
+# record lives in a file under `data/` (see app/theme_config.py) for the same
+# reason the backup target does -- it is not wiki content and does not belong
+# in a fifth table.
+
+
+def _theme_response(request: Request) -> ThemeResponse:
+    settings = request.app.state.settings
+    state = theme_config.load(settings.theme_config_path)
+    return ThemeResponse(
+        mode=state.mode,
+        preset=state.preset,
+        palette=PaletteModel(**asdict(state.palette)),
+        presets=[
+            PresetOption(
+                key=key, label=theme.PRESET_LABELS[key], palette=PaletteModel(**asdict(preset))
+            )
+            for key, preset in theme.PRESETS.items()
+        ],
+        updated_at=state.updated_at,
+    )
+
+
+@router.get("/theme", response_model=ThemeResponse)
+def read_theme(request: Request, actor: AdminActor) -> ThemeResponse:
+    return _theme_response(request)
+
+
+@router.put("/theme", response_model=ThemeResponse, dependencies=CsrfGuard)
+def update_theme(payload: ThemeUpdate, request: Request, actor: AdminActor) -> ThemeResponse:
+    settings = request.app.state.settings
+    if payload.mode == "preset":
+        if payload.palette is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Supply a preset name, not a custom palette, for preset mode",
+            )
+        if not payload.preset or payload.preset not in theme.PRESETS:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unknown palette preset")
+        state = theme_config.save_preset(settings.theme_config_path, payload.preset)
+    else:
+        if payload.preset is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Supply a custom palette, not a preset name, for custom mode",
+            )
+        if payload.palette is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "Custom mode requires a palette"
+            )
+        try:
+            palette = Palette(**payload.palette.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        state = theme_config.save_custom(settings.theme_config_path, palette)
+    _audit("admin.theme.update", actor, mode=state.mode, preset=state.preset or "custom")
+    return _theme_response(request)

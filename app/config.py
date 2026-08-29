@@ -129,6 +129,11 @@ class Settings(BaseSettings):
     # `servers` and stays valid for local tooling (Swagger UI, curl) that
     # doesn't need one.
     public_base_url: str | None = None
+    # Runtime-editable web UI color palette (see app/theme_config.py). Unlike
+    # the backup target, there is no environment-variable form of this: the
+    # default preset applies until an administrator saves one through the
+    # admin API, and the file then wins outright.
+    theme_config_path: Path = Path("data/theme.json")
 
     @field_validator(
         "github_token_path",

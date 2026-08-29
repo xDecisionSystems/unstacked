@@ -33,6 +33,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 from sqlmodel import Session
 
+from app import theme, theme_config
 from app.acl import AccessDenied, AuthorizationContext
 from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
 from app.export import ExportError, StaticExportRunner
@@ -60,6 +61,24 @@ router = APIRouter(tags=["Web UI"])
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 EDITOR_FORM_OVERHEAD = 16_384
+
+
+def _theme_style_tag(request: Request) -> Markup:
+    """The admin-selected palette as an inline ``<style>`` override.
+
+    Registered as a Jinja global (below) rather than threaded through every
+    route's context: every page -- including the pre-login screens, which
+    never call ``_base_context`` -- needs the same override, and reading a
+    small JSON file per render keeps a saved change visible immediately, with
+    no cache to invalidate.
+    """
+
+    settings = request.app.state.settings
+    state = theme_config.load(settings.theme_config_path)
+    return Markup(f"<style>{theme.css_block(state.palette)}</style>")
+
+
+templates.env.globals["theme_style"] = _theme_style_tag
 
 
 async def _read_form(request: Request, *, max_bytes: int = MAX_FORM_BYTES) -> dict[str, str]:

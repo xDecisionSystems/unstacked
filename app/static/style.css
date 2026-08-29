@@ -6,29 +6,28 @@
 
 :root {
   color-scheme: light;
-  /* Brand palette. --accent-dark and --bg-alt are tints/shades derived from
-   * Future Green and Cosmic Blue respectively, not new brand colors, so the
-   * five source colors stay the only ones this file introduces. */
-  --future-green: #00ca8c;
-  --pastel-orange: #ffb54c;
-  --cyber-lime: #8cd47e;
-  --digital-gray: #808080;
-  --cosmic-blue: #002e5d;
-
   --border: #c7cdd1;
-  --muted: var(--digital-gray);
-  --accent: var(--future-green);
-  --accent-dark: #00a374;
-  --accent-secondary: var(--cyber-lime);
-  --warm: var(--pastel-orange);
   --bg: #ffffff;
-  --bg-alt: #eefaf5;
-  --text: var(--cosmic-blue);
-  /* Destructive actions stay unambiguously red regardless of brand palette:
-   * none of the five brand colors reads as "danger", and repurposing one
-   * for delete/revoke controls would be a legibility regression, not a
-   * brand win. */
+  /* Destructive actions stay unambiguously red regardless of the selected
+   * palette: an admin-chosen accent could plausibly land anywhere on the
+   * wheel, and delete/revoke controls staying legible matters more than
+   * palette purism there. */
   --danger: #b3261e;
+
+  /* Palette variables below are the "Future Green" preset, used until an
+   * administrator picks a different one in Admin -> Appearance. The admin
+   * console injects a small inline `:root{...}` override (see
+   * `theme_style()` in app/web.py) that replaces exactly these seven
+   * variables per request, so a saved change applies without editing this
+   * file or restarting the app. --accent-dark and --bg-alt are a derived
+   * hover shade / tint, not independent choices -- see app/theme.py. */
+  --accent: #00ca8c;
+  --accent-dark: #00a374;
+  --accent-secondary: #8cd47e;
+  --warm: #ffb54c;
+  --muted: #808080;
+  --text: #002e5d;
+  --bg-alt: #eefaf5;
 }
 
 * {
@@ -314,6 +313,12 @@ button.danger:hover { background: #922019; border-color: #922019; }
 .admin-row details { margin-top: .35rem; }
 .admin-members { margin: .35rem 0 0; padding-left: 1.25rem; }
 .admin-members button { margin-left: .35rem; padding: .2rem .4rem; font-size: .85rem; }
+
+.theme-option { display: flex; align-items: center; gap: .35rem; margin: .4rem 0; }
+.swatch-dot { display: inline-block; width: .85rem; height: .85rem; border-radius: 50%; border: 1px solid var(--border); }
+.theme-custom { display: flex; flex-wrap: wrap; gap: .75rem; margin: .6rem 0; }
+.theme-custom label { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; }
+.theme-custom input[type=color] { width: 2.6rem; height: 1.9rem; padding: 0; border: 1px solid var(--border); border-radius: 4px; }
 
 .history-picker { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; }
 .history-picker label { display: flex; flex-direction: column; gap: 0.25rem; }
