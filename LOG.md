@@ -10,6 +10,24 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 22:22 UTC — Codex
+Kept the Page View’s accessible Back-to-book title metadata while applying its
+new Figma-style action treatment.
+- Files: `app/templates/page.html`, `LOG.md`
+
+## 2026-08-29 22:07 UTC — Codex
+Wrapped the book-tag aggregation for the project linting standard.
+- Files: `app/web.py`, `LOG.md`
+
+## 2026-08-29 22:06 UTC — Codex
+Implemented the Figma knowledge-workspace visual system across login, books,
+chapters, pages, and administration, while retaining the existing Markdown,
+Git, and ACL-backed behavior. Book filtering uses tags from readable pages.
+- Files: `app/web.py`, `app/templates/base.html`,
+  `app/templates/tree.html`, `app/templates/book.html`,
+  `app/templates/page.html`, `app/templates/login.html`,
+  `app/static/style.css`, `LOG.md`
+
 ## 2026-08-29 19:45 UTC — Codex
 Reworked inline editing tags into a right-side one-at-a-time entry panel with
 removable current-tag bubbles and ACL-filtered previously-used tag bubbles.
@@ -80,22 +98,4 @@ Made page editing inline: Edit opens an in-place EasyMDE editor backed by the
 existing CSRF/blob-conflict-protected save path. Added an up-arrow back-to-book
 control before Edit.
 - Files: `app/web.py`, `app/templates/page.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:08 UTC — Codex
-Removed the page-view Move/Rename control and made the displayed page title a
-clear link to the existing ACL-checked editor, where users can change it.
-- Files: `app/templates/page.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 06:59 UTC — Codex
-Replaced the subtle hollow collapse glyphs with large solid down/right
-triangles, keeping the control's expanded/collapsed semantics unchanged.
-- Files: `app/templates/book.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 06:58 UTC — Codex
-Made collapse hide the whole chapter page scroller (including arrows), hid
-native horizontal scrollbars, and raised open add-page forms above scroller
-controls.
-- Files: `app/templates/book.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`

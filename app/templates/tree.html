@@ -1,48 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Unstacked{% endblock %}
+{% block title %}Books · Unstacked{% endblock %}
 {% block content %}
-<div class="dashboard-header">
-  <h1>Books</h1>
-  {% if is_admin %}
-  <details class="new-book-popover">
-    <summary class="icon-button" title="Add a new book" aria-label="Add a new book">+</summary>
-    <form method="post" action="/manage/book" class="new-book-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Title<input name="title" required></label>
-      <button type="submit">Create book</button>
-    </form>
-  </details>
-  {% endif %}
+<div class="screen-heading dashboard-header">
+  <div><p class="eyebrow">KNOWLEDGE WORKSPACE</p><h1>Books</h1><p>Browse the folders that make up your team wiki.</p></div>
+  {% if is_admin %}<details class="new-book-popover"><summary class="button">Create book</summary><form method="post" action="/manage/book" class="new-book-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Title<input name="title" required></label><button type="submit">Create book</button></form></details>{% endif %}
 </div>
 {% if tree %}
+<section class="library-filters" aria-label="Filter books">
+  <label class="visually-hidden" for="book-filter">Search books</label><input id="book-filter" type="search" placeholder="⌕  Search books…">
+  <div class="tag-filter-row"><span>Filter by tag</span>{% for tag in tree|map(attribute='tags')|sum(start=[])|unique|sort(case_sensitive=false) %}<button class="tag-filter" type="button" data-book-tag="{{ tag }}">{{ tag }}</button>{% endfor %}</div>
+</section>
 <ul class="book-cards" id="book-cards">
-  {% for book in tree %}
-  <li class="book-card" draggable="true" data-key="{{ book.slug }}">
-    <a
-      class="book-card-link"
-      draggable="false"
-      aria-label="{{ book.title }}"
-      href="/books/{{ book.slug }}"
-    ></a>
-    <span class="book-card-title">{{ book.title }}</span>
-    <span class="book-card-footer">
-      <span class="book-card-stat book-card-stat-primary">{{ book.page_count }} page{{ '' if book.page_count == 1 else 's' }}</span>
-      <span class="book-card-stat">{{ book.chapters|length }} chapter{{ '' if book.chapters|length == 1 else 's' }}</span>
-    </span>
-  </li>
-  {% endfor %}
+  {% for book in tree %}<li class="book-card" draggable="true" data-key="{{ book.slug }}" data-title="{{ book.title|lower }}" data-tags="{{ book.tags|join('|')|lower }}"><a class="book-card-link" draggable="false" aria-label="{{ book.title }}" href="/books/{{ book.slug }}"></a><span class="book-card-type">BOOK</span><span class="book-card-title">{{ book.title }}</span>{% if book.tags %}<span class="card-tags">{% for tag in book.tags[:3] %}<span>{{ tag }}</span>{% endfor %}</span>{% endif %}<span class="book-card-footer"><span class="book-card-stat">{{ book.chapters|length }} chapter{{ '' if book.chapters|length == 1 else 's' }} · {{ book.page_count }} page{{ '' if book.page_count == 1 else 's' }}</span><span class="open-link">Open →</span></span></li>{% endfor %}
 </ul>
-{% else %}
-<p class="empty-state">Nothing here yet.{% if is_admin %} Use the + button above to add the first book.{% endif %}</p>
-{% endif %}
+{% else %}<p class="empty-state">Nothing here yet.{% if is_admin %} Create the first book to begin.{% endif %}</p>{% endif %}
 {% endblock %}
 {% block scripts %}
-<script src="/static/reorder.js"></script>
-<script>
-initDragReorder(document.querySelector('#book-cards'), {
-  itemSelector: '.book-card',
-  storageKey: 'unstacked.book_order',
-  axis: 'x',
-});
-</script>
-{% endblock %}
+<script src="/static/reorder.js"></script><script>
+initDragReorder(document.querySelector('#book-cards'), {itemSelector: '.book-card', storageKey: 'unstacked.book_order', axis: 'x'});
+(() => { const input=document.querySelector('#book-filter'), cards=[...document.querySelectorAll('.book-card')]; let tag=''; const filter=()=>cards.forEach(card=>card.hidden=!(card.dataset.title.includes(input.value.toLowerCase())&&(!tag||card.dataset.tags.split('|').includes(tag)))); input?.addEventListener('input',filter); document.querySelectorAll('[data-book-tag]').forEach(button=>button.addEventListener('click',()=>{tag=tag===button.dataset.bookTag.toLowerCase()?'':button.dataset.bookTag.toLowerCase(); document.querySelectorAll('[data-book-tag]').forEach(item=>item.classList.toggle('is-active',item===button&&tag)); filter();})); })();
+</script>{% endblock %}

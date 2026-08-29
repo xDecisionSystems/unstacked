@@ -12,14 +12,13 @@
     <a class="brand" href="/tree">Unstacked</a>
     <form class="site-search" method="get" action="/search" role="search">
       <label class="visually-hidden" for="site-search-query">Search content</label>
-      <input id="site-search-query" name="q" type="search" placeholder="Search content" value="{{ query|default('') }}">
-      <button type="submit">Search</button>
+      <input id="site-search-query" name="q" type="search" placeholder="⌕  Search every page…" value="{{ query|default('') }}">
     </form>
     <form method="post" action="/logout">
-      <span class="whoami">{{ current_user.display_name }}</span>
       {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
+      <span class="whoami">{{ current_user.display_name }}</span>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit">Log out</button>
+      <button class="quiet-action" type="submit">Log out</button>
     </form>
   </header>
   <main class="content">

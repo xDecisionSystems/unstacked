@@ -2,18 +2,19 @@
 {% block title %}{{ page_title or "Page" }} · Unstacked{% endblock %}
 {% block content %}
 <div class="page-actions">
-  <a class="button page-back" href="/books/{{ current_path.split('/')[0] }}" title="Back to book" aria-label="Back to book">&#8593;</a>
+  <a class="page-back" href="/books/{{ current_path.split('/')[0] }}" title="Back to book">← Back to book</a>
+  {% if can_write %}<span class="permission-badge">Can edit</span>{% endif %}<span class="actions-spacer"></span>
   {% if can_write %}<button type="button" id="edit-toggle" aria-expanded="false" aria-controls="inline-editor">Edit</button>{% endif %}
   <a class="button" href="/pages/{{ current_path }}/history">History</a>
-  <form method="post" action="/pages/{{ current_path }}/delete" onsubmit="return confirm('Delete this page? Git history will retain it.');">
+  {% if can_write %}<form method="post" action="/pages/{{ current_path }}/delete" onsubmit="return confirm('Delete this page? Git history will retain it.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button class="danger" type="submit">Delete</button>
-  </form>
+  </form>{% endif %}
 </div>
 <div class="page-title-row">
-  <h1 class="page-title">
+  <div class="page-title-wrap"><h1 class="page-title">
     {% if can_write %}<span id="editable-title" class="editable-title" role="textbox" aria-label="Page title" title="Click to edit title">{{ page_title }}</span>{% else %}{{ page_title }}{% endif %}
-  </h1>
+  </h1><p class="title-help">Click the title to rename this Markdown file</p></div>
   {% if draft %}<em class="page-draft-status">(Draft)</em>{% endif %}
   {% if can_write %}<label id="draft-toggle" class="draft-toggle" hidden><input form="inline-edit-form" type="checkbox" name="draft" {% if edit_form.draft %}checked{% endif %}> Draft</label>{% endif %}
 </div>
@@ -23,10 +24,10 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="base_blob_sha" value="{{ edit_form.base_blob_sha }}">
     <input id="page-tags" type="hidden" name="tags" value="{{ edit_form.tags }}">
-    <aside class="tag-panel" aria-label="Page tags">
-      <label for="tag-entry">Add tag<input id="tag-entry" autocomplete="off" placeholder="Type a tag, then Enter"></label>
-      <div id="current-tags" class="tag-bubbles" aria-label="Current tags"></div>
-      {% if available_tags %}<p class="tag-panel-label">Previously used</p><div id="known-tags" class="tag-bubbles" aria-label="Previously used tags"></div>{% endif %}
+    <aside class="tag-panel" aria-label="Page tags"><h2>Page tags</h2><p>Add one tag at a time.</p>
+      <label class="tag-entry-label" for="tag-entry"><input id="tag-entry" autocomplete="off" placeholder="Enter a new tag…"><button type="button" id="add-tag">Add</button></label>
+      <p class="tag-panel-label">Current tags</p><div id="current-tags" class="tag-bubbles" aria-label="Current tags"></div>
+      {% if available_tags %}<p class="tag-panel-label">Click an existing tag</p><div id="known-tags" class="tag-bubbles" aria-label="Previously used tags"></div>{% endif %}<p class="tag-help">Write permission is required. Only tags accessible to this user are shown.</p>
     </aside>
     <div class="form-actions inline-editor-actions"><button type="submit">Save</button><button type="button" id="edit-cancel">Cancel</button></div>
     <label>Markdown<textarea id="markdown-editor" name="markdown">{{ edit_form.markdown }}</textarea></label>
@@ -77,6 +78,7 @@
       syncTags();
     }
     tagEntry.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addTag(tagEntry.value); tagEntry.value = ''; } });
+    document.getElementById('add-tag')?.addEventListener('click', () => { addTag(tagEntry.value); tagEntry.value = ''; tagEntry.focus(); });
     renderTags();
   }
   const title = document.getElementById('editable-title');

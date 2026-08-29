@@ -175,6 +175,21 @@ def _tree_view_model(
             for chapter in book.get("chapters", [])
         ]
         pages = [_page_view(content, p) for p in book["pages"]]
+        # Books are filesystem containers, not database records. Their
+        # discoverable tags are the union of visible page front-matter tags.
+        book_tags: set[str] = set()
+        all_pages = [
+            *book["pages"],
+            *(page for chapter in book.get("chapters", []) for page in chapter["pages"]),
+        ]
+        for page in all_pages:
+            try:
+                metadata, _body, _raw = content.read_page(page)
+            except (ContentError, UnsafePath):
+                continue
+            book_tags.update(
+                tag for tag in metadata.get("tags", []) if isinstance(tag, str) and tag
+            )
         books.append(
             {
                 "slug": book["slug"],
@@ -182,6 +197,7 @@ def _tree_view_model(
                 "pages": pages,
                 "chapters": chapters,
                 "page_count": len(pages) + sum(len(chapter["pages"]) for chapter in chapters),
+                "tags": sorted(book_tags, key=str.casefold),
                 "can_write": authorization.policy.decide(book["slug"]).can_write,
             }
         )
