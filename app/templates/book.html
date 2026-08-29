@@ -16,7 +16,7 @@
   {% endif %}
 </div>
 {% macro row_toggle(target_id) %}
-<button type="button" class="row-toggle" aria-expanded="true" aria-controls="{{ target_id }}" title="Collapse" aria-label="Collapse">&#9662;</button>
+<button type="button" class="row-toggle" aria-expanded="true" aria-controls="{{ target_id }}" title="Collapse" aria-label="Collapse">&#9660;</button>
 {% endmacro %}
 {% macro page_cards(pages, parent, target_id) %}
 <div class="page-scroller" id="{{ target_id }}">
@@ -95,7 +95,7 @@ document.querySelectorAll('.row-toggle').forEach(function (button) {
     var collapsed = target.hidden;
     target.hidden = !collapsed;
     button.setAttribute('aria-expanded', String(collapsed));
-    button.innerHTML = collapsed ? '&#9662;' : '&#9656;';
+    button.innerHTML = collapsed ? '&#9660;' : '&#9654;';
   });
 });
 </script>

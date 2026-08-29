@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 06:59 UTC — Codex
+Replaced the subtle hollow collapse glyphs with large solid down/right
+triangles, keeping the control's expanded/collapsed semantics unchanged.
+- Files: `app/templates/book.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-29 06:58 UTC — Codex
 Made collapse hide the whole chapter page scroller (including arrows), hid
 native horizontal scrollbars, and raised open add-page forms above scroller
@@ -339,38 +344,3 @@ the stylesheet still serves correctly and the full web UI test suite
 (21 tests) still passes — styling doesn't affect any Python-level
 assertion, but confirmed nothing broke regardless.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 03:08 UTC — Claude Code
-Completed T9.3 (the plan's last open task) — every task is now `[x]` or
-`[not planned]`. Discovered a real gap while investigating "OpenAPI
-validation against a real action client" from scratch: fetched the whole
-app's actual `/openapi.json` and found 40 operations across 32 paths —
-the AI surface mixed in with the admin console, backup, and browser-
-cookie routes. That's both over ChatGPT Actions' 30-operation import
-limit and the wrong thing to expose as AI "tools" regardless of the
-limit; nothing before this pointed it out because nobody had actually
-fetched and inspected the schema rather than just building routes.
-
-Added `GET /api/ai/openapi.json` (`build_ai_openapi_schema` in
-app/ai_api.py), built directly from the router's own route objects
-filtered to `/api/ai/*` so it can't drift from what those routes actually
-accept — 13 paths, 14 operations. Deliberately excludes
-`/api/auth/token`/`tokens/revoke`: an Action gets one bearer token
-configured out of band, not by calling a credential-issuing endpoint as
-one of its own operations. Added `Settings.public_base_url` (validated
-absolute http(s) URL) so the schema can declare the `servers` entry an
-Action needs — omitted, not guessed, when unset.
-
-Validated with the real `openapi-spec-validator` library against the
-actual OpenAPI 3.1 spec, not a shape this app's own tests invented, plus
-Action-specific checks a generic validator wouldn't catch (operationId
-uniqueness, the 30-op ceiling, universal bearer security). Mutation-
-tested the security check specifically: stripped one operation's
-`security` array and confirmed my assertion catches it while the generic
-validator still accepts the now-unauthenticated shape as structurally
-valid OpenAPI — proving the extra check earns its place. Full suite 602
-passing (was 583 at the start of this session's work on T2.1/T9.3), ruff
-clean.
-- Files: `app/ai_api.py`, `app/config.py`, `.env.example`, `pyproject.toml`,
-  `uv.lock`, `tests/test_ai_openapi.py`, `tests/test_config.py`,
-  `plans/plan_initial.md`, `LOG.md`
