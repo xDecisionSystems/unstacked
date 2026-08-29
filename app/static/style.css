@@ -209,7 +209,16 @@ a {
 .page-back { min-width: 2.2rem; padding-left: 0; padding-right: 0; text-align: center; }
 #inline-editor[hidden] { display: none; }
 .inline-editor-actions {
-  margin: .75rem 0;
+  position: absolute;
+  left: calc(100% + .75rem);
+  top: 5rem;
+  flex-direction: column;
+  margin: 0;
+  white-space: nowrap;
+}
+#inline-editor .editor-form { position: relative; }
+@media (max-width: 1000px) {
+  .inline-editor-actions { position: static; flex-direction: row; margin: .75rem 0; }
 }
 .page-title-row { display: flex; align-items: center; gap: .75rem; margin: 1.25rem 0 .75rem; }
 .page-title { margin: 0; }
