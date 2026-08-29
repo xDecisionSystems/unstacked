@@ -10,28 +10,37 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="book_slug" value="{{ book.slug }}">
       <label>Title<input name="title" required></label>
-      <label>Slug (optional)<input name="slug"></label>
       <button type="submit">Create chapter</button>
     </form>
   </details>
   {% endif %}
 </div>
-{% macro page_cards(pages) %}
-<ul class="page-cards">
+{% macro row_toggle(target_id) %}
+<button type="button" class="row-toggle" aria-expanded="true" aria-controls="{{ target_id }}" title="Collapse" aria-label="Collapse">&#9662;</button>
+{% endmacro %}
+{% macro page_cards(pages, parent, target_id) %}
+<ul class="page-cards" id="{{ target_id }}" data-parent="{{ parent }}">
   {% for page in pages %}
-  <li class="page-card"><a href="/pages/{{ page.path }}">{{ page.label }}{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}</a></li>
+  <li class="page-card" draggable="true" data-key="{{ page.path }}">
+    <a draggable="false" href="/pages/{{ page.path }}">{{ page.label }}{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}</a>
+  </li>
   {% endfor %}
 </ul>
 {% endmacro %}
 {% if book.pages %}
 <section class="chapter-row">
-  <h2 class="chapter-row-title">Pages</h2>
-  {{ page_cards(book.pages) }}
+  <div class="chapter-row-header">
+    <h2 class="chapter-row-title">Pages</h2>
+    {{ row_toggle('pages-row') }}
+  </div>
+  {{ page_cards(book.pages, book.slug, 'pages-row') }}
 </section>
 {% endif %}
+<div id="chapter-rows">
 {% for chapter in book.chapters %}
-<section class="chapter-row">
+<section class="chapter-row" draggable="true" data-key="{{ chapter.slug }}">
   <div class="chapter-row-header">
+    <span class="drag-handle" title="Drag to reorder" aria-hidden="true">&#10021;</span>
     <h2 class="chapter-row-title">{{ chapter.title }}</h2>
     {% if chapter.can_write %}
     <details class="new-book-popover">
@@ -40,20 +49,49 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="parent" value="{{ book.slug }}/{{ chapter.slug }}">
         <label>Title<input name="title" required></label>
-        <label>Slug (optional)<input name="slug"></label>
         <button type="submit">Create page</button>
       </form>
     </details>
     {% endif %}
+    {{ row_toggle(chapter.slug ~ '-pages') }}
   </div>
   {% if chapter.pages %}
-  {{ page_cards(chapter.pages) }}
+  {{ page_cards(chapter.pages, book.slug ~ '/' ~ chapter.slug, chapter.slug ~ '-pages') }}
   {% else %}
-  <p class="empty-state">No pages yet.</p>
+  <p class="empty-state" id="{{ chapter.slug }}-pages">No pages yet.</p>
   {% endif %}
 </section>
 {% endfor %}
+</div>
 {% if not book.pages and not book.chapters %}
 <p class="empty-state">Nothing here yet.{% if book.can_write %} Use the + button above to add the first chapter.{% endif %}</p>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="/static/reorder.js"></script>
+<script>
+initDragReorder(document.querySelector('#chapter-rows'), {
+  itemSelector: '.chapter-row',
+  storageKey: 'unstacked.chapter_order.{{ book.slug }}',
+  axis: 'y',
+  handleSelector: '.drag-handle',
+});
+document.querySelectorAll('.page-cards').forEach(function (list) {
+  initDragReorder(list, {
+    itemSelector: '.page-card',
+    storageKey: 'unstacked.page_order.' + list.dataset.parent,
+    axis: 'x',
+  });
+});
+document.querySelectorAll('.row-toggle').forEach(function (button) {
+  button.addEventListener('click', function () {
+    var target = document.getElementById(button.getAttribute('aria-controls'));
+    if (!target) return;
+    var collapsed = target.hidden;
+    target.hidden = !collapsed;
+    button.setAttribute('aria-expanded', String(collapsed));
+    button.innerHTML = collapsed ? '&#9662;' : '&#9656;';
+  });
+});
+</script>
 {% endblock %}

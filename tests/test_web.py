@@ -205,8 +205,8 @@ def test_dashboard_renders_a_card_per_book_linked_to_its_book_page(client, conte
     _login(client, "admin")
     page = client.get("/tree")
     assert page.status_code == 200
-    assert 'data-slug="alice-book"' in page.text
-    assert 'data-slug="bob-book"' in page.text
+    assert 'data-key="alice-book"' in page.text
+    assert 'data-key="bob-book"' in page.text
     assert 'href="/books/alice-book"' in page.text
     assert 'href="/books/bob-book"' in page.text
 
@@ -270,6 +270,43 @@ def test_book_page_shows_loose_pages_under_a_pages_row(client, book_with_chapter
     _login(client, "admin")
     page = client.get("/books/handbook")
     assert 'href="/pages/handbook/overview"' in page.text
+
+
+def test_book_page_carries_drag_reorder_markup(client, book_with_chapters):
+    """Chapter rows and page cards must be individually draggable with a
+    stable key, and the shared reorder script must actually be loaded --
+    reordering here is client-side only (see app/static/reorder.js)."""
+
+    _login(client, "admin")
+    page = client.get("/books/handbook")
+    assert '<script src="/static/reorder.js"></script>' in page.text
+    assert "initDragReorder(document.querySelector('#chapter-rows')" in page.text
+    assert 'class="chapter-row" draggable="true" data-key="policies"' in page.text
+    assert 'class="page-card" draggable="true" data-key="handbook/policies/leave"' in page.text
+    assert 'data-parent="handbook/policies"' in page.text
+    assert 'data-parent="handbook"' in page.text  # the loose-pages row
+
+
+def test_book_page_rows_have_a_collapse_toggle(client, book_with_chapters):
+    _login(client, "admin")
+    page = client.get("/books/handbook")
+    assert 'aria-controls="pages-row"' in page.text
+    assert 'aria-controls="policies-pages"' in page.text
+    assert 'aria-controls="empty-chapter-pages"' in page.text
+    # Every aria-controls target must actually exist, whether that's the
+    # page list or the "No pages yet" placeholder.
+    assert 'id="policies-pages"' in page.text
+    assert 'id="empty-chapter-pages"' in page.text
+
+
+def test_creation_popovers_have_no_slug_field(client, book_with_chapters):
+    """Slug is always derived from the title now -- see make_slug."""
+
+    _login(client, "admin")
+    dashboard = client.get("/tree")
+    assert 'name="slug"' not in dashboard.text
+    book_page = client.get("/books/handbook")
+    assert 'name="slug"' not in book_page.text
 
 
 def test_book_page_marks_drafts(client, book_with_chapters):

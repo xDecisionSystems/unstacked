@@ -10,6 +10,50 @@ how long any entry is.
 
 ---
 
+## 2026-08-29 06:15 UTC — Claude Code
+Three requests: drag-reorder for chapters/pages, a collapse toggle per row,
+and dropping the slug field from creation popovers. Confirmed reorder scope
+with the user first (shared/persisted-to-content vs personal/browser-local)
+since it changes the implementation entirely -- they chose personal, the
+same choice already made for the dashboard's book cards, so no backend work
+was needed here at all.
+
+Extracted the book-card drag logic (previously inline in `tree.html`) into
+`app/static/reorder.js`, a small generic `initDragReorder(container, opts)`
+now shared by three call sites: book cards (dashboard), chapter rows and
+each chapter's page-card row (book page). Added a `handleSelector` option
+for chapter rows specifically -- a row contains other interactive elements
+(the per-chapter "+" popover, page-card links), so dragging is restricted
+to a small grip icon by cancelling `dragstart` (via `preventDefault`)
+unless it originated inside the handle, rather than making the whole row a
+drag source. Page cards reuse the book-card trick of a plain
+`draggable="true"` item with an inner `draggable="false"` link, since a
+native `<a>` is draggable by default and would otherwise hijack the drag.
+Order keys are the chapter slug or full page path; storage keys are scoped
+per-book (`unstacked.chapter_order.<book>`) and per-parent
+(`unstacked.page_order.<book>[/<chapter>]`) so different books/chapters
+don't collide. `base.html` gained a `{% block scripts %}` so only the pages
+that need `reorder.js` load it.
+
+Added a collapse toggle (▾/▸) to every row header -- the loose "Pages" row
+and each chapter row -- that hides/shows its page-card list via the
+`hidden` attribute; ephemeral, not persisted (not asked for, and
+`book.html` already has enough localStorage keys per page).
+
+Removed `<label>Slug (optional)<input name="slug">` from all three
+creation popovers (new book, new chapter, new page) -- title alone was
+already sufficient, since every create route already treats a missing
+`slug` field as `None` and derives one from the title via `make_slug`. No
+backend change needed.
+
+7 new/updated tests in `tests/test_web.py` (drag-reorder markup present
+with correct keys/parents, every row's collapse toggle points at an
+existing target, no `name="slug"` field anywhere). Full suite green, ruff
+clean.
+- Files: `app/static/reorder.js` (new), `app/templates/base.html`,
+  `app/templates/tree.html`, `app/templates/book.html`,
+  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-29 05:59 UTC — Claude Code
 User asked to remove the "Manage content" topbar link and make every "+"
 button follow actual write permission rather than admin status. Confirmed
@@ -367,10 +411,3 @@ Removed MCP from the MVP at the user's request. The existing signed-bearer
 REST/OpenAPI surface is now the sole AI transport, avoiding a second protocol
 and its client-context overhead.
 - Files: `README.md`, `plans/plan_initial.md`, `LOG.md`
-
-## 2026-08-28 23:10 UTC — Codex
-Added a bounded, lock-protected per-user throttle for authenticated AI content
-requests and exhaustive finite-domain ACL regression coverage. Token rotation
-shares a user budget while users behind one proxy remain isolated.
-- Files: `app/ai_api.py`, `app/config.py`, `tests/test_ai_api.py`,
-  `tests/test_acl_properties.py`, `plans/plan_initial.md`, `LOG.md`

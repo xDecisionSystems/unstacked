@@ -327,7 +327,9 @@ button.danger:hover { background: #922019; border-color: #922019; }
   transition: box-shadow .15s ease, transform .15s ease, opacity .15s ease;
 }
 .book-card:hover { box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14); transform: translateY(-2px); }
-.book-card.dragging { opacity: .4; }
+/* Shared by every drag-reorderable item (book cards, chapter rows, page
+ * cards) -- reorder.js adds this class to whichever one is being dragged. */
+.dragging { opacity: .4; }
 /* The whole card is clickable via this transparent overlay, rather than
  * wrapping the title/footer in an <a> -- that would need a second, nested
  * `subgrid` level just to keep them aligned to the same row tracks. */
@@ -348,6 +350,17 @@ button.danger:hover { background: #922019; border-color: #922019; }
 .chapter-row { margin-bottom: 2rem; }
 .chapter-row-header { display: flex; align-items: center; gap: .6rem; margin-bottom: .75rem; }
 .chapter-row-title { margin: 0; font-size: 1.1rem; }
+.drag-handle { cursor: grab; color: var(--muted); font-size: .95rem; user-select: none; }
+.row-toggle {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: .85rem;
+  padding: .2rem .3rem;
+}
+.row-toggle:hover { color: var(--text); }
 .page-cards {
   list-style: none;
   margin: 0;
@@ -363,6 +376,7 @@ button.danger:hover { background: #922019; border-color: #922019; }
   border-radius: 12px;
   background: var(--bg-alt);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.09), 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: grab;
   transition: box-shadow .15s ease, transform .15s ease;
 }
 .page-card:hover { box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14); transform: translateY(-2px); }
