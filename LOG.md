@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 05:34 UTC — Codex
+Redesigned Groups as a user-by-group checkbox matrix with direct membership
+toggle actions and compact group deletion controls.
+- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 05:21 UTC — Codex
 Expanded the new-user password checklist to show length, uppercase, lowercase,
 and number requirements with individual live red/green feedback.

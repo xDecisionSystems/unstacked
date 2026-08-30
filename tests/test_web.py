@@ -707,7 +707,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
         "data-user-deactivate",
         "data-user-delete",
         "data-group-delete",
-        "data-member-remove",
+            "data-group-membership",
         "data-permission-delete",
     ):
         assert control in response.text
