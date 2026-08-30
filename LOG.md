@@ -10,6 +10,61 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 20:25 UTC — Claude Code
+Implemented the remaining phases (3, 4, 5) of `plan_editable_widget_home.md`
+on top of the backend foundation from the prior entry, using two parallel
+subagents in isolated git worktrees (to avoid a shared-tree collision),
+then merged, verified, and pushed both.
+
+**Phase 3 (Home rendering + editing UI):** `GET`/`POST /home/edit` --
+mirrors the existing page-editor route shape, gated on
+`AuthorizationContext.require_write("index.md")` (a real write grant, not
+`is_admin`), reuses the same markdown editor as page editing. `GET /tree`
+now renders `index.md`'s real body through `MarkdownRenderer` plus its
+widgets in one fixed slot below. New `home_editor.html` widget tray: an
+ordered list with move-up/move-down buttons as the primary,
+keyboard-accessible reorder mechanism (plus an optional pointer-drag
+layer) -- deliberately not `reorder.js`'s `localStorage` mechanism, since
+this order is real, git-committed content; the tray's order is serialized
+into the save request and checked against the page's blob SHA even on a
+reorder-only save.
+
+**Phase 4+5 (Settings separation + featured-star verification):** Trimmed
+`Branding` to name + logo only, deleting `home_eyebrow`/`home_title`/
+`home_description`/`featured_label` end to end (dataclass, load/save,
+admin API models, admin.html form) now that `index.md` itself is the live
+source of that copy. Added a Settings "Home page" section: a pointer to
+Home's own Edit button, plus a "reset to starter content" admin action
+that goes through `update_home_page`'s ordinary blob-SHA commit path
+(`ContentRepository.reset_home_page_to_starter`), not a raw overwrite.
+Verified (read-only) that the existing `/home/feature`/`/home/remove`
+star toggles still work unchanged against the new model.
+
+**Integration:** both worktree branches merged into `main` cleanly --
+only `tests/test_web.py` was touched by both, and git's own merge
+resolved it with no manual conflict. Full suite (100% pass, all dots) and
+ruff clean on the merged tree. Verified through a real Docker Compose
+deployment per `AGENTS.md`: container healthy, `/healthz` 200, and --
+more telling than an HTTP smoke test -- directly inspected the actual
+`index.md` written into the real content volume by genuine container
+bootstrap, confirming the widget front matter is correct outside of test
+fixtures. Could not exercise the new routes over HTTP in that container
+since its persisted `data` volume already holds an admin account from an
+earlier verification run with a since-changed password (expected --
+`AGENTS.md` forbids wiping these volumes between runs).
+
+Deferred, per the implementing agents' own judgment, not required by the
+plan: inline widget-placeholder tokens (v1 uses one fixed slot, as the
+plan already specifies) and additional widget types beyond `featured`.
+
+Merge commits `f26c10e` and `75af1c5` on `main`; worktrees and their
+branches removed after merging.
+- Files: `app/web.py`, `app/templates/tree.html`,
+  `app/templates/home_editor.html`, `app/static/style.css`,
+  `app/branding.py`, `app/admin_api.py`, `app/content.py`,
+  `app/templates/admin.html`, `tests/test_web.py`,
+  `tests/test_admin_api.py`, `LOG.md`
+
 ## 2026-08-30 19:48 UTC — Claude Code
 Implemented Phase 1+2 of `plan_editable_widget_home.md`: the backend
 foundation for the editable, widget-based home page, deliberately stopping
@@ -188,10 +243,3 @@ the Public template’s per-chapter read/write defaults.
 - Files: `app/default_groups.py`, `app/admin_api.py`,
   `app/templates/admin.html`, `app/static/style.css`,
   `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 06:11 UTC — Codex
-Added built-in Public and Admin groups: Public begins with no chapter grants,
-while Admin receives read/write grants for every current and new chapter.
-- Files: `app/default_groups.py`, `app/main.py`, `app/bootstrap.py`,
-  `app/content.py`, `app/admin_api.py`, `tests/test_default_groups.py`,
-  `LOG.md`
