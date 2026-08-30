@@ -743,9 +743,18 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
     assert editor.status_code == 200
     assert "toastui-editor-all.min.js" in editor.text
     assert "getMarkdown" in editor.text
+    # The chart plugin has a real, separate library dependency (toastui-chart);
+    # without it, the plugin throws inside the editor's own constructor and
+    # silently breaks its toolbar state tracking. Must load before the plugin.
+    assert editor.text.index("toastui-chart.min.js") < editor.text.index(
+        "editor-plugin-chart.min.js"
+    )
     assert "editor-plugin-chart" in editor.text
     assert "editor-plugin-code-syntax-highlight" in editor.text
-    assert "editor-plugin-color-syntax" in editor.text
+    # Unlike the other plugins, color-syntax has no "-all" bundle variant --
+    # that filename 404s.
+    assert "toastui-editor-plugin-color-syntax.min.js" in editor.text
+    assert "toastui-editor-plugin-color-syntax-all.min.js" not in editor.text
     assert "editor-plugin-table-merged-cell" in editor.text
     assert "editor-plugin-uml" in editor.text
     assert 'name="card_image"' in editor.text

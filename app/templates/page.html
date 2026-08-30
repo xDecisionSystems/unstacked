@@ -43,9 +43,18 @@
 {% if can_write %}
 <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
 <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+<!-- The chart plugin depends on the separate TOAST UI Chart library; without
+     it, the plugin throws while the editor's own constructor is invoking it
+     (`t().barChart` on undefined), which aborts the rest of the editor's
+     setup partway through -- including the toolbar's own cursor-position
+     tracking, leaving whichever button was "active" at that point stuck. -->
+<link rel="stylesheet" href="https://uicdn.toast.com/chart/latest/toastui-chart.min.css">
+<script src="https://uicdn.toast.com/chart/latest/toastui-chart.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-chart/latest/toastui-editor-plugin-chart.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-code-syntax-highlight/latest/toastui-editor-plugin-code-syntax-highlight-all.min.js"></script>
-<script src="https://uicdn.toast.com/editor-plugin-color-syntax/latest/toastui-editor-plugin-color-syntax-all.min.js"></script>
+<!-- Unlike the other plugins, color-syntax ships no "-all" bundle variant;
+     that filename 404s and was never actually loading. -->
+<script src="https://uicdn.toast.com/editor-plugin-color-syntax/latest/toastui-editor-plugin-color-syntax.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-table-merged-cell/latest/toastui-editor-plugin-table-merged-cell.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-uml/latest/toastui-editor-plugin-uml.min.js"></script>
 <script>

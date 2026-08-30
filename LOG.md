@@ -10,6 +10,34 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 21:18 UTC — Claude Code
+Fixed the Toast UI markdown editor's "H" toolbar button getting stuck
+"active" regardless of actual cursor position (reported by the user with a
+screenshot on the new Edit Home page, confirmed by Safari console errors to
+also affect the regular page editor). Not a CSS or app-code bug -- two real
+problems with the CDN plugin scripts loaded in `page.html`/`editor.html`/
+`home_editor.html`:
+
+- The chart plugin depends on a separate library, `toastui-chart`, that was
+  never loaded. Without it, the plugin throws (`t().barChart` on undefined)
+  *inside* Toast UI Editor's own constructor call, on every page load before
+  any user interaction -- which aborts the rest of the editor's internal
+  setup partway through, including the toolbar's cursor-position tracking.
+  Whatever button was "active" at the moment of the crash just never gets
+  updated again.
+- The color-syntax plugin's script URL 404s outright: unlike the other
+  plugins, it ships no `-all` bundle variant, and the URL used that suffix
+  anyway.
+
+Added the missing `toastui-chart` JS+CSS (loaded before the chart plugin)
+and corrected the color-syntax filename, in all three templates that load
+this script set. Added regression assertions to `tests/test_web.py`: the
+chart library now loads before the plugin that needs it, and the corrected
+color-syntax filename is present while the broken one is not. Full suite
+green, ruff clean.
+- Files: `app/templates/page.html`, `app/templates/editor.html`,
+  `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 20:25 UTC — Claude Code
 Implemented the remaining phases (3, 4, 5) of `plan_editable_widget_home.md`
 on top of the backend foundation from the prior entry, using two parallel
@@ -236,10 +264,3 @@ disabled account actions in gray.
 - Files: `app/admin_api.py`, `app/templates/admin.html`,
   `app/static/style.css`, `tests/test_admin_api.py`, `tests/test_web.py`,
   `LOG.md`
-
-## 2026-08-30 06:17 UTC — Codex
-Added chapter-level default permission icons and made new custom groups inherit
-the Public template’s per-chapter read/write defaults.
-- Files: `app/default_groups.py`, `app/admin_api.py`,
-  `app/templates/admin.html`, `app/static/style.css`,
-  `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
