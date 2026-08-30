@@ -696,6 +696,7 @@ def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, c
     assert "toastui-editor-all.min.js" in response.text
     assert "editor-plugin-table-merged-cell" in response.text
     assert "editor-plugin-uml" in response.text
+    assert "dismissHeadingPopup" in response.text
     assert 'aria-label="Breadcrumb"' not in response.text
 
     changed = client.post(

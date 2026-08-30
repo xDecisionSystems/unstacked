@@ -88,6 +88,25 @@
         el: mount, height: '565px', initialEditType: 'markdown', previewStyle: 'vertical',
         initialValue: source.value, plugins, usageStatistics: false,
       });
+      // Toast UI normally closes the heading chooser only after a click outside
+      // it.  That makes the menu appear stuck when the pointer has moved back
+      // into the editing surface, so dismiss it once neither the toolbar nor
+      // its popup is being hovered.  Dispatching the same outside mousedown
+      // uses Toast UI's own cleanup path rather than hiding its DOM directly.
+      const toolbar = mount.querySelector('.toastui-editor-toolbar');
+      const headingPopup = mount.querySelector('.toastui-editor-popup-add-heading');
+      let headingPopupTimer;
+      const dismissHeadingPopup = () => {
+        window.clearTimeout(headingPopupTimer);
+        headingPopupTimer = window.setTimeout(() => {
+          if (!toolbar?.matches(':hover') && !headingPopup?.matches(':hover')) {
+            document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+          }
+        }, 160);
+      };
+      toolbar?.addEventListener('mouseleave', dismissHeadingPopup);
+      headingPopup?.addEventListener('mouseleave', dismissHeadingPopup);
+      headingPopup?.addEventListener('mouseenter', () => window.clearTimeout(headingPopupTimer));
       document.getElementById('inline-edit-form').addEventListener('submit', () => { source.value = toastEditor.getMarkdown(); });
     }
   });

@@ -10,6 +10,18 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 22:59 UTC — Codex
+Completed the follow-up review of the Toast UI heading control. The plugin
+dependency fixes already committed by Claude eliminate the editor
+initialization failure; the rendered inline script was also checked with a
+real page response and is valid JavaScript. Added a small inline-editor
+interaction guard so the heading chooser dismisses shortly after the pointer
+leaves both the toolbar and its menu, using Toast UI's own outside-click
+cleanup path rather than forcing its DOM closed. This prevents the menu from
+obscuring the editing surface while preserving access to its heading choices.
+Focused page-view regression test passes; ruff passes.
+- Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 22:47 UTC — Claude Code
 Third round on the Toast UI toolbar bug. With the color-picker fix
 confirmed live (`GET /version` showed the deployed commit, and its specific
@@ -327,12 +339,4 @@ pages so normal pages retain inherited book access.
   `app/templates/book.html`, `app/templates/tree.html`, `app/web.py`,
   `plans/plan_initial.md`, `tests/test_acl.py`, `tests/test_admin_api.py`,
   `tests/test_ai_api.py`, `tests/test_book_migration.py`,
-  `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 07:33 UTC — Codex
-Added reserved main-hidden, main-read, and main-write starter books with
-front-page pages and suffix-based Public-group default access, while keeping
-their book containers out of the dashboard.
-- Files: `app/content.py`, `app/default_groups.py`, `app/web.py`,
-  `app/templates/tree.html`, `tests/test_ai_api.py`,
   `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
