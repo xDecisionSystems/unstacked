@@ -23,6 +23,7 @@ redirect from ``/``.
 """
 
 import difflib
+import json
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import parse_qsl
@@ -38,6 +39,7 @@ from app.acl import AccessDenied, AuthorizationContext
 from app.assets import AssetTooLarge, UnsupportedAsset, detect_image
 from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
 from app.export import ExportError, StaticExportRunner
+from app.home_widgets import build_home_widgets
 from app.models import User
 from app.nav import NavigationError, read_navigation
 from app.paths import UnsafePath
@@ -304,6 +306,75 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
     }
 
 
+def _home_context(request: Request, session: Session, user: User) -> dict:
+    """Augment the base context with the rendered, editable Home page.
+
+    ``index.md`` replaces the old fixed dashboard heading: its Markdown body
+    renders through the same :class:`MarkdownRenderer` a normal page uses,
+    and its ``widgets`` front matter renders in one fixed slot below the
+    body (v1 simplification -- see ``plan_editable_widget_home.md``). A
+    broken or unreadable home page must not take down every authenticated
+    view, so a read failure falls back to an empty body rather than 500ing.
+    """
+
+    content = request.app.state.content
+    authorization = _authorization(session, user)
+    context = _base_context(request, session, user)
+    try:
+        metadata, markdown, _raw = content.read_home_page()
+    except (ContentError, UnsafePath):
+        metadata, markdown = {}, ""
+    try:
+        body_html = MarkdownRenderer(content.root).render("index.md", markdown)
+    except RenderConfigurationError:
+        body_html = ""
+    widgets_result = build_home_widgets(metadata.get("widgets"), authorization, content)
+    context.update(
+        {
+            "home_title": metadata.get("title") or "Home",
+            "home_body": body_html,
+            "home_widgets": widgets_result.rendered,
+            "home_widget_errors": [error.message for error in widgets_result.errors],
+            "can_write_home": authorization.policy.decide("index.md").can_write,
+        }
+    )
+    return context
+
+
+def _home_editor_context(
+    request: Request,
+    session: Session,
+    user: User,
+    *,
+    form: dict[str, object] | None = None,
+    error: str | None = None,
+    status_code: int = 200,
+) -> Response:
+    """Mirror ``_editor_context`` for the single, fixed Home page path.
+
+    The widget tray needs the current front-matter ``widgets`` list (a list
+    of plain dicts) alongside the usual title/markdown/blob-sha fields a
+    text edit needs.
+    """
+
+    content = request.app.state.content
+    context = _base_context(request, session, user)
+    if form is None:
+        metadata, markdown, _raw = content.read_home_page()
+        raw_widgets = metadata.get("widgets")
+        widgets = [entry for entry in raw_widgets if isinstance(entry, dict)] if isinstance(
+            raw_widgets, list
+        ) else []
+        form = {
+            "title": str(metadata.get("title") or "Home"),
+            "markdown": markdown,
+            "base_blob_sha": content.home_page_blob_sha(),
+            "widgets": widgets,
+        }
+    context.update({"form": form, "error": error})
+    return templates.TemplateResponse(request, "home_editor.html", context, status_code=status_code)
+
+
 def _home_return_path(value: str | None) -> str:
     """Keep home-toggle forms on a local page without permitting redirects elsewhere."""
 
@@ -459,7 +530,7 @@ def tree_view(
     user: Annotated[User, Depends(require_normal_web_user)],
 ) -> Response:
     with Session(request.app.state.engine) as session:
-        context = _base_context(request, session, user)
+        context = _home_context(request, session, user)
     return templates.TemplateResponse(request, "tree.html", context)
 
 
@@ -830,6 +901,79 @@ async def save_page(
                 status_code=409 if isinstance(exc, ContentConflict) else 422,
             )
     return RedirectResponse(f"/pages/{target.removesuffix('.md')}", status_code=303)
+
+
+@router.get("/home/edit", response_class=HTMLResponse, include_in_schema=False)
+def edit_home(
+    request: Request,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    """Home's own editor: same shape as ``/pages/{path}/edit`` but fixed to
+    the single ``index.md`` path, plus a widget-order tray alongside the
+    Markdown body.
+    """
+
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_write("index.md")
+        except AccessDenied:
+            context = _base_context(request, session, user)
+            return templates.TemplateResponse(request, "404.html", context, status_code=404)
+        return _home_editor_context(request, session, user)
+
+
+@router.post("/home/edit", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def save_home(
+    request: Request,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    """Save Home's Markdown body, title, and widget order in one commit.
+
+    Front matter and body share one file, and therefore one conflict
+    domain: ``base_blob_sha`` is sent (and checked by
+    ``ContentRepository.update_home_page``) even when only the widget order
+    changed, exactly like a text edit -- see the hidden ``widgets_json``
+    field the editor template rebuilds from the tray's current DOM order
+    right before submit.
+    """
+
+    form = await _read_form(
+        request, max_bytes=request.app.state.settings.max_page_bytes + EDITOR_FORM_OVERHEAD
+    )
+    widgets: list = []
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_write("index.md")
+            try:
+                parsed = json.loads(form.get("widgets_json") or "[]")
+            except json.JSONDecodeError as exc:
+                raise ContentError("widget order could not be read") from exc
+            if not isinstance(parsed, list):
+                raise ContentError("widget order could not be read")
+            widgets = parsed
+            request.app.state.content.update_home_page(
+                form.get("markdown", ""),
+                widgets,
+                user,
+                base_blob_sha=form.get("base_blob_sha", ""),
+                title=form.get("title") or None,
+            )
+        except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
+            display_form = {
+                "title": form.get("title", ""),
+                "markdown": form.get("markdown", ""),
+                "base_blob_sha": form.get("base_blob_sha", ""),
+                "widgets": widgets,
+            }
+            return _home_editor_context(
+                request,
+                session,
+                user,
+                form=display_form,
+                error=_web_error(exc),
+                status_code=409 if isinstance(exc, ContentConflict) else 422,
+            )
+    return RedirectResponse("/tree", status_code=303)
 
 
 @router.post(

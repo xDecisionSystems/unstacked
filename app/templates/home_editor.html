@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Edit Home · Unstacked{% endblock %}
+{% block content %}
+<h1>Edit Home</h1>
+{% if error %}<p class="error-message">{{ error }}</p>{% endif %}
+<form class="editor-form home-editor-form" method="post" action="/home/edit" id="home-edit-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="base_blob_sha" value="{{ form.base_blob_sha }}">
+  <input type="hidden" name="widgets_json" id="widgets-json" value="">
+  <label>Title<input name="title" value="{{ form.title }}"></label>
+  <label>Markdown<textarea id="markdown-editor" name="markdown">{{ form.markdown }}</textarea></label>
+  <fieldset class="widget-tray">
+    <legend>Home widgets</legend>
+    <p class="tag-help">Widgets render below the page body, in this order. Use the move controls (or drag the handle) to reorder them.</p>
+    <ul id="widget-list" class="widget-list">
+      {% for widget in form.widgets %}
+      <li class="widget-row" draggable="true" data-id="{{ widget.id }}" data-type="{{ widget.type }}" data-config='{{ widget.get("config", {}) | tojson }}'>
+        <span class="widget-grip" aria-hidden="true">⠿</span>
+        <span class="widget-label">{{ widget.type | capitalize }}</span>
+        <span class="widget-id">{{ widget.id }}</span>
+        <div class="widget-move-controls">
+          <button type="button" class="widget-move-up" aria-label="Move the {{ widget.type }} widget up">↑</button>
+          <button type="button" class="widget-move-down" aria-label="Move the {{ widget.type }} widget down">↓</button>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </fieldset>
+  <div class="form-actions"><button type="submit">Save</button><a class="button" href="/tree">Cancel</a></div>
+</form>
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
+<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-chart/latest/toastui-editor-plugin-chart.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-code-syntax-highlight/latest/toastui-editor-plugin-code-syntax-highlight-all.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-color-syntax/latest/toastui-editor-plugin-color-syntax-all.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-table-merged-cell/latest/toastui-editor-plugin-table-merged-cell.min.js"></script>
+<script src="https://uicdn.toast.com/editor-plugin-uml/latest/toastui-editor-plugin-uml.min.js"></script>
+<script>
+(() => {
+  const element = document.getElementById('markdown-editor');
+  const form = document.getElementById('home-edit-form');
+  if (element && window.toastui?.Editor) {
+    const mount = document.createElement('div');
+    mount.id = 'toast-editor'; element.before(mount); element.hidden = true;
+    const plugins = Object.values(window.toastui.Editor.plugin || {});
+    const editor = new window.toastui.Editor({
+      el: mount, height: '480px', initialEditType: 'markdown', previewStyle: 'vertical',
+      initialValue: element.value, plugins, usageStatistics: false,
+    });
+    form.addEventListener('submit', () => { element.value = editor.getMarkdown(); });
+  }
+
+  // Widget tray reordering. Keyboard-accessible move-up/move-down buttons
+  // are the primary mechanism (they work with one widget today and scale to
+  // more); pointer drag is a cheap enhancement on top of the same DOM order.
+  // Unlike static/reorder.js's per-browser card ordering, this order is
+  // real, shared, Git-committed content -- it is read out of the tray and
+  // serialized into the submitted form right before submit, never persisted
+  // to localStorage.
+  const list = document.getElementById('widget-list');
+  const widgetsField = document.getElementById('widgets-json');
+
+  function rows() {
+    return list ? Array.prototype.slice.call(list.children) : [];
+  }
+
+  function serializeWidgets() {
+    return rows().map((row) => {
+      let config = {};
+      try { config = JSON.parse(row.dataset.config || '{}'); } catch (e) { config = {}; }
+      return { id: row.dataset.id, type: row.dataset.type, config };
+    });
+  }
+
+  if (list) {
+    list.addEventListener('click', (event) => {
+      const upButton = event.target.closest('.widget-move-up');
+      const downButton = event.target.closest('.widget-move-down');
+      if (!upButton && !downButton) return;
+      const row = event.target.closest('.widget-row');
+      if (!row) return;
+      if (upButton && row.previousElementSibling) {
+        list.insertBefore(row, row.previousElementSibling);
+        upButton.focus();
+      } else if (downButton && row.nextElementSibling) {
+        list.insertBefore(row.nextElementSibling, row);
+        downButton.focus();
+      }
+    });
+
+    let dragging = null;
+    list.addEventListener('dragstart', (event) => {
+      const row = event.target.closest('.widget-row');
+      if (!row || row.parentNode !== list) return;
+      dragging = row;
+      row.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+    });
+    list.addEventListener('dragover', (event) => {
+      if (!dragging) return;
+      event.preventDefault();
+      const row = event.target.closest('.widget-row');
+      if (!row || row === dragging || row.parentNode !== list) return;
+      const rect = row.getBoundingClientRect();
+      const before = (event.clientY - rect.top) < rect.height / 2;
+      list.insertBefore(dragging, before ? row : row.nextSibling);
+    });
+    list.addEventListener('dragend', () => {
+      if (dragging) dragging.classList.remove('dragging');
+      dragging = null;
+    });
+  }
+
+  form.addEventListener('submit', () => {
+    widgetsField.value = JSON.stringify(serializeWidgets());
+  });
+})();
+</script>
+{% endblock %}

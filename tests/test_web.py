@@ -8,6 +8,7 @@ leaking whether it exists via a 403 instead of a 404, and unsanitized page
 content escaping into the rendered HTML.
 """
 
+import json
 import re
 
 import pytest
@@ -263,6 +264,156 @@ def test_admin_can_feature_a_page_or_book_on_home(client, content):
     assert "Featured" in page.text
     assert 'href="/books/alice-book"' in page.text
     assert 'href="/pages/alice-book/secret"' in page.text
+
+
+# --------------------------------------------------------------------------
+# Editable, widget-based Home (Phase 3 of plan_editable_widget_home.md)
+# --------------------------------------------------------------------------
+
+
+def test_home_renders_the_index_page_body_and_the_featured_widget(client, content):
+    _login(client, "admin")
+    csrf = _csrf_from(client.get("/tree").text)
+    client.post(
+        "/home/feature",
+        data={"csrf_token": csrf, "target": "alice-book/secret.md"},
+        follow_redirects=False,
+    )
+
+    home = client.get("/tree")
+    assert home.status_code == 200
+    # The starter body written by ContentRepository's bootstrap, rendered as
+    # actual Markdown -- not the old fixed Branding-sourced heading.
+    assert "Your featured books and pages." in home.text
+    # The featured widget, rendered below the body in its own fixed slot.
+    assert "Featured" in home.text
+    assert 'href="/pages/alice-book/secret"' in home.text
+    assert "Secret" in home.text
+
+
+def test_home_edit_button_visibility_follows_write_access_not_admin_status(app_env, client):
+    app, _settings, _admin, _token = app_env
+    writer = _make_user(app, "writer")
+    _grant(app, writer.id, "index.md", group_name="home-writers", can_write=True)
+    _make_user(app, "reader")
+
+    _login(client, "writer")
+    home = client.get("/tree")
+    assert 'href="/home/edit"' in home.text
+    assert client.get("/home/edit").status_code == 200
+
+    _login(client, "reader")
+    home = client.get("/tree")
+    assert 'href="/home/edit"' not in home.text
+    assert client.get("/home/edit").status_code == 404
+
+
+def test_home_edit_round_trip_updates_markdown_and_title(app_env, client):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    _login(client, "admin")
+
+    editor = client.get("/home/edit")
+    assert editor.status_code == 200
+    assert "Your featured books and pages." in editor.text
+    assert "toastui-editor-all.min.js" in editor.text
+    assert 'name="widgets_json"' in editor.text
+    assert 'data-id="featured"' in editor.text
+    csrf_token = _csrf_from(editor.text)
+    blob_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
+
+    saved = client.post(
+        "/home/edit",
+        data={
+            "csrf_token": csrf_token,
+            "base_blob_sha": blob_sha,
+            "title": "Welcome",
+            "markdown": "# Welcome\n\nUpdated home copy.",
+            "widgets_json": json.dumps([{"id": "featured", "type": "featured", "config": {}}]),
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/tree"
+
+    metadata, markdown, _raw = content.read_home_page()
+    assert markdown == "# Welcome\n\nUpdated home copy."
+    assert metadata["title"] == "Welcome"
+    home = client.get("/tree")
+    assert "Updated home copy." in home.text
+
+
+def test_home_edit_rejects_a_stale_save_without_overwriting(app_env, client):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    _login(client, "admin")
+
+    editor = client.get("/home/edit")
+    csrf_token = _csrf_from(editor.text)
+    stale_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
+    content.update_home_page(
+        "Changed elsewhere",
+        [{"id": "featured", "type": "featured", "config": {}}],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+
+    response = client.post(
+        "/home/edit",
+        data={
+            "csrf_token": csrf_token,
+            "base_blob_sha": stale_sha,
+            "title": "Home",
+            "markdown": "Would overwrite",
+            "widgets_json": json.dumps([{"id": "featured", "type": "featured", "config": {}}]),
+        },
+    )
+    assert response.status_code == 409
+    assert "changed since you opened it" in response.text
+    assert content.read_home_page()[1] == "Changed elsewhere"
+
+
+def test_home_edit_reorders_widgets_and_persists_the_new_order(app_env, client):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.update_home_page(
+        "Body",
+        [
+            {"id": "featured", "type": "featured", "config": {}},
+            {"id": "extra", "type": "featured", "config": {"note": "second"}},
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+    _login(client, "admin")
+
+    editor = client.get("/home/edit")
+    assert editor.status_code == 200
+    # Both widgets appear in the tray, in their stored order.
+    assert editor.text.index('data-id="featured"') < editor.text.index('data-id="extra"')
+    csrf_token = _csrf_from(editor.text)
+    blob_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
+
+    saved = client.post(
+        "/home/edit",
+        data={
+            "csrf_token": csrf_token,
+            "base_blob_sha": blob_sha,
+            "title": "Home",
+            "markdown": "Body",
+            "widgets_json": json.dumps(
+                [
+                    {"id": "extra", "type": "featured", "config": {"note": "second"}},
+                    {"id": "featured", "type": "featured", "config": {}},
+                ]
+            ),
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+
+    metadata, _markdown, _raw = content.read_home_page()
+    assert [entry["id"] for entry in metadata["widgets"]] == ["extra", "featured"]
 
 
 def test_feature_star_toggles_in_place_on_a_book_page(client, content):
