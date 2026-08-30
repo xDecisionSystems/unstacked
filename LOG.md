@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 05:59 UTC — Codex
+Replaced Chapter Permissions dropdowns with accessible dash, eye, and pencil
+icon controls for no access, read, and read/write assignments.
+- Files: `app/templates/admin.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 05:51 UTC — Codex
 Renamed the groups settings section and added a chapter-by-group permissions
 matrix with read/write levels and per-group select-all controls.
@@ -90,9 +96,3 @@ read access; public links now block creation of no-read groups and denied
 permission grants.
 - Files: `app/admin_api.py`, `app/git_backend.py`, `app/templates/admin.html`,
   `tests/test_backup_config.py`, `tests/test_git_backend.py`, `LOG.md`
-
-## 2026-08-30 01:16 UTC — Codex
-Reframed the Settings backup control as a dedicated GitHub repository link,
-with private-repository safeguards and clear automatic synchronization to the
-content repository's `main` branch.
-- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
