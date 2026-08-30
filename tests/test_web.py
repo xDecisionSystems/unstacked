@@ -708,6 +708,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     for control in (
         "data-user-deactivate",
         "data-user-delete",
+        "primary Admin account cannot be deleted",
         "data-group-delete",
         "data-group-membership",
         "data-chapter-permission",

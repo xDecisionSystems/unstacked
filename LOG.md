@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 06:21 UTC — Codex
+Protected the primary Admin account from deletion and styled inactive users'
+disabled account actions in gray.
+- Files: `app/admin_api.py`, `app/templates/admin.html`,
+  `app/static/style.css`, `tests/test_admin_api.py`, `tests/test_web.py`,
+  `LOG.md`
+
 ## 2026-08-30 06:17 UTC — Codex
 Added chapter-level default permission icons and made new custom groups inherit
 the Public template’s per-chapter read/write defaults.
@@ -86,8 +93,3 @@ that reflect private, mixed-descendant, and fully public visibility.
 Applied the accessible open/closed eye visibility toggle to book cards, matching
 the chapter-card visibility interaction.
 - Files: `app/templates/tree.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 04:37 UTC — Codex
-Replaced chapter visibility action buttons with a single accessible eye toggle
-that reflects and switches the chapter’s recursive public state.
-- Files: `app/templates/book.html`, `app/static/style.css`, `LOG.md`

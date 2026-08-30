@@ -67,6 +67,7 @@ audit_log = logging.getLogger("unstacked.audit")
 # Passwords are set by an administrator rather than mailed out, so the floor
 # matches the bootstrap CLI's rather than the login form's shorter minimum.
 MINIMUM_PASSWORD_LENGTH = 12
+PRIMARY_ADMIN_USERNAME = "admin"
 
 # Field names an audit record may never carry.  The audit trail records *who
 # changed what*, and a value under any of these names would be either a
@@ -607,7 +608,13 @@ def reset_password(
 @router.delete("/users/{user_id}", response_model=DetailResponse, dependencies=CsrfGuard)
 def delete_user(user_id: int, request: Request, actor: AdminActor) -> DetailResponse:
     with Session(request.app.state.engine) as session:
-        email = _require_user(session, user_id).email
+        user = _require_user(session, user_id)
+        if user.username == PRIMARY_ADMIN_USERNAME:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "The primary Admin account cannot be deleted",
+            )
+        email = user.email
         statement = (
             delete(User).where(User.id == user_id).where(_not_last_active_admin(user_id))
         )

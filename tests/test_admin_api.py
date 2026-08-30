@@ -678,6 +678,13 @@ def test_deleting_a_user_cascades_only_their_memberships(app_env, client):
     assert client.get(f"/api/admin/groups/{group_id}/members", headers=bearer(token)).json() == []
 
 
+def test_primary_admin_account_cannot_be_deleted(app_env, client):
+    _app, _settings, admin, token = app_env
+    response = client.delete(f"/api/admin/users/{admin.id}", headers=bearer(token))
+    assert response.status_code == 409
+    assert "cannot be deleted" in response.json()["detail"]
+
+
 # --------------------------------------------------------------------------
 # Conflict diagnostics
 # --------------------------------------------------------------------------
