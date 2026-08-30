@@ -10,6 +10,30 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 21:53 UTC — Claude Code
+Corrected the previous `GET /version` commit (its `.git`-copying build step
+worked in local `docker compose` testing but broke the user's real Coolify
+deployment): Coolify "imports" a plain file snapshot of the commit, no
+`.git` directory at all, so `COPY .git ./.git` failed with
+`"/.git": not found` at deploy time -- caught immediately from the user's
+pasted deployment log.
+
+Replaced it with Coolify's own purpose-built mechanism: a `SOURCE_COMMIT`
+build arg, which Coolify supplies automatically (off by default, to avoid
+busting layer caching on every commit -- the user needs to enable "Include
+Source Commit in Build" under the app's Advanced settings for it to
+actually populate). Dockerfile now just declares `ARG SOURCE_COMMIT=unknown`
+in the runtime stage and writes it to `/app/GIT_COMMIT`; `.dockerignore`'s
+original `.git` exclusion is restored since the build context no longer
+needs it at all. `app/main.py`'s `_resolve_commit()` and its tests were
+already written against that same file path and needed no changes --
+only the file's provenance comment.
+
+Verified directly with `docker build`: passing `--build-arg
+SOURCE_COMMIT=<sha>` reports that exact commit; omitting it falls back to
+`"unknown"` rather than failing the build. Full suite green, ruff clean.
+- Files: `Dockerfile`, `.dockerignore`, `app/main.py`, `LOG.md`
+
 ## 2026-08-30 21:37 UTC — Claude Code
 Added `GET /version`, at the user's request, so a deployed container's
 actual commit can be confirmed directly (`curl https://.../version`)
@@ -280,8 +304,3 @@ web/settings UI now uses book-level permissions and a draggable page grid.
 Stopped inaccessible book shells from appearing when every chapter is denied
 by a more-specific permission rule.
 - Files: `app/content.py`, `tests/test_admin_api.py`, `LOG.md`
-
-## 2026-08-30 06:25 UTC — Codex
-Added an explicit Reactivate action for inactive accounts, restoring access
-through the guarded user-update flow.
-- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`

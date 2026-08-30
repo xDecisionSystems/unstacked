@@ -19,17 +19,6 @@ RUN uv sync --locked --no-install-project --no-dev
 COPY app ./app
 RUN uv sync --locked --no-dev
 
-# Resolve the exact commit this image is built from, for GET /version --
-# placed last so this layer (which changes on every single commit) never
-# invalidates the cacheable dependency-install layers above it. `.git` is
-# excluded from the runtime image entirely (see .dockerignore); only the
-# resolved SHA crosses that boundary.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
-    && rm -rf /var/lib/apt/lists/*
-COPY .git ./.git
-RUN git rev-parse HEAD > /app/GIT_COMMIT && rm -rf /app/.git
-
 
 FROM python:3.12-slim AS runtime
 
@@ -44,7 +33,16 @@ RUN groupadd --system unstacked && useradd --system --gid unstacked --create-hom
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/app /app/app
-COPY --from=builder /app/GIT_COMMIT /app/GIT_COMMIT
+# The commit this image was built from, for GET /version -- lets an operator
+# confirm a redeploy actually picked up a given push instead of assuming it.
+# `.git` is excluded from the build context entirely (see .dockerignore) and
+# isn't needed here: Coolify supplies the real commit itself as the
+# SOURCE_COMMIT build arg (off by default there, to preserve layer caching --
+# enable "Include Source Commit in Build" under the app's Advanced settings).
+# A plain `docker build` without that arg just gets "unknown", same as
+# running the app outside Docker entirely.
+ARG SOURCE_COMMIT=unknown
+RUN echo "${SOURCE_COMMIT}" > /app/GIT_COMMIT
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     UNSTACKED_CONTENT_REPO_PATH=/app/content \

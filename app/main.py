@@ -21,9 +21,10 @@ from app.web_auth import router as web_auth_router
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-# Baked into the image at build time (see Dockerfile) since `.dockerignore`
-# deliberately excludes `.git` from the runtime image entirely -- only this
-# one resolved string crosses that boundary, not the repository history.
+# Baked into the image at Docker build time (see Dockerfile) from the
+# SOURCE_COMMIT build arg -- not from `.git`, which the build context never
+# has access to on at least one real deployment platform (Coolify imports a
+# plain file snapshot of the commit, no `.git` directory at all).
 _BAKED_COMMIT_FILE = Path("/app/GIT_COMMIT")
 
 
