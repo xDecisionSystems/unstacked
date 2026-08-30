@@ -629,9 +629,7 @@ class ContentRepository:
                     raise ContentMissing("page not found")
                 tree = ConfinedTree(self.docs)
                 try:
-                    original = tree.read_text(
-                        page_relative, max_bytes=self.settings.max_page_bytes
-                    )
+                    original = tree.read_text(page_relative, max_bytes=self.settings.max_page_bytes)
                 except ConfinedFileTooLarge as exc:
                     raise ContentError("page exceeds configured size limit") from exc
                 except UnsafePath as exc:
@@ -779,6 +777,59 @@ class ContentRepository:
                 tree.write_internal_text(relative, original, overwrite=True)
                 raise
 
+    def set_container_public(self, relative: str, public: bool, actor: User) -> str:
+        """Persist anonymous-read visibility in portable container metadata."""
+
+        with self.git.write_lock():
+            relative = normalize_relative_path(relative)
+            if path_depth(relative) not in {1, 2} or relative.split("/")[0] in RESERVED_ROOT_NAMES:
+                raise ContentError("only books and chapters are containers")
+            tree = ConfinedTree(self.docs)
+            original = tree.read_internal_text(relative)
+            try:
+                navigation = parse_navigation(original, source=".pages")
+                values = dict(navigation.values)
+                values["public"] = public
+                tree.write_internal_text(
+                    relative,
+                    serialize_navigation(Navigation(values), source=".pages"),
+                    overwrite=True,
+                )
+                return self.git.commit_paths(
+                    [f"docs/{relative}/.pages"],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Update {self._kind(relative)} visibility: {relative}",
+                )
+            except Exception:
+                tree.write_internal_text(relative, original, overwrite=True)
+                raise
+
+    def set_page_public(self, relative: str, public: bool, actor: User) -> str:
+        """Persist anonymous-read visibility in page front matter."""
+
+        with self.git.write_lock():
+            relative = normalize_relative_path(relative)
+            original = ConfinedTree(self.docs).read_text(
+                relative, max_bytes=self.settings.max_page_bytes
+            )
+            document = parse_page(original, default_title=Path(relative).stem)
+            metadata = dict(document.metadata)
+            metadata["public"] = public
+            serialized = serialize_page(document, metadata=metadata)
+            tree = ConfinedTree(self.docs)
+            try:
+                tree.write_text(relative, serialized, overwrite=True)
+                return self.git.commit_paths(
+                    [f"docs/{relative}"],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Update page visibility: {relative}",
+                )
+            except Exception:
+                tree.write_text(relative, original, overwrite=True)
+                raise
+
     def delete_page(self, relative: str, actor: User) -> str:
         """Remove a page from the tree; Git keeps it recoverable.
 
@@ -875,9 +926,7 @@ class ContentRepository:
                         self._changed_nav_confined(tree, rollback, parent, old=page_name)
                     )
                     affected.extend(
-                        self._changed_nav_confined(
-                            tree, rollback, target_parent, new=f"{slug}.md"
-                        )
+                        self._changed_nav_confined(tree, rollback, target_parent, new=f"{slug}.md")
                     )
                 tree.rename(page_relative, target_relative, overwrite=False)
                 commit = self.git.commit_paths(
@@ -1037,8 +1086,7 @@ class ContentRepository:
             try:
                 affected = [f"docs/{path}" for path in source_files]
                 affected.extend(
-                    f"docs/{target_relative}/{path[len(relative) + 1 :]}"
-                    for path in source_files
+                    f"docs/{target_relative}/{path[len(relative) + 1 :]}" for path in source_files
                 )
                 if has_assets:
                     affected.extend(f"docs/{path}" for path in asset_files)
@@ -1054,16 +1102,12 @@ class ContentRepository:
                 # so Git records renames and `--follow` still reaches the
                 # pages' earlier history.
                 tree.rename(relative, target_relative, overwrite=False)
-                undo_steps.append(
-                    lambda: tree.rename(target_relative, relative, overwrite=False)
-                )
+                undo_steps.append(lambda: tree.rename(target_relative, relative, overwrite=False))
 
                 if has_assets:
                     tree.rename(asset_relative, asset_target_relative, overwrite=False)
                     undo_steps.append(
-                        lambda: tree.rename(
-                            asset_target_relative, asset_relative, overwrite=False
-                        )
+                        lambda: tree.rename(asset_target_relative, asset_relative, overwrite=False)
                     )
                     old_reference = f"{ASSETS_ROOT}/{relative}/".encode()
                     new_reference = f"{ASSETS_ROOT}/{target_relative}/".encode()
@@ -1089,9 +1133,7 @@ class ContentRepository:
                 )
             except FileExistsError as exc:
                 unwind()
-                raise ContentExists(
-                    "a book or chapter already exists at that location"
-                ) from exc
+                raise ContentExists("a book or chapter already exists at that location") from exc
             except Exception:
                 unwind()
                 raise

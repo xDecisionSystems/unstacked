@@ -68,6 +68,10 @@ class Navigation:
             return list(value)
         return []
 
+    @property
+    def public(self) -> bool:
+        return self.values.get("public") is True
+
 
 def new_navigation(title: str) -> Navigation:
     """Return the default explicit container navigation used by Unstacked."""
@@ -200,6 +204,9 @@ def _validate_values(source: str, values: dict[str, Any]) -> None:
         or any(not isinstance(tag, str) or not tag.strip() or len(tag) > 100 for tag in tags)
     ):
         raise NavigationError(f"malformed navigation file {source}: tags must be short strings")
+    public = values.get("public")
+    if public is not None and not isinstance(public, bool):
+        raise NavigationError(f"malformed navigation file {source}: public must be true or false")
 
 
 def _atomic_write(path: Path, text: str) -> None:

@@ -129,6 +129,13 @@ class AIContentService:
         writable_path = authorization.require_write(path)
         return self.content.set_container_tags(writable_path, tags, authorization.user)
 
+    def set_container_public(
+        self, authorization: AuthorizationContext, *, path: str, public: bool
+    ) -> str:
+        return self.content.set_container_public(
+            authorization.require_write(path), public, authorization.user
+        )
+
     def upload_asset(
         self,
         authorization: AuthorizationContext,
@@ -209,6 +216,11 @@ class AIContentService:
     def set_page_title(self, authorization: AuthorizationContext, path: str, title: str) -> str:
         return self.content.set_page_title(
             authorization.require_write(path), title, authorization.user
+        )
+
+    def set_page_public(self, authorization: AuthorizationContext, path: str, public: bool) -> str:
+        return self.content.set_page_public(
+            authorization.require_write(path), public, authorization.user
         )
 
     def delete_page(self, authorization: AuthorizationContext, path: str) -> str:

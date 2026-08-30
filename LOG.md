@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 03:01 UTC — Codex
+Added portable public visibility controls for books, chapters, and pages, and
+made anonymously reachable public content render without a web session.
+- Files: `app/nav.py`, `app/content.py`, `app/ai_service.py`, `app/web.py`,
+  `app/templates/base.html`, `app/templates/book.html`,
+  `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 02:52 UTC — Codex
 Allowed public GitHub content repositories only when no group has restricted
 read access; public links now block creation of no-read groups and denied
@@ -97,8 +104,3 @@ Reworked inline editing tags into a right-side one-at-a-time entry panel with
 removable current-tag bubbles and ACL-filtered previously-used tag bubbles.
 - Files: `app/web.py`, `app/templates/page.html`, `app/static/style.css`,
   `LOG.md`
-
-## 2026-08-29 08:05 UTC — Codex
-Added visible text/symbol fallbacks for every EasyMDE toolbar action, so Safari
-can show and use Markdown controls even when Font Awesome glyphs fail to load.
-- Files: `app/static/style.css`, `LOG.md`

@@ -135,6 +135,45 @@ def _container_tags(docs: Path, *parts: str) -> list[str]:
         return []
 
 
+def _container_public(docs: Path, *parts: str) -> bool:
+    try:
+        return read_navigation(docs.joinpath(*parts, ".pages")).public
+    except NavigationError:
+        return False
+
+
+def _optional_normal_web_user(request: Request) -> User | None:
+    try:
+        return require_normal_web_user(get_current_web_user(request))
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+            return None
+        raise
+
+
+def _public_page(content, target: str) -> bool:
+    try:
+        metadata, _markdown, _raw = content.read_page(target)
+    except (ContentError, UnsafePath):
+        return False
+    parts = target.removesuffix(".md").split("/")
+    return not metadata.get("draft") and (
+        bool(metadata.get("public"))
+        or _container_public(content.docs, parts[0])
+        or (len(parts) == 3 and _container_public(content.docs, parts[0], parts[1]))
+    )
+
+
+def _public_context(request: Request) -> dict:
+    return {
+        "request": request,
+        "current_user": None,
+        "csrf_token": "",
+        "tree": [],
+        "is_admin": False,
+    }
+
+
 def _page_view(content, path: str) -> dict[str, str | bool]:
     slug = path.rsplit("/", 1)[-1].removesuffix(".md")
     try:
@@ -145,7 +184,12 @@ def _page_view(content, path: str) -> dict[str, str | bool]:
         # A hand-edited broken page must not make every authenticated view
         # fail.  The page route will present the actual error when opened.
         draft, label = False, _slug_title(slug)
-    return {"path": path.removesuffix(".md"), "label": label, "draft": draft}
+    return {
+        "path": path.removesuffix(".md"),
+        "label": label,
+        "draft": draft,
+        "public": bool(metadata.get("public")) if "metadata" in locals() else False,
+    }
 
 
 def _tree_view_model(
@@ -179,6 +223,7 @@ def _tree_view_model(
                     f"{book['slug']}/{chapter['slug']}"
                 ).can_write,
                 "tags": _container_tags(content.docs, book["slug"], chapter["slug"]),
+                "public": _container_public(content.docs, book["slug"], chapter["slug"]),
             }
             for chapter in book.get("chapters", [])
         ]
@@ -205,6 +250,7 @@ def _tree_view_model(
                 "page_count": len(pages) + sum(len(chapter["pages"]) for chapter in chapters),
                 "tags": sorted(book_tags, key=str.casefold),
                 "can_write": authorization.policy.decide(book["slug"]).can_write,
+                "public": _container_public(content.docs, book["slug"]),
             }
         )
     return books
@@ -390,7 +436,7 @@ def tree_view(
 def book_view(
     request: Request,
     book_slug: str,
-    user: Annotated[User, Depends(require_normal_web_user)],
+    user: Annotated[User | None, Depends(_optional_normal_web_user)],
 ) -> Response:
     """A single book's chapters and pages, one scrollable row per chapter.
 
@@ -400,6 +446,31 @@ def book_view(
     both collapse to the same 404 as everywhere else in this module.
     """
 
+    if user is None:
+        content = request.app.state.content
+        book_path = content.docs / book_slug
+        pages = (
+            [
+                _page_view(content, page.relative_to(content.docs).as_posix())
+                for page in sorted(book_path.rglob("*.md"))
+                if _public_page(content, page.relative_to(content.docs).as_posix())
+            ]
+            if book_path.is_dir()
+            else []
+        )
+        if not pages and not _container_public(content.docs, book_slug):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+        context = _public_context(request)
+        context["book"] = {
+            "slug": book_slug,
+            "title": _container_title(content.docs, book_slug),
+            "pages": [page for page in pages if page["path"].count("/") == 1],
+            "chapters": [],
+            "page_count": len(pages),
+            "tags": [],
+            "can_write": False,
+        }
+        return templates.TemplateResponse(request, "book.html", context)
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     book = next((entry for entry in context["tree"] if entry["slug"] == book_slug), None)
@@ -962,6 +1033,39 @@ async def set_container_tags_submit(
     return RedirectResponse(f"/books/{container_path.split('/')[0]}", status_code=303)
 
 
+@router.post(
+    "/containers/{container_path:path}/visibility",
+    include_in_schema=False,
+    dependencies=[Depends(require_csrf)],
+)
+async def set_container_public_submit(
+    request: Request, container_path: str, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        request.app.state.ai_service.set_container_public(
+            _authorization(session, user), path=container_path, public=form.get("public") == "on"
+        )
+    return RedirectResponse(f"/books/{container_path.split('/')[0]}", status_code=303)
+
+
+@router.post(
+    "/pages/{page_path:path}/visibility",
+    include_in_schema=False,
+    dependencies=[Depends(require_csrf)],
+)
+async def set_page_public_submit(
+    request: Request, page_path: str, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    with Session(request.app.state.engine) as session:
+        request.app.state.ai_service.set_page_public(
+            _authorization(session, user), path=target, public=form.get("public") == "on"
+        )
+    return RedirectResponse(f"/pages/{target.removesuffix('.md')}", status_code=303)
+
+
 @router.post("/manage/page", include_in_schema=False, dependencies=[Depends(require_csrf)])
 async def create_page_quick_submit(
     request: Request, user: Annotated[User, Depends(require_normal_web_user)]
@@ -1064,10 +1168,32 @@ async def delete_chapter_submit(
 def page_view(
     request: Request,
     page_path: str,
-    user: Annotated[User, Depends(require_normal_web_user)],
+    user: Annotated[User | None, Depends(_optional_normal_web_user)],
 ) -> Response:
     content = request.app.state.content
     target = page_path if page_path.endswith(".md") else f"{page_path}.md"
+    if user is None:
+        if not _public_page(content, target):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+        metadata, markdown_source, _raw = content.read_page(target)
+        try:
+            html = MarkdownRenderer(content.root).render(target, markdown_source)
+        except RenderConfigurationError:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Page cannot be rendered")
+        context = _public_context(request)
+        context.update(
+            {
+                "page_title": metadata.get("title"),
+                "body": html,
+                "breadcrumbs": _breadcrumbs(content.docs, target, metadata),
+                "current_path": target.removesuffix(".md"),
+                "draft": False,
+                "can_write": False,
+                "edit_form": {},
+                "available_tags": [],
+            }
+        )
+        return templates.TemplateResponse(request, "page.html", context)
     with Session(request.app.state.engine) as session:
         authorization = _authorization(session, user)
         try:
@@ -1113,6 +1239,7 @@ def page_view(
                     "markdown": markdown_source,
                     "tags": ", ".join(str(tag) for tag in metadata.get("tags", [])),
                     "draft": bool(metadata.get("draft")),
+                    "public": bool(metadata.get("public")),
                     "base_blob_sha": content.page_blob_sha(target),
                 },
                 "available_tags": sorted(available_tags, key=str.casefold),

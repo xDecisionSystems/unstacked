@@ -720,6 +720,20 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert client.get("/admin").status_code == 404
 
 
+def test_public_page_and_book_are_available_without_a_session(app_env, client):
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Public handbook", "public-handbook", admin)
+    repository.create_page(
+        "public-handbook", "Welcome", "welcome", "# Welcome", [], False, admin
+    )
+    repository.set_page_public("public-handbook/welcome.md", True, admin)
+
+    client.cookies.clear()
+    assert client.get("/pages/public-handbook/welcome").status_code == 200
+    assert client.get("/books/public-handbook").status_code == 200
+
+
 # --------------------------------------------------------------------------
 # History UI
 # --------------------------------------------------------------------------
