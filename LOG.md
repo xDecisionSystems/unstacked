@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 05:13 UTC — Codex
+Added the 12-character password requirement directly beneath the new-user
+password field in Settings.
+- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 05:11 UTC — Codex
 Made Settings form validation errors readable so failed user creation explains
 the invalid field instead of displaying `object Object`.
