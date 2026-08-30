@@ -157,9 +157,15 @@ def _public_page(content, target: str) -> bool:
     except (ContentError, UnsafePath):
         return False
     parts = target.removesuffix(".md").split("/")
-    return not metadata.get("draft") and (
-        _container_public(content.docs, parts[0])
-        or (len(parts) == 3 and _container_public(content.docs, parts[0], parts[1]))
+    if metadata.get("draft"):
+        return False
+    # A nested page always follows its chapter.  The book setting governs its
+    # direct pages only, which keeps a public book with a private chapter a
+    # meaningful mixed-visibility state.
+    return (
+        _container_public(content.docs, parts[0], parts[1])
+        if len(parts) == 3
+        else _container_public(content.docs, parts[0])
     )
 
 
@@ -240,6 +246,8 @@ def _tree_view_model(
             book_tags.update(
                 tag for tag in metadata.get("tags", []) if isinstance(tag, str) and tag
             )
+        book_public = _container_public(content.docs, book["slug"])
+        visibility_states = [book_public, *(chapter["public"] for chapter in chapters)]
         books.append(
             {
                 "slug": book["slug"],
@@ -249,12 +257,12 @@ def _tree_view_model(
                 "page_count": len(pages) + sum(len(chapter["pages"]) for chapter in chapters),
                 "tags": sorted(book_tags, key=str.casefold),
                 "can_write": authorization.policy.decide(book["slug"]).can_write,
-                "public": _container_public(content.docs, book["slug"]),
+                "public": book_public,
                 "visibility": (
                     "public"
-                    if _container_public(content.docs, book["slug"])
+                    if all(visibility_states)
                     else "mixed"
-                    if any(chapter["public"] for chapter in chapters)
+                    if any(visibility_states)
                     else "private"
                 ),
             }
