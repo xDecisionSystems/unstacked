@@ -316,7 +316,8 @@ def test_home_edit_round_trip_updates_markdown_and_title(app_env, client):
     editor = client.get("/home/edit")
     assert editor.status_code == 200
     assert "Your featured books and pages." in editor.text
-    assert "toastui-editor-all.min.js" in editor.text
+    assert 'src="/static/markdown-editor.js"' in editor.text
+    assert 'data-markdown-editor' in editor.text
     assert 'name="widgets_json"' in editor.text
     assert 'data-id="featured"' in editor.text
     csrf_token = _csrf_from(editor.text)
@@ -693,10 +694,9 @@ def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, c
     assert 'id="draft-toggle" class="draft-toggle" hidden' in response.text
     assert "Draft — exclude from the published site" not in response.text
     assert 'href="/books/handbook" title="Back to book"' in response.text
-    assert "toastui-editor-all.min.js" in response.text
-    assert "editor-plugin-table-merged-cell" in response.text
-    assert "editor-plugin-uml" in response.text
-    assert "dismissHeadingPopup" in response.text
+    assert 'src="/static/markdown-editor.js"' in response.text
+    assert 'data-markdown-editor' in response.text
+    assert "toastui" not in response.text.lower()
     assert 'aria-label="Breadcrumb"' not in response.text
 
     changed = client.post(
@@ -742,31 +742,9 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
 
     editor = client.get("/pages/handbook/leave/edit")
     assert editor.status_code == 200
-    assert "toastui-editor-all.min.js" in editor.text
-    assert "getMarkdown" in editor.text
-    # The chart plugin has a real, separate library dependency (toastui-chart);
-    # without it, the plugin throws inside the editor's own constructor and
-    # silently breaks its toolbar state tracking. Must load before the plugin.
-    assert editor.text.index("toastui-chart.min.js") < editor.text.index(
-        "editor-plugin-chart.min.js"
-    )
-    assert "editor-plugin-chart" in editor.text
-    # Despite the "-all" name, this plugin references window.Prism directly
-    # and does not bundle it -- the same missing-dependency shape as chart.
-    assert editor.text.index("prism.min.js") < editor.text.index(
-        "editor-plugin-code-syntax-highlight-all.min.js"
-    )
-    assert "editor-plugin-code-syntax-highlight" in editor.text
-    # Unlike the other plugins, color-syntax has no "-all" bundle variant --
-    # that filename 404s. It also has its own separate library dependency
-    # (tui-color-picker), the same shape as the chart plugin's.
-    assert "toastui-editor-plugin-color-syntax.min.js" in editor.text
-    assert "toastui-editor-plugin-color-syntax-all.min.js" not in editor.text
-    assert editor.text.index("tui-color-picker.min.js") < editor.text.index(
-        "toastui-editor-plugin-color-syntax.min.js"
-    )
-    assert "editor-plugin-table-merged-cell" in editor.text
-    assert "editor-plugin-uml" in editor.text
+    assert 'src="/static/markdown-editor.js"' in editor.text
+    assert 'data-markdown-editor' in editor.text
+    assert "toastui" not in editor.text.lower()
     assert 'name="card_image"' in editor.text
     csrf_token = _csrf_from(editor.text)
     blob_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)

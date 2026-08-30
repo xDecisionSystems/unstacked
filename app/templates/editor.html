@@ -12,48 +12,8 @@
   <label>Tags (comma-separated)<input name="tags" value="{{ form.tags }}"></label>
   <label>Card image (optional)<input name="card_image" value="{{ form.card_image or '' }}" placeholder="assets/{{ form.parent.split('/')[0] if form.parent else 'book' }}/image.png"></label>
   <label class="checkbox"><input type="checkbox" name="draft" {% if form.draft %}checked{% endif %}> Draft — exclude from the published site</label>
-  <label>Markdown<textarea id="markdown-editor" name="markdown">{{ form.markdown }}</textarea></label>
+  <label>Markdown<textarea id="markdown-editor" data-markdown-editor name="markdown">{{ form.markdown }}</textarea></label>
   <div class="form-actions"><button type="submit">Save</button>{% if editing_path %}<a class="button" href="/pages/{{ editing_path.removesuffix('.md') }}">Cancel</a>{% endif %}</div>
 </form>
-<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
-<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
-<!-- The chart plugin depends on the separate TOAST UI Chart library; without
-     it, the plugin throws while the editor's own constructor is invoking it
-     (`t().barChart` on undefined), which aborts the rest of the editor's
-     setup partway through -- including the toolbar's own cursor-position
-     tracking, leaving whichever button was "active" at that point stuck. -->
-<link rel="stylesheet" href="https://uicdn.toast.com/chart/latest/toastui-chart.min.css">
-<script src="https://uicdn.toast.com/chart/latest/toastui-chart.min.js"></script>
-<script src="https://uicdn.toast.com/editor-plugin-chart/latest/toastui-editor-plugin-chart.min.js"></script>
-<!-- Despite the "-all" name, this plugin does not bundle Prism.js -- it
-     references window.Prism directly and throws without it, the same
-     missing-peer-dependency shape as the chart and color-syntax plugins. -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-<script src="https://uicdn.toast.com/editor-plugin-code-syntax-highlight/latest/toastui-editor-plugin-code-syntax-highlight-all.min.js"></script>
-<!-- Unlike the other plugins, color-syntax ships no "-all" bundle variant;
-     that filename 404s and was never actually loading. Once it does load,
-     it has the same missing-peer-dependency problem the chart plugin had:
-     it needs the separate TOAST UI Color Picker library (t.tui.colorPicker),
-     which the "-all" bundles of other plugins would have included inline. -->
-<link rel="stylesheet" href="https://uicdn.toast.com/tui-color-picker/latest/tui-color-picker.min.css">
-<script src="https://uicdn.toast.com/tui-color-picker/latest/tui-color-picker.min.js"></script>
-<script src="https://uicdn.toast.com/editor-plugin-color-syntax/latest/toastui-editor-plugin-color-syntax.min.js"></script>
-<script src="https://uicdn.toast.com/editor-plugin-table-merged-cell/latest/toastui-editor-plugin-table-merged-cell.min.js"></script>
-<script src="https://uicdn.toast.com/editor-plugin-uml/latest/toastui-editor-plugin-uml.min.js"></script>
-<script>
-(() => {
-  const element = document.getElementById('markdown-editor');
-  if (!element || !window.toastui?.Editor) return;
-  const previewUrl = {% if editing_path %}"/pages/{{ editing_path.removesuffix('.md') }}/preview"{% else %}"/pages/preview"{% endif %};
-  const mount = document.createElement('div');
-  mount.id = 'toast-editor'; element.before(mount); element.hidden = true;
-  const plugins = Object.values(window.toastui.Editor.plugin || {});
-  const editor = new window.toastui.Editor({
-    el: mount, height: '640px', initialEditType: 'markdown', previewStyle: 'vertical',
-    initialValue: element.value, plugins, usageStatistics: false,
-  });
-  element.closest('form').addEventListener('submit', () => { element.value = editor.getMarkdown(); });
-})();
-</script>
+<script src="/static/markdown-editor.js"></script>
 {% endblock %}

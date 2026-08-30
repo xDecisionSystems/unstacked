@@ -10,6 +10,21 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 23:07 UTC — Codex
+Replaced Toast UI across page, standalone-page, and home Markdown editing
+with a lightweight native textarea editor owned by the application. The new
+toolbar uses direct Markdown insertions for headings, text formatting,
+quotes, lists, tasks, links, images, and inline code; it has no CDN
+dependencies, browser-specific popup behavior, or conversion layer, so the
+stored Markdown and existing save routes remain unchanged. Added focused
+template assertions and removed the now-unused Toast UI styling.
+Focused editor, page-view, and home-editor tests pass; ruff passes. Verified
+through production Compose on port 18765: container started and `/healthz`
+returned 200; the new static toolbar script was served successfully.
+- Files: `app/static/markdown-editor.js`, `app/static/style.css`,
+  `app/templates/editor.html`, `app/templates/home_editor.html`,
+  `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 22:59 UTC — Codex
 Completed the follow-up review of the Toast UI heading control. The plugin
 dependency fixes already committed by Claude eliminate the editor
@@ -329,14 +344,3 @@ and displayed on book and featured-home page cards.
   `app/templates/editor.html`, `app/templates/page.html`,
   `app/templates/tree.html`, `app/web.py`, `tests/test_assets.py`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 17:07 UTC — Codex
-Replaced fake home books with a Git-versioned curated home layout that can
-feature real books or pages, and allowed exact permissions only for featured
-pages so normal pages retain inherited book access.
-- Files: `app/acl.py`, `app/admin_api.py`, `app/content.py`,
-  `app/default_groups.py`, `app/static/style.css`, `app/templates/admin.html`,
-  `app/templates/book.html`, `app/templates/tree.html`, `app/web.py`,
-  `plans/plan_initial.md`, `tests/test_acl.py`, `tests/test_admin_api.py`,
-  `tests/test_ai_api.py`, `tests/test_book_migration.py`,
-  `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
