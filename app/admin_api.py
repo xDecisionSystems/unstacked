@@ -38,7 +38,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from app import backup_config, backup_runtime, theme, theme_config
-from app.acl import Rule, explain_access
+from app.acl import AccessPolicy, Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
 from app.content import ContentRepository
@@ -190,6 +190,7 @@ class BackupConfigResponse(BaseModel):
     type: str
     url: str | None
     confirmed_private: bool
+    requires_private_repository: bool
     # Which kind of credential is in place, not the credential or its path.
     # Changing a credential requires supplying it again; nothing is prefilled.
     credential: str
@@ -610,6 +611,12 @@ def create_group(payload: GroupCreate, request: Request, actor: AdminActor) -> G
     name = payload.name.strip()
     if not name:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Group name must not be blank")
+    if _public_repository_is_linked(request):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "A group without read permissions cannot be created while the GitHub repository "
+            "is public",
+        )
     with Session(request.app.state.engine) as session:
         group = Group(name=name, description=payload.description)
         session.add(group)
@@ -738,6 +745,11 @@ def create_permission(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "A write grant requires read; deny both instead",
+        )
+    if not payload.can_read and _public_repository_is_linked(request):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "A private GitHub repository is required for a group with restricted read access",
         )
     prefix = _normalize_grant_prefix(payload.path_prefix)
     kind = _target_kind(_content(request), prefix)
@@ -894,6 +906,48 @@ def explain_user_access(
 MAX_BACKUP_TOKEN_CHARS = 512
 
 
+def _public_repository_is_linked(request: Request) -> bool:
+    target = backup_config.effective_target(request.app.state.settings)
+    return target.configured and not target.confirmed_private
+
+
+def _groups_restrict_read_access(session: Session, content: ContentRepository) -> bool:
+    """Whether any group cannot read every currently addressable content target."""
+
+    targets: list[str] = []
+    for item in content.docs.rglob("*"):
+        relative = item.relative_to(content.docs).as_posix()
+        parts = relative.split("/")
+        if "assets" in parts or any(part.startswith(".") for part in parts):
+            continue
+        depth = path_depth(relative)
+        if (item.is_dir() and depth in {1, 2}) or (
+            item.is_file() and item.suffix == ".md" and depth in {2, 3}
+        ):
+            targets.append(relative)
+    for group in session.exec(select(Group)).all():
+        rows = session.exec(select(Permission).where(Permission.group_id == group.id)).all()
+        if not any(row.can_read for row in rows):
+            return True
+        policy = AccessPolicy(
+            is_admin=False,
+            is_active=True,
+            rules=tuple(
+                Rule(
+                    group_id=row.group_id,
+                    prefix=row.path_prefix,
+                    depth=path_depth(row.path_prefix),
+                    can_read=row.can_read,
+                    can_write=row.can_write,
+                )
+                for row in rows
+            ),
+        )
+        if any(not policy.decide(target).can_read for target in targets):
+            return True
+    return False
+
+
 def _backup_status_response(request: Request) -> BackupConfigResponse:
     settings = request.app.state.settings
     target = backup_config.effective_target(settings)
@@ -902,11 +956,14 @@ def _backup_status_response(request: Request) -> BackupConfigResponse:
     # token file that has since been removed, say) is reported here rather than
     # having stopped the application from booting.
     startup_error = getattr(request.app.state.content, "backup_config_error", None)
+    with Session(request.app.state.engine) as session:
+        requires_private = _groups_restrict_read_access(session, _content(request))
     return BackupConfigResponse(
         configured=target.configured,
         type=target.type,
         url=scrub_git_output(target.url) if target.url is not None else None,
         confirmed_private=target.confirmed_private,
+        requires_private_repository=requires_private,
         credential=target.credential,
         source=target.source,
         updated_at=target.updated_at,
@@ -969,6 +1026,14 @@ def update_backup_config(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "A backup URL must contain between 1 and 2000 characters",
         )
+    if not payload.confirmed_private:
+        with Session(request.app.state.engine) as session:
+            if _groups_restrict_read_access(session, content):
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "A private GitHub repository is required while groups have restricted "
+                    "read access",
+                )
 
     snapshot = backup_config.FileSnapshot(config_path, managed_token)
     try:

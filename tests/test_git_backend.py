@@ -433,15 +433,11 @@ def test_remote_probe_verifies_write_access_without_updating_the_remote(tmp_path
     assert not list(remote.references)
 
 
-def test_an_unconfirmed_remote_is_not_configured_at_all(tmp_path: Path):
-    """A public backup would publish every page, drafts included."""
-
+def test_remote_configuration_defers_visibility_policy_to_the_settings_layer(tmp_path: Path):
+    """The Git helper has no ACL database and therefore accepts the supplied policy."""
     local, backend = _content_checkout(tmp_path)
-    with pytest.raises(GitRemoteConfigError, match="confirmed private"):
-        backend.configure_remote(
-            RemoteConfig(url=REMOTE_URL, token_path=_token_file(tmp_path))
-        )
-    assert not list(local.remotes)
+    backend.configure_remote(RemoteConfig(url=REMOTE_URL, token_path=_token_file(tmp_path)))
+    assert local.remotes.origin.url == REMOTE_URL
 
 
 def test_no_configured_remote_leaves_an_operators_own_origin_alone(tmp_path: Path):

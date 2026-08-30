@@ -234,13 +234,9 @@ class GitBackend:
         ``known_hosts``.  ``git remote -v``, the reflog, and any error text git
         produces therefore carry the bare URL and nothing else.
 
-        The remote must be a **private** repository for MVP.  A ``content/``
-        backup is a complete, unfiltered copy of the wiki, drafts included,
-        with no per-user ACL — the same caveat the static export carries — so a
-        public remote would publish every page to everyone.  Confirming that
-        needs a network call this code deliberately does not make, so the
-        operator affirms it with ``UNSTACKED_GITHUB_REMOTE_CONFIRMED_PRIVATE``
-        and configuration is refused without the affirmation.
+        Repository visibility is enforced by the administrator settings layer,
+        which can inspect the ACL database. This low-level Git helper cannot,
+        so it only configures the supplied remote and credentials.
 
         Idempotent: re-running replaces the previous remote URL and clears
         credential configuration left over from a different transport.
@@ -251,10 +247,6 @@ class GitBackend:
             # up by hand, so nothing existing is touched or removed.
             return
         url = _validated_remote_url(config.url)
-        if not config.confirmed_private:
-            raise GitRemoteConfigError(
-                "content backup remote must be confirmed private before it is configured"
-            )
         with self.lock:
             repo = self.repo
             self._set_origin(repo, url)

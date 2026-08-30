@@ -14,7 +14,7 @@ from app.auth import create_api_token, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
 from app.config import Settings
 from app.main import create_app
-from app.models import User
+from app.models import Group, User
 from app.web_auth import CSRF_HEADER_NAME
 from tests.conftest import bearer
 
@@ -75,6 +75,7 @@ def test_unconfigured_status_is_admin_only_and_has_no_runtime_services(app_env, 
         "type": "none",
         "url": None,
         "confirmed_private": False,
+        "requires_private_repository": False,
         "credential": "none",
         "source": "unset",
         "updated_at": None,
@@ -105,6 +106,35 @@ def test_authenticated_non_admin_cannot_read_backup_configuration(app_env, clien
     assert client.get(
         "/api/admin/backup/config", headers=bearer(token)
     ).status_code == 403
+
+
+def test_public_repository_is_allowed_without_groups_but_blocks_new_restricted_groups(
+    app_env, client, tmp_path
+):
+    _app, _settings_value, _admin, token = app_env
+    payload = _payload(_bare_remote(tmp_path))
+    payload["confirmed_private"] = False
+
+    configured = client.put("/api/admin/backup/config", json=payload, headers=bearer(token))
+    assert configured.status_code == 200, configured.text
+    assert configured.json()["confirmed_private"] is False
+    assert configured.json()["requires_private_repository"] is False
+    blocked = client.post(
+        "/api/admin/groups", json={"name": "restricted"}, headers=bearer(token)
+    )
+    assert blocked.status_code == 409
+
+
+def test_public_repository_is_refused_when_a_group_lacks_read_access(app_env, client, tmp_path):
+    app, _settings_value, _admin, token = app_env
+    with Session(app.state.engine) as session:
+        session.add(Group(name="restricted"))
+        session.commit()
+    payload = _payload(_bare_remote(tmp_path))
+    payload["confirmed_private"] = False
+
+    response = client.put("/api/admin/backup/config", json=payload, headers=bearer(token))
+    assert response.status_code == 409
 
 
 def test_cookie_admin_needs_csrf_to_change_backup_configuration(app_env, client, tmp_path):

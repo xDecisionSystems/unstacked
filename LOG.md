@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 02:52 UTC — Codex
+Allowed public GitHub content repositories only when no group has restricted
+read access; public links now block creation of no-read groups and denied
+permission grants.
+- Files: `app/admin_api.py`, `app/git_backend.py`, `app/templates/admin.html`,
+  `tests/test_backup_config.py`, `tests/test_git_backend.py`, `LOG.md`
+
 ## 2026-08-30 01:16 UTC — Codex
 Reframed the Settings backup control as a dedicated GitHub repository link,
 with private-repository safeguards and clear automatic synchronization to the
@@ -95,10 +102,3 @@ removable current-tag bubbles and ACL-filtered previously-used tag bubbles.
 Added visible text/symbol fallbacks for every EasyMDE toolbar action, so Safari
 can show and use Markdown controls even when Font Awesome glyphs fail to load.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 08:02 UTC — Codex
-Aligned floating Save/Cancel with the Markdown editor, made viewed draft status
-an italic “(Draft)” beside the title, and show its checkbox there only while
-editing.
-- Files: `app/templates/page.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
