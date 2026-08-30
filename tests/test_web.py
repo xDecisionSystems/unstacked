@@ -690,11 +690,15 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     _login(client, "admin")
     response = client.get("/admin")
     assert response.status_code == 200
+    assert "Settings · Unstacked" in response.text
+    assert 'data-admin-panel="users"' in response.text
     assert "/api/admin/users" in response.text
     assert "/api/admin/backup/config" in response.text
     assert 'data-admin-panel="groups"' in response.text
     assert 'data-admin-section="groups"' in response.text
+    assert 'data-admin-section="users"' in response.text
     assert "selectPanel" in response.text
+    assert client.get("/settings").status_code == 200
     # Live rows delegate their destructive actions to the established CSRF
     # guarded APIs; confirmation happens before each state-changing request.
     for control in (

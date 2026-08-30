@@ -553,6 +553,7 @@ def _history_context(
     return context
 
 
+@router.get("/settings", response_class=HTMLResponse, include_in_schema=False)
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 def admin_view(
     request: Request, user: Annotated[User, Depends(require_normal_web_user)]

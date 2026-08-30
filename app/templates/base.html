@@ -15,8 +15,7 @@
       <input id="site-search-query" name="q" type="search" placeholder="⌕  Search every page…" value="{{ query|default('') }}">
     </form>
     <form method="post" action="/logout">
-      {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
-      <span class="whoami">{{ current_user.display_name }}</span>
+      {% if is_admin %}<a class="settings-link" href="/settings" aria-label="Settings" title="Settings"><span aria-hidden="true">⚙</span><span class="visually-hidden">Settings</span></a>{% endif %}
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="quiet-action" type="submit">Log out</button>
     </form>

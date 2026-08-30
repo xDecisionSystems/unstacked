@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 01:13 UTC — Codex
+Renamed the administration surface to Settings, replaced the top-bar Admin
+label with an accessible gear link, and separated Users from the combined
+Groups & permissions panel.
+- Files: `app/web.py`, `app/templates/base.html`, `app/templates/admin.html`,
+  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 00:59 UTC — Codex
 Changed the Administration sidebar into section navigation: each link now
 shows only its related settings panel, updates the heading, and preserves a
@@ -94,9 +101,3 @@ with a compact Draft badge immediately beside the title for draft pages.
 Moved the Draft toggle into the hidden inline editor, so it appears only while
 editing rather than in the normal page title row.
 - Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:53 UTC — Codex
-Restored floating editor actions without a panel, border, or shadow. On wide
-screens they sit immediately right of the editor; narrow screens keep them
-inline below it.
-- Files: `app/static/style.css`, `LOG.md`
