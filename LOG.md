@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 01:16 UTC — Codex
+Reframed the Settings backup control as a dedicated GitHub repository link,
+with private-repository safeguards and clear automatic synchronization to the
+content repository's `main` branch.
+- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 01:14 UTC — Codex
 Made administrator-created user passwords permanent by default, while keeping
 the bootstrap account's first-login password-change safeguard unchanged.
@@ -94,11 +100,5 @@ can show and use Markdown controls even when Font Awesome glyphs fail to load.
 Aligned floating Save/Cancel with the Markdown editor, made viewed draft status
 an italic “(Draft)” beside the title, and show its checkbox there only while
 editing.
-- Files: `app/templates/page.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:58 UTC — Codex
-Moved Save/Cancel to the left of the editor box and replaced the draft notice
-with a compact Draft badge immediately beside the title for draft pages.
 - Files: `app/templates/page.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`

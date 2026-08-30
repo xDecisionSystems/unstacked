@@ -694,6 +694,8 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert 'data-admin-panel="users"' in response.text
     assert "/api/admin/users" in response.text
     assert "/api/admin/backup/config" in response.text
+    assert "GitHub repository" in response.text
+    assert "automatically synchronized to its <code>main</code> branch" in response.text
     assert 'data-admin-panel="groups"' in response.text
     assert 'data-admin-section="groups"' in response.text
     assert 'data-admin-section="users"' in response.text
