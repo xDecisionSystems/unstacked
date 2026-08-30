@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 06:03 UTC — Codex
+Fixed Chapter Permissions icon contrast so every dash, eye, and pencil remains
+burgundy and visible against its button background.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 05:59 UTC — Codex
 Replaced Chapter Permissions dropdowns with accessible dash, eye, and pencil
 icon controls for no access, read, and read/write assignments.
@@ -89,10 +94,3 @@ made anonymously reachable public content render without a web session.
 - Files: `app/nav.py`, `app/content.py`, `app/ai_service.py`, `app/web.py`,
   `app/templates/base.html`, `app/templates/book.html`,
   `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 02:52 UTC — Codex
-Allowed public GitHub content repositories only when no group has restricted
-read access; public links now block creation of no-read groups and denied
-permission grants.
-- Files: `app/admin_api.py`, `app/git_backend.py`, `app/templates/admin.html`,
-  `tests/test_backup_config.py`, `tests/test_git_backend.py`, `LOG.md`
