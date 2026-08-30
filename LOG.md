@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 05:15 UTC — Codex
+Added live password-requirement feedback to Settings: red until 12 characters
+are entered, then green.
+- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 05:13 UTC — Codex
 Added the 12-character password requirement directly beneath the new-user
 password field in Settings.

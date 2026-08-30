@@ -112,7 +112,7 @@
 .admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .admin-grid .admin-panel-wide { grid-column: 1 / -1; }
 .admin-grid section { border-radius: 14px; }.admin-grid h2 { font-size: 22px; }.admin-grid > section > p { color: var(--burgundy-soft); font-size: 13px; }
-.password-requirements{margin-top:-4px;color:var(--muted);font-size:12px}
+.password-requirements{margin-top:-4px;font-size:12px}.password-requirements.is-invalid{color:var(--danger)}.password-requirements.is-valid{color:var(--green)}
 .admin-grid > section[hidden], .admin-metrics[hidden], #invite-user[hidden] { display: none; }
 .add-content-button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--burgundy); font: 600 13px 'Source Sans 3', sans-serif; cursor: pointer; list-style: none; }
 .add-content-button:hover { border-color: var(--orange); background: var(--tag); color: var(--burgundy); }.add-content-button::-webkit-details-marker { display: none; }
