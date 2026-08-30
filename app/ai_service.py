@@ -123,6 +123,12 @@ class AIContentService:
             authorization.user,
         )
 
+    def set_container_tags(
+        self, authorization: AuthorizationContext, *, path: str, tags: list[str]
+    ) -> str:
+        writable_path = authorization.require_write(path)
+        return self.content.set_container_tags(writable_path, tags, authorization.user)
+
     def upload_asset(
         self,
         authorization: AuthorizationContext,

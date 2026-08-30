@@ -749,6 +749,36 @@ class ContentRepository:
                 tree.write_internal_text(relative, original, overwrite=True)
                 raise
 
+    def set_container_tags(self, relative: str, tags: list[str], actor: User) -> str:
+        """Persist portable container tags in its ``.pages`` metadata."""
+
+        cleaned = sorted({tag.strip() for tag in tags if tag.strip()}, key=str.casefold)
+        if len(cleaned) > 100 or any(len(tag) > 100 for tag in cleaned):
+            raise ContentError("use at most 100 tags of 100 characters each")
+        with self.git.write_lock():
+            relative = normalize_relative_path(relative)
+            if path_depth(relative) not in {1, 2} or relative.split("/")[0] in RESERVED_ROOT_NAMES:
+                raise ContentError("only books and chapters are containers")
+            tree = ConfinedTree(self.docs)
+            try:
+                original = tree.read_internal_text(relative)
+                navigation = parse_navigation(original, source=".pages")
+                values = dict(navigation.values)
+                values["tags"] = cleaned
+                serialized = serialize_navigation(Navigation(values), source=".pages")
+                tree.write_internal_text(relative, serialized, overwrite=True)
+                return self.git.commit_paths(
+                    [f"docs/{relative}/.pages"],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Update {self._kind(relative)} tags: {relative}",
+                )
+            except NavigationError as exc:
+                raise ContentError("navigation file is malformed") from exc
+            except Exception:
+                tree.write_internal_text(relative, original, overwrite=True)
+                raise
+
     def delete_page(self, relative: str, actor: User) -> str:
         """Remove a page from the tree; Git keeps it recoverable.
 

@@ -61,6 +61,13 @@ class Navigation:
         value = self.values.get("nav")
         return copy.deepcopy(value) if isinstance(value, list) else None
 
+    @property
+    def tags(self) -> list[str]:
+        value = self.values.get("tags")
+        if isinstance(value, list) and all(isinstance(tag, str) for tag in value):
+            return list(value)
+        return []
+
 
 def new_navigation(title: str) -> Navigation:
     """Return the default explicit container navigation used by Unstacked."""
@@ -186,6 +193,13 @@ def _validate_values(source: str, values: dict[str, Any]) -> None:
     entries = values.get("nav")
     if entries is not None and not isinstance(entries, list):
         raise NavigationError(f"malformed navigation file {source}: nav must be a list")
+    tags = values.get("tags")
+    if tags is not None and (
+        not isinstance(tags, list)
+        or len(tags) > 100
+        or any(not isinstance(tag, str) or not tag.strip() or len(tag) > 100 for tag in tags)
+    ):
+        raise NavigationError(f"malformed navigation file {source}: tags must be short strings")
 
 
 def _atomic_write(path: Path, text: str) -> None:

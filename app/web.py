@@ -128,6 +128,13 @@ def _container_title(docs: Path, *parts: str) -> str:
     return _slug_title(parts[-1])
 
 
+def _container_tags(docs: Path, *parts: str) -> list[str]:
+    try:
+        return read_navigation(docs.joinpath(*parts, ".pages")).tags
+    except NavigationError:
+        return []
+
+
 def _page_view(content, path: str) -> dict[str, str | bool]:
     slug = path.rsplit("/", 1)[-1].removesuffix(".md")
     try:
@@ -171,13 +178,12 @@ def _tree_view_model(
                 "can_write": authorization.policy.decide(
                     f"{book['slug']}/{chapter['slug']}"
                 ).can_write,
+                "tags": _container_tags(content.docs, book["slug"], chapter["slug"]),
             }
             for chapter in book.get("chapters", [])
         ]
         pages = [_page_view(content, p) for p in book["pages"]]
-        # Books are filesystem containers, not database records. Their
-        # discoverable tags are the union of visible page front-matter tags.
-        book_tags: set[str] = set()
+        book_tags: set[str] = set(_container_tags(content.docs, book["slug"]))
         all_pages = [
             *book["pages"],
             *(page for chapter in book.get("chapters", []) for page in chapter["pages"]),
@@ -932,6 +938,27 @@ async def create_chapter_submit(
             return _manage_error_response(request, session, user, exc)
     book_slug = created.path.rsplit("/", 1)[0]
     return RedirectResponse(f"/books/{book_slug}", status_code=303)
+
+
+@router.post(
+    "/containers/{container_path:path}/tags",
+    include_in_schema=False,
+    dependencies=[Depends(require_csrf)],
+)
+async def set_container_tags_submit(
+    request: Request,
+    container_path: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            request.app.state.ai_service.set_container_tags(
+                _authorization(session, user), path=container_path, tags=_tags(form.get("tags", ""))
+            )
+        except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse(f"/books/{container_path.split('/')[0]}", status_code=303)
 
 
 @router.post("/manage/page", include_in_schema=False, dependencies=[Depends(require_csrf)])
