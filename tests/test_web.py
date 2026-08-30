@@ -232,6 +232,40 @@ def test_admin_can_feature_a_page_or_book_on_home(client, content):
     assert 'href="/pages/alice-book/secret"' in page.text
 
 
+def test_feature_star_toggles_in_place_on_a_book_page(client, content):
+    _login(client, "admin")
+    book = client.get("/books/alice-book")
+    csrf = _csrf_from(book.text)
+    assert 'class="feature-star"' in book.text
+    assert "☆" in book.text
+
+    featured = client.post(
+        "/home/feature",
+        data={
+            "csrf_token": csrf,
+            "target": "alice-book/secret.md",
+            "return_to": "/books/alice-book",
+        },
+        follow_redirects=False,
+    )
+    assert featured.status_code == 303
+    assert featured.headers["location"] == "/books/alice-book"
+    selected = client.get("/books/alice-book")
+    assert 'class="feature-star is-featured"' in selected.text
+    assert "★" in selected.text
+
+    removed = client.post(
+        "/home/remove",
+        data={
+            "csrf_token": csrf,
+            "target": "alice-book/secret.md",
+            "return_to": "/books/alice-book",
+        },
+        follow_redirects=False,
+    )
+    assert removed.headers["location"] == "/books/alice-book"
+
+
 def test_the_add_book_button_is_admin_only(app_env, client, content):
     app, _settings, _admin, _token = app_env
     _make_user(app, "reader")

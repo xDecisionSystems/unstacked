@@ -247,6 +247,12 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
     authorization = _authorization(session, user)
     raw_tree = request.app.state.ai_service.tree(authorization)
     display_tree = _tree_view_model(content, authorization, raw_tree)
+    home_targets = content.home_items()
+    featured_targets = set(home_targets)
+    for book in display_tree:
+        book["featured"] = book["slug"] in featured_targets
+        for page in book["pages"]:
+            page["featured"] = f"{page['path']}.md" in featured_targets
     books_by_slug = {book["slug"]: book for book in display_tree}
     pages_by_path = {
         page["path"] + ".md": {**page, "book_title": book["title"]}
@@ -254,7 +260,7 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
         for page in book["pages"]
     }
     home_items = []
-    for target in content.home_items():
+    for target in home_targets:
         if target.endswith(".md") and target in pages_by_path:
             home_items.append({"kind": "page", "target": target, **pages_by_path[target]})
         elif target in books_by_slug:
@@ -267,6 +273,14 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
         "home_items": home_items,
         "is_admin": user.is_admin,
     }
+
+
+def _home_return_path(value: str | None) -> str:
+    """Keep home-toggle forms on a local page without permitting redirects elsewhere."""
+
+    if isinstance(value, str) and value.startswith("/") and not value.startswith("//"):
+        return value
+    return "/tree"
 
 
 def _highlight_search_snippet(snippet: str, query: str) -> Markup:
@@ -1001,7 +1015,7 @@ async def feature_home_submit(
             request.app.state.content.feature_on_home(form.get("target", ""), user)
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
-    return RedirectResponse("/tree", status_code=303)
+    return RedirectResponse(_home_return_path(form.get("return_to")), status_code=303)
 
 
 @router.post("/home/remove", include_in_schema=False, dependencies=[Depends(require_csrf)])
@@ -1015,7 +1029,7 @@ async def remove_home_submit(
             request.app.state.content.remove_from_home(form.get("target", ""), user)
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
-    return RedirectResponse("/tree", status_code=303)
+    return RedirectResponse(_home_return_path(form.get("return_to")), status_code=303)
 
 
 @router.post(

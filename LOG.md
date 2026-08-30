@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 18:27 UTC — Codex
+Replaced text-based home-feature actions with visible star toggles that retain
+their selected state and return the user to the current book or library view.
+- Files: `app/static/style.css`, `app/templates/book.html`,
+  `app/templates/tree.html`, `app/web.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 17:18 UTC — Codex
 Added optional, safe page-card images. Images are Git-tracked book assets,
 validated against the page's book, available through the page editor and API,
@@ -112,9 +118,4 @@ matrix with read/write levels and per-group select-all controls.
 ## 2026-08-30 05:34 UTC — Codex
 Redesigned Groups as a user-by-group checkbox matrix with direct membership
 toggle actions and compact group deletion controls.
-- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 05:21 UTC — Codex
-Expanded the new-user password checklist to show length, uppercase, lowercase,
-and number requirements with individual live red/green feedback.
 - Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
