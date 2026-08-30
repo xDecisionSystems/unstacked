@@ -280,11 +280,19 @@ class BrandingResponse(BaseModel):
     name: str
     logo_url: str
     updated_at: str | None
+    home_eyebrow: str
+    home_title: str
+    home_description: str
+    featured_label: str
 
 
 class BrandingUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     logo_base64: str | None = Field(default=None, max_length=20_000_000)
+    home_eyebrow: str = Field(default="", max_length=100)
+    home_title: str = Field(default="", max_length=100)
+    home_description: str = Field(default="", max_length=300)
+    featured_label: str = Field(default="", max_length=100)
 
 
 # --------------------------------------------------------------------------
@@ -1325,7 +1333,11 @@ def update_branding(
 ) -> BrandingResponse:
     settings = request.app.state.settings
     try:
-        state = branding.save(settings.branding_config_path, name=payload.name)
+        state = branding.save(
+            settings.branding_config_path, name=payload.name,
+            home_eyebrow=payload.home_eyebrow, home_title=payload.home_title,
+            home_description=payload.home_description, featured_label=payload.featured_label,
+        )
         if payload.logo_base64:
             data = base64.b64decode(payload.logo_base64, validate=True)
             if len(data) > settings.max_upload_bytes:

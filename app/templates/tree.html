@@ -2,10 +2,10 @@
 {% block title %}Home · Unstacked{% endblock %}
 {% block content %}
 <div class="screen-heading dashboard-header">
-  <div><p class="eyebrow">KNOWLEDGE WORKSPACE</p><h1>Home</h1><p>Your featured books and pages.</p></div>
+  {% set home = branding(request) %}<div><p class="eyebrow">{{ home.home_eyebrow }}</p><h1>{{ home.home_title }}</h1>{% if home.home_description %}<p>{{ home.home_description }}</p>{% endif %}</div>
 </div>
 {% if home_items %}
-<section class="main-pages" aria-label="Featured home content"><h2>Featured</h2><ul class="page-cards book-page-grid">
+<section class="main-pages" aria-label="Featured home content">{% if home.featured_label %}<h2>{{ home.featured_label }}</h2>{% endif %}<ul class="page-cards book-page-grid">
   {% for item in home_items %}<li class="page-card"><a href="{% if item.kind == 'book' %}/books/{{ item.slug }}{% else %}/pages/{{ item.path }}{% endif %}">{% if item.kind == 'page' and item.card_image %}<img class="page-card-image" src="/assets/{{ item.card_image }}" alt="">{% endif %}<span class="page-card-type">{{ item.kind|upper }}{% if item.kind == 'page' %} · {{ item.book_title }}{% endif %}</span><strong>{{ item.title if item.kind == 'book' else item.label }}</strong>{% if item.kind == 'page' and item.draft %}<span class="draft-badge">Draft</span>{% endif %}<span class="page-card-open">Open →</span></a>{% if is_admin %}<form class="card-home-action" method="post" action="/home/remove"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target" value="{{ item.target }}"><input type="hidden" name="return_to" value="/tree"><button class="feature-star is-featured" type="submit" title="Remove from home" aria-label="Remove from home"><span aria-hidden="true">★</span></button></form>{% endif %}</li>{% endfor %}
 </ul></section>
 {% else %}<p class="empty-state">No featured content yet.</p>{% endif %}
