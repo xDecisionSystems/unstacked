@@ -42,7 +42,7 @@ from app import backup_config, backup_runtime, branding, theme, theme_config
 from app.acl import AccessPolicy, Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
-from app.content import ContentRepository
+from app.content import ContentConflict, ContentError, ContentRepository
 from app.default_groups import (
     ADMIN_GROUP_NAME,
     PUBLIC_GROUP_NAME,
@@ -280,19 +280,11 @@ class BrandingResponse(BaseModel):
     name: str
     logo_url: str
     updated_at: str | None
-    home_eyebrow: str
-    home_title: str
-    home_description: str
-    featured_label: str
 
 
 class BrandingUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     logo_base64: str | None = Field(default=None, max_length=20_000_000)
-    home_eyebrow: str = Field(default="", max_length=100)
-    home_title: str = Field(default="", max_length=100)
-    home_description: str = Field(default="", max_length=300)
-    featured_label: str = Field(default="", max_length=100)
 
 
 # --------------------------------------------------------------------------
@@ -1335,11 +1327,7 @@ def update_branding(
 ) -> BrandingResponse:
     settings = request.app.state.settings
     try:
-        state = branding.save(
-            settings.branding_config_path, name=payload.name,
-            home_eyebrow=payload.home_eyebrow, home_title=payload.home_title,
-            home_description=payload.home_description, featured_label=payload.featured_label,
-        )
+        state = branding.save(settings.branding_config_path, name=payload.name)
         if payload.logo_base64:
             data = base64.b64decode(payload.logo_base64, validate=True)
             if len(data) > settings.max_upload_bytes:
@@ -1354,3 +1342,24 @@ def update_branding(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     _audit("admin.branding.update", actor)
     return BrandingResponse(**state.__dict__)
+
+
+@router.post("/home/reset", response_model=DetailResponse, dependencies=CsrfGuard)
+def reset_home_page(request: Request, actor: AdminActor) -> DetailResponse:
+    """Discard the Home page's current body/widgets, restoring the starter.
+
+    An explicit, admin-only action (the client is expected to confirm with
+    the user first, since this discards any hand-authored edit) that goes
+    through the ordinary :meth:`ContentRepository.update_home_page`
+    blob-SHA commit path -- one Git commit authored by the admin, not a
+    raw file overwrite.
+    """
+
+    try:
+        commit = _content(request).reset_home_page_to_starter(actor)
+    except ContentConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except ContentError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    _audit("admin.home.reset", actor, commit=commit)
+    return DetailResponse(detail=f"Home page reset to starter content ({commit[:12]})")

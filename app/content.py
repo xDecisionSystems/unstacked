@@ -423,6 +423,18 @@ created path and Git commit returned by the API.
 """
 
 
+def _home_page_starter_body() -> str:
+    """Return the Home starter's Markdown body, shared by bootstrap/migration/reset."""
+
+    return (
+        f"*{_LEGACY_HOME_EYEBROW.title()}*\n"
+        "\n"
+        f"# {_LEGACY_HOME_TITLE}\n"
+        "\n"
+        f"{_LEGACY_HOME_DESCRIPTION}\n"
+    )
+
+
 def _home_page_starter_content(*, now: str) -> str:
     """Serialize the widget-aware Home starter used by bootstrap and migration.
 
@@ -442,14 +454,7 @@ def _home_page_starter_content(*, now: str) -> str:
         "draft": False,
         "widgets": [dict(entry) for entry in HOME_STARTER_WIDGETS],
     }
-    body = (
-        f"*{_LEGACY_HOME_EYEBROW.title()}*\n"
-        "\n"
-        f"# {_LEGACY_HOME_TITLE}\n"
-        "\n"
-        f"{_LEGACY_HOME_DESCRIPTION}\n"
-    )
-    return new_page(body, metadata)
+    return new_page(_home_page_starter_body(), metadata)
 
 
 def _validate_widget_entries(widgets: list) -> list[dict]:
@@ -1099,6 +1104,26 @@ class ContentRepository:
                     raise
         except GitWriteLockTimeout as exc:
             raise ContentLockTimeout(str(exc)) from exc
+
+    def reset_home_page_to_starter(self, actor: User) -> str:
+        """Discard the Home page's current body/widgets and restore the starter.
+
+        An explicit, admin-triggered action -- never automatic -- since it
+        discards any hand-authored edit.  Goes through the same optimistic
+        blob-SHA :meth:`update_home_page` commit path as any other save
+        (reading the current SHA itself so callers don't need to), rather
+        than a raw file overwrite that would bypass the conflict check and
+        Git history.
+        """
+
+        base_blob_sha = self.home_page_blob_sha()
+        return self.update_home_page(
+            _home_page_starter_body(),
+            [dict(entry) for entry in HOME_STARTER_WIDGETS],
+            actor,
+            base_blob_sha=base_blob_sha,
+            title=_LEGACY_HOME_TITLE,
+        )
 
     def page_blob_sha(self, relative: str) -> str:
         """Return the opaque version callers must send back with an update."""
