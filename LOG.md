@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 06:04 UTC — Codex
+Made inactive chapter-permission buttons white and outlined, with an orange
+filled selected state and white icon for clear status contrast.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 06:03 UTC — Codex
 Fixed Chapter Permissions icon contrast so every dash, eye, and pencil remains
 burgundy and visible against its button background.
@@ -87,10 +92,3 @@ Replaced visibility checkboxes with recursive Make Public and Make Private
 actions, and re-anchored tag and new-page popovers beneath their controls.
 - Files: `app/content.py`, `app/ai_service.py`, `app/web.py`,
   `app/templates/book.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 03:01 UTC — Codex
-Added portable public visibility controls for books, chapters, and pages, and
-made anonymously reachable public content render without a web session.
-- Files: `app/nav.py`, `app/content.py`, `app/ai_service.py`, `app/web.py`,
-  `app/templates/base.html`, `app/templates/book.html`,
-  `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
