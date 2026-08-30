@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 04:37 UTC — Codex
+Replaced chapter visibility action buttons with a single accessible eye toggle
+that reflects and switches the chapter’s recursive public state.
+- Files: `app/templates/book.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 04:15 UTC — Codex
 Moved book privacy controls into the library cards and made pages inherit both
 visibility and permissions from their parent chapter or book.
@@ -100,7 +105,3 @@ black so they remain visible against the pale Markdown toolbar.
 Kept the Page View’s accessible Back-to-book title metadata while applying its
 new Figma-style action treatment.
 - Files: `app/templates/page.html`, `LOG.md`
-
-## 2026-08-29 22:07 UTC — Codex
-Wrapped the book-tag aggregation for the project linting standard.
-- Files: `app/web.py`, `LOG.md`
