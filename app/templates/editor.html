@@ -27,7 +27,12 @@
 <script src="https://uicdn.toast.com/editor-plugin-chart/latest/toastui-editor-plugin-chart.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-code-syntax-highlight/latest/toastui-editor-plugin-code-syntax-highlight-all.min.js"></script>
 <!-- Unlike the other plugins, color-syntax ships no "-all" bundle variant;
-     that filename 404s and was never actually loading. -->
+     that filename 404s and was never actually loading. Once it does load,
+     it has the same missing-peer-dependency problem the chart plugin had:
+     it needs the separate TOAST UI Color Picker library (t.tui.colorPicker),
+     which the "-all" bundles of other plugins would have included inline. -->
+<link rel="stylesheet" href="https://uicdn.toast.com/tui-color-picker/latest/tui-color-picker.min.css">
+<script src="https://uicdn.toast.com/tui-color-picker/latest/tui-color-picker.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-color-syntax/latest/toastui-editor-plugin-color-syntax.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-table-merged-cell/latest/toastui-editor-plugin-table-merged-cell.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-uml/latest/toastui-editor-plugin-uml.min.js"></script>

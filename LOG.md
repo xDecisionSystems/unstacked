@@ -10,6 +10,28 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 22:23 UTC — Claude Code
+Follow-up to the Toast UI toolbar fix: with `GET /version` confirming the
+live site really was running the earlier fix, the user still saw the "H"
+button stuck -- a fresh console check (after a hard refresh) showed the
+color-syntax plugin now loads (no more 404) but throws its own error:
+`TypeError: undefined is not an object (evaluating 't.tui.colorPicker')`.
+
+Same root cause as the chart plugin, one plugin over: color-syntax also
+depends on a separate library -- TOAST UI Color Picker -- that the "-all"
+bundle variant would have included inline, but the plain variant (the only
+one that actually exists for this plugin) does not. Added the missing
+`tui-color-picker` JS+CSS before the color-syntax plugin script, in all
+three templates. Checked the remaining two plugins (table-merged-cell, uml)
+for the same pattern first -- neither has an "-all" variant and neither
+references any external global, so neither has this problem. Re-verified
+every TOAST UI CDN URL now used across all three templates returns 200.
+
+Extended the existing regression test with the same load-order assertion
+already used for the chart fix. Full suite green, ruff clean.
+- Files: `app/templates/page.html`, `app/templates/editor.html`,
+  `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 21:53 UTC — Claude Code
 Corrected the previous `GET /version` commit (its `.git`-copying build step
 worked in local `docker compose` testing but broke the user's real Coolify
@@ -299,8 +321,3 @@ web/settings UI now uses book-level permissions and a draggable page grid.
   `tests/test_content_lifecycle.py`, `tests/test_content_structure.py`,
   `tests/test_content_symlink_races.py`, `tests/test_default_groups.py`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 06:28 UTC — Codex
-Stopped inaccessible book shells from appearing when every chapter is denied
-by a more-specific permission rule.
-- Files: `app/content.py`, `tests/test_admin_api.py`, `LOG.md`

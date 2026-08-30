@@ -752,9 +752,13 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
     assert "editor-plugin-chart" in editor.text
     assert "editor-plugin-code-syntax-highlight" in editor.text
     # Unlike the other plugins, color-syntax has no "-all" bundle variant --
-    # that filename 404s.
+    # that filename 404s. It also has its own separate library dependency
+    # (tui-color-picker), the same shape as the chart plugin's.
     assert "toastui-editor-plugin-color-syntax.min.js" in editor.text
     assert "toastui-editor-plugin-color-syntax-all.min.js" not in editor.text
+    assert editor.text.index("tui-color-picker.min.js") < editor.text.index(
+        "toastui-editor-plugin-color-syntax.min.js"
+    )
     assert "editor-plugin-table-merged-cell" in editor.text
     assert "editor-plugin-uml" in editor.text
     assert 'name="card_image"' in editor.text
