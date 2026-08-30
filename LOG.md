@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 18:39 UTC — Codex
+Added a generated badger-at-a-typewriter header logo and administrator-managed
+branding controls for a custom workspace name and validated raster logo.
+- Files: `app/admin_api.py`, `app/branding.py`, `app/config.py`,
+  `app/static/branding/badger-typewriter.png`, `app/static/style.css`,
+  `app/templates/admin.html`, `app/templates/base.html`, `app/web.py`, `LOG.md`
+
 ## 2026-08-30 18:34 UTC — Codex
 Separated the workspace landing page from content libraries: Home now shows
 only featured items, while new Books and permission-filtered Pages views are
@@ -115,10 +122,3 @@ Replaced Chapter Permissions dropdowns with accessible dash, eye, and pencil
 icon controls for no access, read, and read/write assignments.
 - Files: `app/templates/admin.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 05:51 UTC — Codex
-Renamed the groups settings section and added a chapter-by-group permissions
-matrix with read/write levels and per-group select-all controls.
-- Files: `app/admin_api.py`, `app/templates/admin.html`,
-  `app/static/style.css`, `tests/test_admin_api.py`, `tests/test_web.py`,
-  `LOG.md`

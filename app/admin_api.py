@@ -23,6 +23,7 @@ it with a central dependency; keeping the check in one helper
 (:func:`get_admin_actor`) means that swap is a one-line change here.
 """
 
+import base64
 import logging
 import re
 from dataclasses import asdict
@@ -37,7 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
-from app import backup_config, backup_runtime, theme, theme_config
+from app import backup_config, backup_runtime, branding, theme, theme_config
 from app.acl import AccessPolicy, Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
@@ -273,6 +274,17 @@ class ThemeUpdate(BaseModel):
     mode: Literal["preset", "custom"]
     preset: str | None = None
     palette: PaletteModel | None = None
+
+
+class BrandingResponse(BaseModel):
+    name: str
+    logo_url: str
+    updated_at: str | None
+
+
+class BrandingUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    logo_base64: str | None = Field(default=None, max_length=20_000_000)
 
 
 # --------------------------------------------------------------------------
@@ -1299,3 +1311,32 @@ def update_theme(payload: ThemeUpdate, request: Request, actor: AdminActor) -> T
         state = theme_config.save_custom(settings.theme_config_path, palette)
     _audit("admin.theme.update", actor, mode=state.mode, preset=state.preset or "custom")
     return _theme_response(request)
+
+
+@router.get("/branding", response_model=BrandingResponse)
+def read_branding(request: Request, actor: AdminActor) -> BrandingResponse:
+    state = branding.load(request.app.state.settings.branding_config_path)
+    return BrandingResponse(**state.__dict__)
+
+
+@router.put("/branding", response_model=BrandingResponse, dependencies=CsrfGuard)
+def update_branding(
+    payload: BrandingUpdate, request: Request, actor: AdminActor
+) -> BrandingResponse:
+    settings = request.app.state.settings
+    try:
+        state = branding.save(settings.branding_config_path, name=payload.name)
+        if payload.logo_base64:
+            data = base64.b64decode(payload.logo_base64, validate=True)
+            if len(data) > settings.max_upload_bytes:
+                raise ValueError("Logo exceeds the configured upload size limit")
+            state = branding.store_logo(
+                settings.branding_config_path,
+                data,
+                max_pixels=settings.max_upload_pixels,
+                max_dimension=settings.max_upload_dimension,
+            )
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    _audit("admin.branding.update", actor)
+    return BrandingResponse(**state.__dict__)

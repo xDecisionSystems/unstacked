@@ -33,8 +33,9 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 from sqlmodel import Session
 
-from app import theme, theme_config
+from app import branding, theme, theme_config
 from app.acl import AccessDenied, AuthorizationContext
+from app.assets import AssetTooLarge, UnsupportedAsset, detect_image
 from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
 from app.export import ExportError, StaticExportRunner
 from app.models import User
@@ -79,6 +80,30 @@ def _theme_style_tag(request: Request) -> Markup:
 
 
 templates.env.globals["theme_style"] = _theme_style_tag
+
+
+def _branding(request: Request) -> dict[str, str | None]:
+    return branding.load(request.app.state.settings.branding_config_path).__dict__
+
+
+templates.env.globals["branding"] = _branding
+
+
+@router.get("/branding/logo", include_in_schema=False)
+def branding_logo(request: Request) -> Response:
+    path = request.app.state.settings.branding_config_path.with_name("branding-logo")
+    try:
+        data = path.read_bytes()
+        detected = detect_image(
+            data,
+            max_pixels=request.app.state.settings.max_upload_pixels,
+            max_dimension=request.app.state.settings.max_upload_dimension,
+        )
+    except (OSError, AssetTooLarge, UnsupportedAsset):
+        return RedirectResponse("/static/branding/badger-typewriter.png", status_code=307)
+    return Response(
+        data, media_type=detected.media_type, headers={"X-Content-Type-Options": "nosniff"}
+    )
 
 
 async def _read_form(request: Request, *, max_bytes: int = MAX_FORM_BYTES) -> dict[str, str]:
