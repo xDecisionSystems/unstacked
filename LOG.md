@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 05:21 UTC — Codex
+Expanded the new-user password checklist to show length, uppercase, lowercase,
+and number requirements with individual live red/green feedback.
+- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 05:15 UTC — Codex
 Added live password-requirement feedback to Settings: red until 12 characters
 are entered, then green.
