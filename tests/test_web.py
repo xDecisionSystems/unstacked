@@ -211,6 +211,20 @@ def test_dashboard_renders_a_card_per_book_linked_to_its_book_page(client, conte
     assert 'href="/books/bob-book"' in page.text
 
 
+def test_reserved_main_books_surface_pages_without_book_cards(client):
+    _login(client, "admin")
+
+    page = client.get("/tree")
+
+    assert "Featured pages" in page.text
+    assert 'href="/pages/main-hidden/welcome"' in page.text
+    assert 'href="/pages/main-read/welcome"' in page.text
+    assert 'href="/pages/main-write/welcome"' in page.text
+    assert 'data-key="main-hidden"' not in page.text
+    assert 'data-key="main-read"' not in page.text
+    assert 'data-key="main-write"' not in page.text
+
+
 def test_the_add_book_button_is_admin_only(app_env, client, content):
     app, _settings, _admin, _token = app_env
     _make_user(app, "reader")

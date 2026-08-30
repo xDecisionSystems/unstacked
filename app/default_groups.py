@@ -14,6 +14,11 @@ from app.models import Group, Permission, User, UserGroup
 
 PUBLIC_GROUP_NAME = "Public"
 ADMIN_GROUP_NAME = "Admin"
+MAIN_BOOK_ACCESS = {
+    "main-hidden": (False, False),
+    "main-read": (True, False),
+    "main-write": (True, True),
+}
 
 
 def _book_paths(docs: Path) -> list[str]:
@@ -68,8 +73,6 @@ def ensure_default_groups(engine, docs: Path) -> None:
             ADMIN_GROUP_NAME,
             "Read and write access to every book.",
         )
-        # Public intentionally receives no rows: the ACL is default-deny until
-        # a specific book grant is created in Settings.
         assert public.id is not None and admin.id is not None
         for user in session.exec(select(User)).all():
             sync_admin_membership(session, user)
@@ -95,6 +98,28 @@ def ensure_default_groups(engine, docs: Path) -> None:
                         can_write=True,
                     )
                 )
+        # The reserved front-page books define the starting template that a
+        # newly created group inherits.  They remain ordinary editable grants
+        # in Settings; startup only creates a missing baseline.
+        public_grants = {
+            permission.path_prefix: permission
+            for permission in session.exec(
+                select(Permission).where(Permission.group_id == public.id)
+            ).all()
+        }
+        for path, access in MAIN_BOOK_ACCESS.items():
+            if path not in book_paths:
+                continue
+            if path in public_grants:
+                continue
+            session.add(
+                Permission(
+                    group_id=public.id,
+                    path_prefix=path,
+                    can_read=access[0],
+                    can_write=access[1],
+                )
+            )
         session.commit()
 
 

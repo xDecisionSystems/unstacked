@@ -5,6 +5,12 @@
   <div><p class="eyebrow">KNOWLEDGE WORKSPACE</p><h1>Books</h1><p>Browse the folders that make up your team wiki.</p></div>
   {% if is_admin %}<details class="new-book-popover"><summary class="button">Create book</summary><form method="post" action="/manage/book" class="new-book-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Title<input name="title" required></label><button type="submit">Create book</button></form></details>{% endif %}
 </div>
+{% if tree or main_pages %}
+{% if main_pages %}
+<section class="main-pages" aria-label="Front-page links"><h2>Featured pages</h2><ul class="page-cards book-page-grid">
+  {% for page in main_pages %}<li class="page-card"><a href="/pages/{{ page.path }}"><span class="page-card-type">PAGE · {{ page.book_title }}</span><strong>{{ page.label }}</strong>{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}<span class="page-card-open">Open →</span></a></li>{% endfor %}
+</ul></section>
+{% endif %}
 {% if tree %}
 <section class="library-filters" aria-label="Filter books">
   <label class="visually-hidden" for="book-filter">Search books</label><input id="book-filter" type="search" placeholder="⌕  Search books…">
@@ -13,6 +19,7 @@
 <ul class="book-cards" id="book-cards">
   {% for book in tree %}<li class="book-card" draggable="true" data-key="{{ book.slug }}" data-title="{{ book.title|lower }}" data-tags="{{ book.tags|join('|')|lower }}"><a class="book-card-link" draggable="false" aria-label="{{ book.title }}" href="/books/{{ book.slug }}"></a><span class="book-card-type">BOOK</span><span class="book-card-title">{{ book.title }}</span>{% if book.tags %}<span class="card-tags">{% for tag in book.tags[:3] %}<span>{{ tag }}</span>{% endfor %}</span>{% endif %}{% if book.can_write %}<form class="card-visibility-actions" method="post" action="/containers/{{ book.slug }}/visibility"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button name="public" value="{{ 'off' if book.visibility == 'public' else 'on' }}" title="{{ 'Make all book content private' if book.visibility == 'public' else 'Make all book content public' }}" aria-label="{{ 'Make all book content private' if book.visibility == 'public' else 'Make all book content public' }}"><svg class="visibility-glasses visibility-{{ book.visibility }}" viewBox="0 0 24 24" aria-hidden="true"><circle class="lens left-lens" cx="7" cy="13" r="4"/><circle class="lens right-lens" cx="17" cy="13" r="4"/><path d="M11 13h2M3 11l1-1M20 10l1 1"/></svg></button></form>{% endif %}<span class="book-card-footer"><span class="book-card-stat">{{ book.page_count }} page{{ '' if book.page_count == 1 else 's' }}</span><span class="open-link">Open →</span></span></li>{% endfor %}
 </ul>
+{% endif %}
 {% else %}<p class="empty-state">Nothing here yet.{% if is_admin %} Create the first book to begin.{% endif %}</p>{% endif %}
 {% endblock %}
 {% block scripts %}

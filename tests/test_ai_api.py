@@ -36,7 +36,8 @@ def test_admin_can_create_and_download_complete_content(client, app_env):
 
     tree = client.get("/api/ai/tree", headers=headers)
     assert tree.status_code == 200
-    assert tree.json()["books"][0]["pages"] == ["operations/restart-service.md"]
+    operations = next(book for book in tree.json()["books"] if book["slug"] == "operations")
+    assert operations["pages"] == ["operations/restart-service.md"]
 
     content = client.get("/api/ai/content/operations/restart-service.md", headers=headers)
     assert content.status_code == 200
@@ -58,7 +59,7 @@ def test_admin_can_create_and_download_complete_content(client, app_env):
 
     repo = Repo(settings.content_repo_path)
     commits = list(repo.iter_commits())
-    assert len(commits) == 3
+    assert len(commits) == 4
     assert commits[0].author.email == "admin@example.com"
     assert not repo.is_dirty(untracked_files=True)
 

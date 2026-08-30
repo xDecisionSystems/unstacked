@@ -57,6 +57,16 @@ from app.paths import (
 # path's first segment unambiguously says whether it is an asset.
 ASSETS_ROOT = "assets"
 
+# Reserved books back the configurable landing-page cards. They are ordinary
+# Markdown content on disk, but are intentionally not shown as book cards.
+# The suffix also defines the baseline grant applied to the built-in Public
+# group (see ``default_groups.ensure_default_groups``).
+MAIN_BOOK_SPECS = {
+    "main-hidden": ("Hidden", "Hidden"),
+    "main-read": ("Read", "Read"),
+    "main-write": ("Write", "Write"),
+}
+
 
 class ContentError(RuntimeError):
     pass
@@ -420,6 +430,7 @@ class ContentRepository:
                 self._ensure_content_ci_workflow()
             else:
                 self._bootstrap_repository()
+            self._ensure_main_books()
             # Configure the backup remote once, at startup, so every later
             # push/fetch finds `origin` already pointed at the right place and
             # already authenticated.  Failing here rather than at the first
@@ -446,6 +457,46 @@ class ContentRepository:
                 # backup is optional, and local disk is the whole state.  Start
                 # without a remote and let the admin API report why.
                 self.backup_config_error = scrub_git_output(str(exc))
+
+    def _ensure_main_books(self) -> None:
+        """Create the reserved front-page content once, without a DB dependency."""
+
+        affected: list[Path] = []
+        for slug, (book_title, page_title) in MAIN_BOOK_SPECS.items():
+            book = self.docs / slug
+            nav = book / ".pages"
+            page = book / "welcome.md"
+            if not book.exists():
+                book.mkdir()
+                self._write_nav(nav, book_title)
+                affected.append(nav)
+            if not page.exists():
+                now = datetime.now(timezone.utc).isoformat()
+                atomic_write_confined(
+                    self.docs,
+                    f"{slug}/welcome.md",
+                    new_page(
+                        f"# {page_title}\n",
+                        {
+                            "id": str(uuid4()),
+                            "title": page_title,
+                            "created_at": now,
+                            "updated_at": now,
+                            "author": "Unstacked",
+                            "tags": [],
+                            "draft": False,
+                        },
+                    ),
+                    overwrite=False,
+                )
+                affected.append(page)
+        if affected:
+            self.git.commit_paths(
+                affected,
+                name="Unstacked",
+                email="system@unstacked.local",
+                message="Create default front-page books",
+            )
 
     def migrate_legacy_chapters(self) -> dict[str, str]:
         """Promote legacy ``book/chapter`` directories into standalone books.

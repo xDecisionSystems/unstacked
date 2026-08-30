@@ -35,7 +35,13 @@ from sqlmodel import Session
 
 from app import theme, theme_config
 from app.acl import AccessDenied, AuthorizationContext
-from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
+from app.content import (
+    MAIN_BOOK_SPECS,
+    ContentConflict,
+    ContentError,
+    ContentExists,
+    ContentMissing,
+)
 from app.export import ExportError, StaticExportRunner
 from app.models import User
 from app.nav import NavigationError, read_navigation
@@ -243,11 +249,19 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
     content = request.app.state.content
     authorization = _authorization(session, user)
     raw_tree = request.app.state.ai_service.tree(authorization)
+    display_tree = _tree_view_model(content, authorization, raw_tree)
+    main_pages = [
+        {**page, "book_title": book["title"]}
+        for book in display_tree
+        if book["slug"] in MAIN_BOOK_SPECS
+        for page in book["pages"]
+    ]
     return {
         "request": request,
         "current_user": user,
         "csrf_token": read_session(request, user).csrf_token,
-        "tree": _tree_view_model(content, authorization, raw_tree),
+        "tree": [book for book in display_tree if book["slug"] not in MAIN_BOOK_SPECS],
+        "main_pages": main_pages,
         "is_admin": user.is_admin,
     }
 

@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 07:33 UTC — Codex
+Added reserved main-hidden, main-read, and main-write starter books with
+front-page pages and suffix-based Public-group default access, while keeping
+their book containers out of the dashboard.
+- Files: `app/content.py`, `app/default_groups.py`, `app/web.py`,
+  `app/templates/tree.html`, `tests/test_ai_api.py`,
+  `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 06:49 UTC — Codex
 Replaced the chapter hierarchy with a book-and-page model: legacy chapters
 promote to books at startup, their effective grants are preserved, and the
@@ -99,8 +107,3 @@ are entered, then green.
 Added the 12-character password requirement directly beneath the new-user
 password field in Settings.
 - Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 05:11 UTC — Codex
-Made Settings form validation errors readable so failed user creation explains
-the invalid field instead of displaying `object Object`.
-- Files: `app/templates/admin.html`, `LOG.md`

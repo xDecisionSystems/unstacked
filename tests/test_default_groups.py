@@ -15,7 +15,17 @@ def test_default_groups_keep_public_denied_and_admin_writable_for_new_books(app_
         groups = {group.name: group for group in session.exec(select(Group)).all()}
         assert set(groups) == {PUBLIC_GROUP_NAME, ADMIN_GROUP_NAME}
         public = groups[PUBLIC_GROUP_NAME]
-        assert session.exec(select(Permission).where(Permission.group_id == public.id)).all() == []
+        public_grants = {
+            permission.path_prefix: (permission.can_read, permission.can_write)
+            for permission in session.exec(
+                select(Permission).where(Permission.group_id == public.id)
+            ).all()
+        }
+        assert public_grants == {
+            "main-hidden": (False, False),
+            "main-read": (True, False),
+            "main-write": (True, True),
+        }
 
     app.state.content.create_book("Handbook", "handbook", admin)
 
