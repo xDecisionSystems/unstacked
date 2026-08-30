@@ -38,3 +38,21 @@ def test_flat_tree_excludes_nested_legacy_pages(app_env):
         assert content.tree(session, actor) == [
             {"slug": "operations", "pages": ["operations/overview.md"]}
         ]
+
+
+def test_untouched_legacy_home_placeholders_are_removed(app_env):
+    _app, settings, _admin, _token = app_env
+    book = settings.content_repo_path / "docs" / "main-read"
+    book.mkdir()
+    (book / ".pages").write_text("title: Read\n", encoding="utf-8")
+    (book / "welcome.md").write_text(
+        new_page(
+            "# Read\n",
+            {"title": "Read", "author": "Unstacked", "tags": [], "draft": False},
+        ),
+        encoding="utf-8",
+    )
+
+    ContentRepository(settings).initialize()
+
+    assert not book.exists()

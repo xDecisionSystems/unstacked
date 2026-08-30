@@ -149,6 +149,13 @@ class BookResponse(BaseModel):
     path: str
 
 
+class HomeItemResponse(BaseModel):
+    """One Git-versioned home-screen target available for exact grants."""
+
+    path: str
+    kind: Literal["book", "page"]
+
+
 class OrphanedPermissionResponse(PermissionResponse):
     """A stored grant that can no longer match anything on disk."""
 
@@ -375,13 +382,20 @@ def _target_kind(content: ContentRepository, prefix: str) -> str | None:
     if prefix.split("/")[0] in RESERVED_ROOT_NAMES:
         return None
     depth = path_depth(prefix)
-    if depth != 1:
-        return None
     try:
         target = safe_join(content.docs, prefix)
     except UnsafePath:
         return None
-    return "book" if target.is_dir() and not prefix.endswith(".md") else None
+    if depth == 1 and target.is_dir() and not prefix.endswith(".md"):
+        return "book"
+    if (
+        depth == 2
+        and prefix.endswith(".md")
+        and target.is_file()
+        and prefix in content.home_items()
+    ):
+        return "featured_page"
+    return None
 
 
 def _normalize_grant_prefix(raw: str) -> str:
@@ -760,7 +774,7 @@ def create_permission(
     request: Request,
     actor: AdminActor,
 ) -> PermissionResponse:
-    """Grant a group read/write on one book.
+    """Grant a group read/write on a book or featured page.
 
     The target has to exist now.  A grant on a path that has never existed is
     almost always a typo, and there is nothing else in the system that would
@@ -784,7 +798,7 @@ def create_permission(
     if kind is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "No book exists at that path prefix",
+            "No book or featured page exists at that path prefix",
         )
     with Session(request.app.state.engine) as session:
         _require_group(session, payload.group_id)
@@ -883,6 +897,16 @@ def list_books(request: Request, actor: AdminActor) -> list[BookResponse]:
             BookResponse(path=book["slug"])
             for book in _content(request).tree(session, actor)
         ]
+
+
+@router.get("/home-items", response_model=list[HomeItemResponse])
+def list_home_items(request: Request, actor: AdminActor) -> list[HomeItemResponse]:
+    """List curated home targets; only featured pages permit exact grants."""
+
+    return [
+        HomeItemResponse(path=path, kind="page" if path.endswith(".md") else "book")
+        for path in _content(request).home_items()
+    ]
 
 
 @router.get("/permissions/orphaned", response_model=list[OrphanedPermissionResponse])

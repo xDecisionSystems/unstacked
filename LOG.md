@@ -10,6 +10,17 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 17:07 UTC — Codex
+Replaced fake home books with a Git-versioned curated home layout that can
+feature real books or pages, and allowed exact permissions only for featured
+pages so normal pages retain inherited book access.
+- Files: `app/acl.py`, `app/admin_api.py`, `app/content.py`,
+  `app/default_groups.py`, `app/static/style.css`, `app/templates/admin.html`,
+  `app/templates/book.html`, `app/templates/tree.html`, `app/web.py`,
+  `plans/plan_initial.md`, `tests/test_acl.py`, `tests/test_admin_api.py`,
+  `tests/test_ai_api.py`, `tests/test_book_migration.py`,
+  `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 07:33 UTC — Codex
 Added reserved main-hidden, main-read, and main-write starter books with
 front-page pages and suffix-based Public-group default access, while keeping
@@ -101,9 +112,4 @@ and number requirements with individual live red/green feedback.
 ## 2026-08-30 05:15 UTC — Codex
 Added live password-requirement feedback to Settings: red until 12 characters
 are entered, then green.
-- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 05:13 UTC — Codex
-Added the 12-character password requirement directly beneath the new-user
-password field in Settings.
 - Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`

@@ -90,7 +90,7 @@ def test_more_specific_deny_overrides_inherited_allow(app_env):
     assert not denied.can_read
 
 
-def test_page_permissions_are_ignored_in_favor_of_the_parent_chapter(app_env):
+def test_exact_page_permission_overrides_the_parent_book(app_env):
     app, *_ = app_env
     with Session(app.state.engine) as session:
         user = _make_user(session, "conflict@example.com")
@@ -100,8 +100,8 @@ def test_page_permissions_are_ignored_in_favor_of_the_parent_chapter(app_env):
         denied = resolve_access(session, user, "book/chapter/other.md")
         inherited = resolve_access(session, user, "book/chapter/ok.md")
     assert not denied.can_read
-    assert not inherited.can_read
-    assert not inherited.can_write
+    assert inherited.can_read
+    assert inherited.can_write
 
 
 def test_sibling_prefix_is_not_confused_with_a_longer_name(app_env):

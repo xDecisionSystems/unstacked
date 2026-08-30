@@ -32,6 +32,7 @@ from app.nav import (
     NavigationError,
     create_navigation,
     parse_navigation,
+    read_navigation,
     serialize_navigation,
 )
 from app.paths import (
@@ -57,14 +58,11 @@ from app.paths import (
 # path's first segment unambiguously says whether it is an asset.
 ASSETS_ROOT = "assets"
 
-# Reserved books back the configurable landing-page cards. They are ordinary
-# Markdown content on disk, but are intentionally not shown as book cards.
-# The suffix also defines the baseline grant applied to the built-in Public
-# group (see ``default_groups.ensure_default_groups``).
-MAIN_BOOK_SPECS = {
-    "main-hidden": ("Hidden", "Hidden"),
-    "main-read": ("Read", "Read"),
-    "main-write": ("Write", "Write"),
+HOME_LAYOUT_FILE = ".unstacked-home.json"
+LEGACY_MAIN_BOOK_SPECS = {
+    "main-hidden": "Hidden",
+    "main-read": "Read",
+    "main-write": "Write",
 }
 
 
@@ -430,7 +428,7 @@ class ContentRepository:
                 self._ensure_content_ci_workflow()
             else:
                 self._bootstrap_repository()
-            self._ensure_main_books()
+            self._remove_legacy_main_books()
             # Configure the backup remote once, at startup, so every later
             # push/fetch finds `origin` already pointed at the right place and
             # already authenticated.  Failing here rather than at the first
@@ -458,45 +456,107 @@ class ContentRepository:
                 # without a remote and let the admin API report why.
                 self.backup_config_error = scrub_git_output(str(exc))
 
-    def _ensure_main_books(self) -> None:
-        """Create the reserved front-page content once, without a DB dependency."""
+    def home_items(self) -> list[str]:
+        """Return the ordered book/page targets curated for the home screen."""
+
+        path = self.root / HOME_LAYOUT_FILE
+        if not path.exists():
+            return []
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContentError("home layout is malformed") from exc
+        targets = payload.get("items") if isinstance(payload, dict) else None
+        if not isinstance(targets, list) or not all(isinstance(item, str) for item in targets):
+            raise ContentError("home layout is malformed")
+        return [self._home_target(item) for item in targets]
+
+    def _remove_legacy_main_books(self) -> None:
+        """Remove only untouched placeholder books from the superseded design.
+
+        A book is never removed merely for its name. It must still contain the
+        exact system-generated navigation and welcome page, so administrator
+        edits turn it into ordinary durable content instead.
+        """
 
         affected: list[Path] = []
-        for slug, (book_title, page_title) in MAIN_BOOK_SPECS.items():
+        for slug, title in LEGACY_MAIN_BOOK_SPECS.items():
             book = self.docs / slug
-            nav = book / ".pages"
-            page = book / "welcome.md"
-            if not book.exists():
-                book.mkdir()
-                self._write_nav(nav, book_title)
-                affected.append(nav)
-            if not page.exists():
-                now = datetime.now(timezone.utc).isoformat()
-                atomic_write_confined(
-                    self.docs,
-                    f"{slug}/welcome.md",
-                    new_page(
-                        f"# {page_title}\n",
-                        {
-                            "id": str(uuid4()),
-                            "title": page_title,
-                            "created_at": now,
-                            "updated_at": now,
-                            "author": "Unstacked",
-                            "tags": [],
-                            "draft": False,
-                        },
-                    ),
-                    overwrite=False,
-                )
-                affected.append(page)
+            nav, page = book / ".pages", book / "welcome.md"
+            if not book.is_dir() or not nav.is_file() or not page.is_file():
+                continue
+            if {child.name for child in book.iterdir()} != {".pages", "welcome.md"}:
+                continue
+            try:
+                navigation = read_navigation(nav)
+                document = parse_page(page.read_text(encoding="utf-8"), default_title="welcome")
+            except (NavigationError, OSError, ValueError):
+                continue
+            if (
+                navigation.title != title
+                or document.metadata.get("title") != title
+                or document.metadata.get("author") != "Unstacked"
+                or document.content.strip() != f"# {title}"
+            ):
+                continue
+            shutil.rmtree(book)
+            affected.append(book)
         if affected:
             self.git.commit_paths(
                 affected,
-                name="Unstacked",
+                name="Unstacked migration",
                 email="system@unstacked.local",
-                message="Create default front-page books",
+                message="Remove obsolete default home books",
             )
+
+    def feature_on_home(self, target: str, actor: User) -> str:
+        """Add a book or page to the Git-versioned home layout."""
+
+        target = self._home_target(target)
+        with self.git.write_lock():
+            items = self.home_items()
+            if target in items:
+                return target
+            items.append(target)
+            self._atomic_write(
+                self.root / HOME_LAYOUT_FILE,
+                json.dumps({"items": items}, indent=2) + "\n",
+            )
+            self.git.commit_paths(
+                [self.root / HOME_LAYOUT_FILE],
+                name=actor.display_name,
+                email=actor.email,
+                message=f"Feature on home: {target}",
+            )
+        return target
+
+    def remove_from_home(self, target: str, actor: User) -> None:
+        """Remove one existing home-screen target without affecting its content."""
+
+        target = self._home_target(target)
+        with self.git.write_lock():
+            items = self.home_items()
+            if target not in items:
+                return
+            self._atomic_write(
+                self.root / HOME_LAYOUT_FILE,
+                json.dumps({"items": [item for item in items if item != target]}, indent=2) + "\n",
+            )
+            self.git.commit_paths(
+                [self.root / HOME_LAYOUT_FILE],
+                name=actor.display_name,
+                email=actor.email,
+                message=f"Remove from home: {target}",
+            )
+
+    def _home_target(self, raw: str) -> str:
+        target = normalize_relative_path(raw)
+        if target.endswith(".md"):
+            if path_depth(target) != 2 or not safe_join(self.docs, target).is_file():
+                raise ContentMissing("page not found")
+        elif path_depth(target) != 1 or not safe_join(self.docs, target).is_dir():
+            raise ContentMissing("book not found")
+        return target
 
     def migrate_legacy_chapters(self) -> dict[str, str]:
         """Promote legacy ``book/chapter`` directories into standalone books.

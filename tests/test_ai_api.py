@@ -59,7 +59,7 @@ def test_admin_can_create_and_download_complete_content(client, app_env):
 
     repo = Repo(settings.content_repo_path)
     commits = list(repo.iter_commits())
-    assert len(commits) == 4
+    assert len(commits) == 3
     assert commits[0].author.email == "admin@example.com"
     assert not repo.is_dirty(untracked_files=True)
 

@@ -89,11 +89,10 @@ class AccessPolicy:
                 matching_rules=(),
                 decisive_rules=(),
             )
-    # Pages are files, but never permission boundaries. In the current
-    # book/page model their direct parent is always the book. Keeping this
-    # generic parent calculation also makes legacy nested paths resolve
-    # safely during the one-time migration rather than broadening a grant.
-        permission_path = _page_parent_path(path)
+        # A book prefix supplies the usual inherited access. A featured page
+        # may also carry an exact grant, whose greater depth intentionally
+        # overrides the book only for that one home-screen target.
+        permission_path = path
         matching = tuple(
             rule
             for rule in self.rules

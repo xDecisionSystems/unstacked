@@ -198,6 +198,22 @@ def test_book_permissions_list_and_update_without_a_grant_gap(app_env, client, c
     assert updated.json()["can_write"] is True
 
 
+def test_featured_page_can_receive_an_exact_permission(app_env, client, content):
+    app, _settings, admin, token = app_env
+    content.feature_on_home("handbook/leave.md", admin)
+    group_id = _group_with_member(client, token, admin.id)
+
+    assert client.get("/api/admin/home-items", headers=bearer(token)).json() == [
+        {"path": "handbook/leave.md", "kind": "page"}
+    ]
+    created = client.post(
+        "/api/admin/permissions",
+        json={"group_id": group_id, "path_prefix": "handbook/leave.md", "can_read": True},
+        headers=bearer(token),
+    )
+    assert created.status_code == 201
+
+
 @pytest.mark.parametrize(
     "prefix",
     ["", "   ", "..", "book/../secret", "book//page", "book/./page", "book\\page"],
@@ -264,7 +280,7 @@ def test_grant_to_a_target_that_does_not_exist_is_rejected(app_env, client, cont
         headers=bearer(token),
     )
     assert response.status_code == 422
-    assert "No book exists" in response.json()["detail"]
+    assert "No book or featured page exists" in response.json()["detail"]
 
 
 def test_write_grant_without_read_is_rejected(app_env, client, content):

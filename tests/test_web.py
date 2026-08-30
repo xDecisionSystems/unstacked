@@ -211,18 +211,25 @@ def test_dashboard_renders_a_card_per_book_linked_to_its_book_page(client, conte
     assert 'href="/books/bob-book"' in page.text
 
 
-def test_reserved_main_books_surface_pages_without_book_cards(client):
+def test_admin_can_feature_a_page_or_book_on_home(client, content):
     _login(client, "admin")
+    csrf = _csrf_from(client.get("/tree").text)
+    assert client.post(
+        "/home/feature",
+        data={"csrf_token": csrf, "target": "alice-book"},
+        follow_redirects=False,
+    ).status_code == 303
+    assert client.post(
+        "/home/feature",
+        data={"csrf_token": csrf, "target": "alice-book/secret.md"},
+        follow_redirects=False,
+    ).status_code == 303
 
     page = client.get("/tree")
 
-    assert "Featured pages" in page.text
-    assert 'href="/pages/main-hidden/welcome"' in page.text
-    assert 'href="/pages/main-read/welcome"' in page.text
-    assert 'href="/pages/main-write/welcome"' in page.text
-    assert 'data-key="main-hidden"' not in page.text
-    assert 'data-key="main-read"' not in page.text
-    assert 'data-key="main-write"' not in page.text
+    assert "Featured" in page.text
+    assert 'href="/books/alice-book"' in page.text
+    assert 'href="/pages/alice-book/secret"' in page.text
 
 
 def test_the_add_book_button_is_admin_only(app_env, client, content):

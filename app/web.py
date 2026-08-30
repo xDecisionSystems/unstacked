@@ -35,13 +35,7 @@ from sqlmodel import Session
 
 from app import theme, theme_config
 from app.acl import AccessDenied, AuthorizationContext
-from app.content import (
-    MAIN_BOOK_SPECS,
-    ContentConflict,
-    ContentError,
-    ContentExists,
-    ContentMissing,
-)
+from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
 from app.export import ExportError, StaticExportRunner
 from app.models import User
 from app.nav import NavigationError, read_navigation
@@ -227,6 +221,7 @@ def _tree_view_model(
                 "pages": pages,
                 "page_count": len(pages),
                 "tags": sorted(book_tags, key=str.casefold),
+                "can_read_book": authorization.policy.decide(book["slug"]).can_read,
                 "can_write": authorization.policy.decide(book["slug"]).can_write,
                 "public": _container_public(content.docs, book["slug"]),
                 "visibility": "public"
@@ -250,18 +245,24 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
     authorization = _authorization(session, user)
     raw_tree = request.app.state.ai_service.tree(authorization)
     display_tree = _tree_view_model(content, authorization, raw_tree)
-    main_pages = [
-        {**page, "book_title": book["title"]}
+    books_by_slug = {book["slug"]: book for book in display_tree}
+    pages_by_path = {
+        page["path"] + ".md": {**page, "book_title": book["title"]}
         for book in display_tree
-        if book["slug"] in MAIN_BOOK_SPECS
         for page in book["pages"]
-    ]
+    }
+    home_items = []
+    for target in content.home_items():
+        if target.endswith(".md") and target in pages_by_path:
+            home_items.append({"kind": "page", "target": target, **pages_by_path[target]})
+        elif target in books_by_slug:
+            home_items.append({"kind": "book", "target": target, **books_by_slug[target]})
     return {
         "request": request,
         "current_user": user,
         "csrf_token": read_session(request, user).csrf_token,
-        "tree": [book for book in display_tree if book["slug"] not in MAIN_BOOK_SPECS],
-        "main_pages": main_pages,
+        "tree": [book for book in display_tree if book["can_read_book"]],
+        "home_items": home_items,
         "is_admin": user.is_admin,
     }
 
@@ -975,6 +976,34 @@ async def create_book_submit(
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
     return RedirectResponse(f"/pages/new?parent={created.path}", status_code=303)
+
+
+@router.post("/home/feature", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def feature_home_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_admin()
+            request.app.state.content.feature_on_home(form.get("target", ""), user)
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse("/tree", status_code=303)
+
+
+@router.post("/home/remove", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def remove_home_submit(
+    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+) -> Response:
+    form = await _read_form(request)
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_admin()
+            request.app.state.content.remove_from_home(form.get("target", ""), user)
+        except (AccessDenied, ContentError, UnsafePath) as exc:
+            return _manage_error_response(request, session, user, exc)
+    return RedirectResponse("/tree", status_code=303)
 
 
 @router.post(

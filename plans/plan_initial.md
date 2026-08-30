@@ -53,6 +53,7 @@ A dedicated git repository, independent of the app's own source code repo, at `c
 ```
 content/
   mkdocs.yml
+  .unstacked-home.json        # Git-versioned ordered book/page home cards
   requirements.txt             # exact mkdocs/nav build dependency versions
   hooks/drafts.py               # excludes draft:true pages from the build
   .github/workflows/build.yml   # rebuilds the static site on push, app-independent
@@ -61,14 +62,11 @@ content/
     llm.md                    # maintained llm-md workflow; copied to static /llm.md
     <book-slug>/                # books live at the docs/ root — no shelves
       .pages                    # awesome-nav v3: title + nav order
-      <chapter-slug>/
-        .pages
-        <page-slug>.md
       <page-slug>.md            # pages directly in a book, no chapter
     assets/<book-slug>/...      # uploaded images/attachments
 ```
 
-- Book → folder, Chapter → subfolder, Page → `.md` file. **Exactly two levels of nesting under a book**, so the tree stays predictable. **No shelves** — books sit at the `docs/` root. (If grouping is ever wanted, it's a folder move plus a `.pages` file, with no schema or data migration.)
+- Book → folder and Page → `.md` file directly within that folder. **No shelves** — books sit at the `docs/` root. `.unstacked-home.json` is a Git-versioned, ordered curation list whose targets may be books or pages; it changes the application home screen only, not the MkDocs structure. A featured page may have an exact path grant that overrides its inherited book permission; unfeatured pages inherit their book.
 - Use the current `mkdocs-awesome-nav` plugin, explicitly configured with `filename: .pages`, for nav titles/ordering instead of a hand-maintained `nav:` in `mkdocs.yml`. The app never rewrites a giant nav tree — it writes/renames folders and small `.pages` files using the plugin's v3 syntax. A missing configured plugin makes mkdocs fail rather than fall back, so `requirements.txt`, CI, and the recovery runbook are part of the portable content repo.
 - Every page file starts with YAML front matter for app metadata mkdocs ignores: `id` (uuid, stable across renames), `title`, `created_at`, `updated_at`, `author`, `tags`, `draft`.
 - `docs/llm.md` is a managed, provider-neutral [llm-md](https://llm.md/) workflow that tells authenticated agents how to use the AI API safely. It contains no secrets and no content listing, so publishing the raw file at `/llm.md` cannot disclose ACL-protected paths. The portable MkDocs hook copies it unchanged to the root of a static build as `/llm.md`; the project does not require the alpha llm-md CLI at runtime.
