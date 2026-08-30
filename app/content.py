@@ -1270,7 +1270,12 @@ class ContentRepository:
         result = []
         for book in books.values():
             book["chapters"] = list(book["chapters"].values())
-            result.append(book)
+            # A book-level allow can coexist with more-specific denies on
+            # every chapter.  In that case it would otherwise render as an
+            # empty shell that reveals the book exists but offers no readable
+            # chapter. Direct book pages remain a valid reason to show it.
+            if policy.is_admin or book["chapters"] or book["pages"]:
+                result.append(book)
         return result
 
     def export_zip(self, session: Session, user: User) -> bytes:

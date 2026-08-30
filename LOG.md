@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 06:28 UTC — Codex
+Stopped inaccessible book shells from appearing when every chapter is denied
+by a more-specific permission rule.
+- Files: `app/content.py`, `tests/test_admin_api.py`, `LOG.md`
+
 ## 2026-08-30 06:25 UTC — Codex
 Added an explicit Reactivate action for inactive accounts, restoring access
 through the guarded user-update flow.
@@ -88,8 +93,3 @@ the invalid field instead of displaying `object Object`.
 Fixed mixed book visibility so chapter settings take precedence for nested
 pages and the glasses state reflects both book and chapter visibility.
 - Files: `app/web.py`, `LOG.md`
-
-## 2026-08-30 04:46 UTC — Codex
-Replaced book-card eye controls with clear, mixed, and filled glasses states
-that reflect private, mixed-descendant, and fully public visibility.
-- Files: `app/web.py`, `app/templates/tree.html`, `app/static/style.css`, `LOG.md`

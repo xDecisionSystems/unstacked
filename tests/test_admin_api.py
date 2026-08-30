@@ -166,6 +166,24 @@ def test_revoking_a_grant_takes_effect_immediately_too(app_env, client, content)
     assert client.get("/api/ai/tree", headers=bearer(reader_token)).json()["books"] == []
 
 
+def test_book_with_no_accessible_chapters_is_hidden(app_env, client, content):
+    """A book-level grant must not reveal a shell after every chapter is denied."""
+
+    app, settings, _admin, token = app_env
+    reader = _make_user(app, "reader@example.com")
+    reader_token = create_api_token(reader, settings)
+    group_id = _group_with_member(client, token, reader.id)
+    for path, can_read in (("handbook", True), ("handbook/policies", False)):
+        response = client.post(
+            "/api/admin/permissions",
+            json={"group_id": group_id, "path_prefix": path, "can_read": can_read},
+            headers=bearer(token),
+        )
+        assert response.status_code == 201
+
+    assert client.get("/api/ai/tree", headers=bearer(reader_token)).json()["books"] == []
+
+
 def test_chapter_permissions_list_and_update_without_a_grant_gap(app_env, client, content):
     """The chapter matrix can discover paths and change an existing grant in place."""
 
