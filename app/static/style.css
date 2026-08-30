@@ -137,3 +137,14 @@
 .container-tags label { display: block; font-size: 12px; font-weight: 600; }
 .container-tags input { width: 100%; margin: 5px 0 10px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
 .container-tags button { padding: 6px 10px; font-size: 12px; }
+.home-body { margin: 0 0 30px; }
+.home-editor-form .widget-tray { margin: 20px 0 0; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.home-editor-form .widget-tray legend { padding: 0 6px; font: 600 16px 'Source Serif 4', serif; }
+.widget-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.widget-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--canvas); }
+.widget-row.dragging { opacity: .5; }
+.widget-grip { cursor: grab; color: var(--muted); }
+.widget-label { font-weight: 600; }
+.widget-id { flex: 1; color: var(--muted); font-size: 13px; }
+.widget-move-controls { display: flex; gap: 4px; }
+.widget-move-controls button { width: 28px; height: 28px; padding: 0; font-size: 14px; }
