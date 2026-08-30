@@ -12,9 +12,8 @@
         root,
         defaultValue: textarea.value,
         features: {
-          [Crepe.Feature.CodeMirror]: false,
           [Crepe.Feature.ImageBlock]: false,
-          [Crepe.Feature.Latex]: false,
+          [Crepe.Feature.TopBar]: true,
         },
       });
       await editor.create();

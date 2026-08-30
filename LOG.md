@@ -10,6 +10,20 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 23:34 UTC — Codex
+Fixed Milkdown’s CSS delivery after Safari exposed real 404s for styles that
+were written for a bundler rather than direct CDN use. Replaced the broken
+package-relative CSS imports with the pinned underlying ProseMirror,
+gap-cursor, table, virtual-cursor, and KaTeX styles. Restored the default
+CodeMirror and LaTeX features and enabled Crepe’s optional Top Bar so the
+editor exposes the richer library interface. Image-block upload remains
+disabled until it can call the app’s server-validated upload flow.
+All replacement styles returned 200; focused tests and ruff pass. Production
+Compose also started cleanly on port 18765 and `/healthz` returned 200.
+- Files: `app/static/markdown-editor.js`, `app/templates/editor.html`,
+  `app/templates/home_editor.html`, `app/templates/page.html`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 23:27 UTC — Codex
 Replaced the temporary native Markdown toolbar with Milkdown Crepe, a
 WYSIWYG Markdown editor. Crepe is loaded from pinned v7.21.1 browser assets
@@ -342,10 +356,4 @@ only featured items, while new Books and permission-filtered Pages views are
 available from the top navigation.
 - Files: `app/static/style.css`, `app/templates/base.html`,
   `app/templates/books.html`, `app/templates/pages.html`,
-  `app/templates/tree.html`, `app/web.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 18:27 UTC — Codex
-Replaced text-based home-feature actions with visible star toggles that retain
-their selected state and return the user to the current book or library view.
-- Files: `app/static/style.css`, `app/templates/book.html`,
   `app/templates/tree.html`, `app/web.py`, `tests/test_web.py`, `LOG.md`
