@@ -19,7 +19,6 @@
   {% if can_write %}<label id="draft-toggle" class="draft-toggle" hidden><input form="inline-edit-form" type="checkbox" name="draft" {% if edit_form.draft %}checked{% endif %}> Draft</label>{% endif %}
 </div>
 {% if can_write %}
-  <form method="post" action="/pages/{{ current_path }}/visibility"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label><input name="public" type="checkbox" {% if edit_form.public %}checked{% endif %}> Public</label><button type="submit">Save visibility</button></form>
 <section id="inline-editor" hidden>
   <form id="inline-edit-form" class="editor-form" method="post" action="/pages/{{ current_path }}/edit">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

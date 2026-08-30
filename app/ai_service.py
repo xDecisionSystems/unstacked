@@ -225,11 +225,6 @@ class AIContentService:
             authorization.require_write(path), title, authorization.user
         )
 
-    def set_page_public(self, authorization: AuthorizationContext, path: str, public: bool) -> str:
-        return self.content.set_page_public(
-            authorization.require_write(path), public, authorization.user
-        )
-
     def delete_page(self, authorization: AuthorizationContext, path: str) -> str:
         return self.content.delete_page(
             authorization.require_ungranted_subtree(path), authorization.user

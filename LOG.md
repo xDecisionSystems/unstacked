@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 04:15 UTC — Codex
+Moved book privacy controls into the library cards and made pages inherit both
+visibility and permissions from their parent chapter or book.
+- Files: `app/acl.py`, `app/admin_api.py`, `app/ai_service.py`,
+  `app/content.py`, `app/web.py`, `app/templates/book.html`,
+  `app/templates/page.html`, `app/templates/tree.html`,
+  `app/static/style.css`, `tests/test_acl.py`, `tests/test_admin_api.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 03:09 UTC — Codex
 Replaced visibility checkboxes with recursive Make Public and Make Private
 actions, and re-anchored tag and new-page popovers beneath their controls.
@@ -95,12 +104,3 @@ new Figma-style action treatment.
 ## 2026-08-29 22:07 UTC — Codex
 Wrapped the book-tag aggregation for the project linting standard.
 - Files: `app/web.py`, `LOG.md`
-
-## 2026-08-29 22:06 UTC — Codex
-Implemented the Figma knowledge-workspace visual system across login, books,
-chapters, pages, and administration, while retaining the existing Markdown,
-Git, and ACL-backed behavior. Book filtering uses tags from readable pages.
-- Files: `app/web.py`, `app/templates/base.html`,
-  `app/templates/tree.html`, `app/templates/book.html`,
-  `app/templates/page.html`, `app/templates/login.html`,
-  `app/static/style.css`, `LOG.md`

@@ -746,11 +746,11 @@ def test_audit_log_never_carries_a_content_body(app_env, client, content, caplog
     with caplog.at_level(logging.INFO, logger="unstacked.audit"):
         client.post(
             "/api/admin/permissions",
-            json={"group_id": group_id, "path_prefix": "handbook/policies/leave.md"},
+            json={"group_id": group_id, "path_prefix": "handbook/policies"},
             headers=bearer(token),
         )
     message = [record for record in caplog.records if record.name == "unstacked.audit"][-1]
-    assert "path_prefix=handbook/policies/leave.md" in message.getMessage()
+    assert "path_prefix=handbook/policies" in message.getMessage()
     assert "# Leave" not in caplog.text
 
 

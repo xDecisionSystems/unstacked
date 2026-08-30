@@ -732,7 +732,7 @@ def create_permission(
     request: Request,
     actor: AdminActor,
 ) -> PermissionResponse:
-    """Grant a group read/write on one book, chapter or page.
+    """Grant a group read/write on one book or chapter.
 
     The target has to exist now.  A grant on a path that has never existed is
     almost always a typo, and there is nothing else in the system that would
@@ -757,6 +757,11 @@ def create_permission(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "No book, chapter, or page exists at that path prefix",
+        )
+    if kind == "page":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Pages inherit permissions from their parent chapter or book",
         )
     with Session(request.app.state.engine) as session:
         _require_group(session, payload.group_id)

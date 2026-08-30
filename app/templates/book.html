@@ -5,7 +5,6 @@
   <div><p class="eyebrow">BOOK</p><h1>{{ book.title }}</h1><p>{{ book.page_count }} pages across {{ book.chapters|length }} chapters.</p></div>
   {% if book.can_write %}
   <details class="container-tags"><summary>Tags{% if book.tags %} · {{ book.tags|join(', ') }}{% endif %}</summary><form method="post" action="/containers/{{ book.slug }}/tags"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Book tags<input name="tags" value="{{ book.tags|join(', ') }}" placeholder="Policy, handbook"></label><button type="submit">Save tags</button></form></details>
-  <form class="visibility-actions" method="post" action="/containers/{{ book.slug }}/visibility"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button name="public" value="on">Make Public</button><button name="public" value="off" class="quiet-action">Make Private</button></form>
   <details class="new-book-popover">
     <summary class="add-content-button" title="Add a new chapter" aria-label="Add a new chapter">+ Add chapter</summary>
     <form method="post" action="/manage/chapter" class="new-book-form">

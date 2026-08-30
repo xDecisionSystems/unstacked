@@ -111,7 +111,7 @@ def test_successful_login_reaches_the_tree(client):
 
     tree = client.get("/tree")
     assert tree.status_code == 200
-    assert "Admin Agent" in tree.text
+    assert 'aria-label="Settings"' in tree.text
 
 
 def test_failed_login_shows_an_inline_error_without_a_redirect(client):
@@ -409,7 +409,7 @@ def test_the_topbar_has_no_manage_content_link(client):
     _login(client, "admin")
     page = client.get("/tree")
     assert "Manage content" not in page.text
-    assert 'href="/admin"' in page.text
+    assert 'href="/settings"' in page.text
 
 
 def test_creating_a_page_quick_redirects_to_the_book_page_with_its_new_card(
@@ -534,7 +534,7 @@ def test_web_routes_require_a_session(client):
     """The bare cookie dependency, not just the normal one, still gates access."""
 
     assert client.get("/tree", follow_redirects=False).status_code == 401
-    assert client.get("/pages/alice-book/secret", follow_redirects=False).status_code == 401
+    assert client.get("/pages/alice-book/secret", follow_redirects=False).status_code == 404
 
 
 # --------------------------------------------------------------------------
@@ -727,7 +727,7 @@ def test_public_page_and_book_are_available_without_a_session(app_env, client):
     repository.create_page(
         "public-handbook", "Welcome", "welcome", "# Welcome", [], False, admin
     )
-    repository.set_page_public("public-handbook/welcome.md", True, admin)
+    repository.set_subtree_public("public-handbook", True, admin)
 
     client.cookies.clear()
     assert client.get("/pages/public-handbook/welcome").status_code == 200

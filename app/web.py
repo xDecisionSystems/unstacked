@@ -158,8 +158,7 @@ def _public_page(content, target: str) -> bool:
         return False
     parts = target.removesuffix(".md").split("/")
     return not metadata.get("draft") and (
-        bool(metadata.get("public"))
-        or _container_public(content.docs, parts[0])
+        _container_public(content.docs, parts[0])
         or (len(parts) == 3 and _container_public(content.docs, parts[0], parts[1]))
     )
 
@@ -461,11 +460,25 @@ def book_view(
         if not pages and not _container_public(content.docs, book_slug):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
         context = _public_context(request)
+        direct_pages = [page for page in pages if page["path"].count("/") == 1]
+        chapters: dict[str, list[dict[str, object]]] = {}
+        for page in pages:
+            parts = page["path"].split("/")
+            if len(parts) == 3:
+                chapters.setdefault(parts[1], []).append(page)
         context["book"] = {
             "slug": book_slug,
             "title": _container_title(content.docs, book_slug),
-            "pages": [page for page in pages if page["path"].count("/") == 1],
-            "chapters": [],
+            "pages": direct_pages,
+            "chapters": [
+                {
+                    "slug": slug,
+                    "title": _container_title(content.docs, book_slug, slug),
+                    "pages": chapter_pages,
+                    "can_write": False,
+                }
+                for slug, chapter_pages in chapters.items()
+            ],
             "page_count": len(pages),
             "tags": [],
             "can_write": False,
@@ -1047,23 +1060,6 @@ async def set_container_public_submit(
             _authorization(session, user), path=container_path, public=form.get("public") == "on"
         )
     return RedirectResponse(f"/books/{container_path.split('/')[0]}", status_code=303)
-
-
-@router.post(
-    "/pages/{page_path:path}/visibility",
-    include_in_schema=False,
-    dependencies=[Depends(require_csrf)],
-)
-async def set_page_public_submit(
-    request: Request, page_path: str, user: Annotated[User, Depends(require_normal_web_user)]
-) -> Response:
-    form = await _read_form(request)
-    target = page_path if page_path.endswith(".md") else f"{page_path}.md"
-    with Session(request.app.state.engine) as session:
-        request.app.state.ai_service.set_page_public(
-            _authorization(session, user), path=target, public=form.get("public") == "on"
-        )
-    return RedirectResponse(f"/pages/{target.removesuffix('.md')}", status_code=303)
 
 
 @router.post("/manage/page", include_in_schema=False, dependencies=[Depends(require_csrf)])

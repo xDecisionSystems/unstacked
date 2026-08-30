@@ -90,7 +90,7 @@ def test_more_specific_deny_overrides_inherited_allow(app_env):
     assert not denied.can_read
 
 
-def test_equal_specificity_deny_wins_across_groups(app_env):
+def test_page_permissions_are_ignored_in_favor_of_the_parent_chapter(app_env):
     app, *_ = app_env
     with Session(app.state.engine) as session:
         user = _make_user(session, "conflict@example.com")
@@ -98,10 +98,10 @@ def test_equal_specificity_deny_wins_across_groups(app_env):
         _grant(session, user, "book/chapter", read=False, write=False, group="deny-group")
         _grant(session, user, "book/chapter/ok.md", read=True, write=True, group="allow-group")
         denied = resolve_access(session, user, "book/chapter/other.md")
-        allowed = resolve_access(session, user, "book/chapter/ok.md")
+        inherited = resolve_access(session, user, "book/chapter/ok.md")
     assert not denied.can_read
-    assert allowed.can_read
-    assert allowed.can_write
+    assert not inherited.can_read
+    assert not inherited.can_write
 
 
 def test_sibling_prefix_is_not_confused_with_a_longer_name(app_env):
@@ -143,15 +143,15 @@ def test_ancestor_container_is_visible_only_for_a_readable_descendant(app_env):
     app, *_ = app_env
     with Session(app.state.engine) as session:
         user = _make_user(session, "container@example.com")
-        _grant(session, user, "book/chapter/page.md", read=True, write=False, group="reader")
+        _grant(session, user, "book/chapter", read=True, write=False, group="reader")
         policy = load_policy(session, user)
 
-    # Reaching the readable page requires both navigation containers, but
-    # neither container's corresponding page body became readable.
+    # Reaching a readable chapter requires its book navigation container, but
+    # the book's own pages do not become readable.
     assert policy.can_view_container("book")
     assert policy.can_view_container("book/chapter")
     assert not policy.decide("book/index.md").can_read
-    assert not policy.decide("book/chapter/index.md").can_read
+    assert policy.decide("book/chapter/index.md").can_read
     assert not policy.can_view_container("other-book")
 
 

@@ -89,10 +89,15 @@ class AccessPolicy:
                 matching_rules=(),
                 decisive_rules=(),
             )
+        # Pages are files, but they are never permission boundaries.  A page
+        # always inherits the access rules of its containing chapter (or its
+        # book when it is a top-level page), so a stale or accidental
+        # page-specific grant cannot make one page differ from its siblings.
+        permission_path = _page_parent_path(path)
         matching = tuple(
             rule
             for rule in self.rules
-            if path == rule.prefix or path.startswith(f"{rule.prefix}/")
+            if permission_path == rule.prefix or permission_path.startswith(f"{rule.prefix}/")
         )
         if not matching:
             return AccessExplanation(
@@ -146,6 +151,19 @@ class AccessPolicy:
             and self.decide(rule.prefix).can_read
             for rule in self.rules
         )
+
+
+def _page_parent_path(path: str) -> str:
+    """Return the container whose permissions govern a content page."""
+
+    parts = path.split("/")
+    if not path.endswith(".md"):
+        return path
+    if len(parts) == 2:
+        return parts[0]
+    if len(parts) == 3:
+        return "/".join(parts[:2])
+    return path
 
 
 def load_policy(session: Session, user: User) -> AccessPolicy:

@@ -839,31 +839,6 @@ class ContentRepository:
                 ),
             )
 
-    def set_page_public(self, relative: str, public: bool, actor: User) -> str:
-        """Persist anonymous-read visibility in page front matter."""
-
-        with self.git.write_lock():
-            relative = normalize_relative_path(relative)
-            original = ConfinedTree(self.docs).read_text(
-                relative, max_bytes=self.settings.max_page_bytes
-            )
-            document = parse_page(original, default_title=Path(relative).stem)
-            metadata = dict(document.metadata)
-            metadata["public"] = public
-            serialized = serialize_page(document, metadata=metadata)
-            tree = ConfinedTree(self.docs)
-            try:
-                tree.write_text(relative, serialized, overwrite=True)
-                return self.git.commit_paths(
-                    [f"docs/{relative}"],
-                    name=actor.display_name,
-                    email=actor.email,
-                    message=f"Update page visibility: {relative}",
-                )
-            except Exception:
-                tree.write_text(relative, original, overwrite=True)
-                raise
-
     def delete_page(self, relative: str, actor: User) -> str:
         """Remove a page from the tree; Git keeps it recoverable.
 
