@@ -236,83 +236,61 @@ def test_dashboard_empty_state_when_no_books_are_visible(app_env, client):
 
 
 # --------------------------------------------------------------------------
-# Book overview page (chapter rows of page cards)
+# Book overview page (one grid of page cards)
 # --------------------------------------------------------------------------
 
 
 @pytest.fixture
-def book_with_chapters(app_env):
-    """A book with a loose page, a chapter with pages, and an empty chapter."""
+def book_with_pages(app_env):
+    """A book whose pages all live directly in the book."""
 
     app, _settings, admin, _token = app_env
     repository = app.state.content
     repository.create_book("Handbook", "handbook", admin)
     repository.create_page("handbook", "Overview", "overview", "# Overview", [], False, admin)
-    repository.create_chapter("handbook", "Policies", "policies", admin)
-    repository.create_page("handbook/policies", "Leave", "leave", "# Leave", [], False, admin)
-    repository.create_page("handbook/policies", "Travel", "travel", "# Travel", [], True, admin)
-    repository.create_chapter("handbook", "Empty Chapter", "empty-chapter", admin)
+    repository.create_page("handbook", "Leave", "leave", "# Leave", [], False, admin)
+    repository.create_page("handbook", "Travel", "travel", "# Travel", [], True, admin)
     return repository
 
 
-def test_book_page_renders_a_row_per_chapter_with_page_cards(client, book_with_chapters):
+def test_book_page_renders_one_grid_of_page_cards(client, book_with_pages):
     _login(client, "admin")
     page = client.get("/books/handbook")
     assert page.status_code == 200
-    assert "Policies" in page.text
-    assert "Empty Chapter" in page.text
-    assert 'href="/pages/handbook/policies/leave"' in page.text
-    assert 'href="/pages/handbook/policies/travel"' in page.text
-    assert "No pages yet" in page.text  # the empty chapter's row
+    assert 'href="/pages/handbook/leave"' in page.text
+    assert 'href="/pages/handbook/travel"' in page.text
+    assert 'class="page-cards book-page-grid"' in page.text
+    assert "chapter-row" not in page.text
 
 
-def test_book_page_shows_loose_pages_under_a_pages_row(client, book_with_chapters):
+def test_book_page_shows_direct_pages(client, book_with_pages):
     _login(client, "admin")
     page = client.get("/books/handbook")
     assert 'href="/pages/handbook/overview"' in page.text
 
 
-def test_book_page_carries_page_drag_reorder_markup(client, book_with_chapters):
+def test_book_page_carries_page_drag_reorder_markup(client, book_with_pages):
     """Page cards are draggable with a stable key and load the shared script."""
 
     _login(client, "admin")
     page = client.get("/books/handbook")
     assert '<script src="/static/reorder.js"></script>' in page.text
-    assert "initDragReorder(document.querySelector('#chapter-rows')" not in page.text
+    assert "initDragReorder(document.querySelector('#book-page-cards')" in page.text
     assert 'class="drag-handle"' not in page.text
-    assert '<section class="chapter-row">' in page.text
-    assert 'class="page-card" draggable="true" data-key="handbook/policies/leave"' in page.text
-    assert 'data-parent="handbook/policies"' in page.text
-    assert 'data-parent="handbook"' in page.text  # the loose-pages row
-    assert 'aria-label="Scroll pages left"' in page.text
-    assert 'aria-label="Scroll pages right"' in page.text
-    assert 'class="page-scroller" id="policies-pages"' in page.text
-    assert 'data-scroll-target="policies-pages-list"' in page.text
+    assert 'class="page-card" draggable="true" data-key="handbook/leave"' in page.text
+    assert 'data-parent="handbook"' in page.text
+    assert 'aria-label="Scroll pages left"' not in page.text
+    assert 'aria-label="Scroll pages right"' not in page.text
 
 
-def test_book_page_rows_have_a_collapse_toggle(client, book_with_chapters):
+def test_book_page_has_no_chapter_collapse_controls(client, book_with_pages):
     _login(client, "admin")
     page = client.get("/books/handbook")
-    assert 'aria-controls="pages-row"' in page.text
-    assert 'aria-controls="policies-pages"' in page.text
-    assert 'aria-controls="empty-chapter-pages"' in page.text
-    # Every aria-controls target must actually exist, whether that's the
-    # page list or the "No pages yet" placeholder.
-    assert 'id="policies-pages"' in page.text
-    assert 'id="empty-chapter-pages"' in page.text
+    assert 'class="row-toggle"' not in page.text
+    assert 'id="book-page-cards"' in page.text
 
 
-def test_chapter_collapse_toggle_precedes_its_title(client, book_with_chapters):
-    """The small down/right triangle belongs directly before the chapter name."""
-
-    _login(client, "admin")
-    page = client.get("/books/handbook")
-    toggle = page.text.index('aria-controls="policies-pages"')
-    title = page.text.index('<h2 class="chapter-row-title">Policies</h2>')
-    assert toggle < title
-
-
-def test_creation_popovers_have_no_slug_field(client, book_with_chapters):
+def test_creation_popovers_have_no_slug_field(client, book_with_pages):
     """Slug is always derived from the title now -- see make_slug."""
 
     _login(client, "admin")
@@ -322,7 +300,7 @@ def test_creation_popovers_have_no_slug_field(client, book_with_chapters):
     assert 'name="slug"' not in book_page.text
 
 
-def test_book_page_marks_drafts(client, book_with_chapters):
+def test_book_page_marks_drafts(client, book_with_pages):
     _login(client, "admin")
     page = client.get("/books/handbook")
     assert "Draft" in page.text
@@ -341,68 +319,28 @@ def test_book_page_404s_rather_than_leaking_an_inaccessible_book(app_env, client
     assert client.get("/books/alice-book").status_code == 404
 
 
-def test_the_add_chapter_button_follows_write_access_not_admin_status(
-    app_env, client, book_with_chapters
-):
-    """Chapter creation only needs a write grant on the book (see
-    AIContentService.create_chapter), same as the page button one level down
-    -- a non-admin editor with an actual write grant must still see it."""
+def test_add_page_control_follows_write_access(app_env, client, book_with_pages):
+    """A writer can add pages directly to a book; a reader cannot."""
 
     app, _settings, _admin, _token = app_env
 
     _login(client, "admin")
     admin_page = client.get("/books/handbook")
-    assert "new-book-popover" in admin_page.text
+    assert 'name="parent" value="handbook"' in admin_page.text
     client.cookies.clear()
 
     reader = _make_user(app, "handbook-reader")
     _grant(app, reader.id, "handbook", group_name="handbook-reader-group")
     _login(client, "handbook-reader")
     reader_page = client.get("/books/handbook")
-    assert "new-book-popover" not in reader_page.text
+    assert 'name="parent" value="handbook"' not in reader_page.text
     client.cookies.clear()
 
     editor = _make_user(app, "handbook-editor")
     _grant(app, editor.id, "handbook", group_name="handbook-editor-group", can_write=True)
     _login(client, "handbook-editor")
     editor_page = client.get("/books/handbook")
-    assert "new-book-popover" in editor_page.text
-
-
-def test_creating_a_chapter_redirects_back_to_the_book_page(app_env, client):
-    app, _settings, admin, _token = app_env
-    app.state.content.create_book("Handbook", "handbook", admin)
-
-    _login(client, "admin")
-    page = client.get("/books/handbook")
-    csrf_token = _csrf_from(page.text)
-    response = client.post(
-        "/manage/chapter",
-        data={"csrf_token": csrf_token, "book_slug": "handbook", "title": "Policies"},
-        follow_redirects=False,
-    )
-    assert response.status_code == 303
-    assert response.headers["location"] == "/books/handbook"
-
-
-def test_a_non_admin_with_a_write_grant_can_actually_create_a_chapter(app_env, client):
-    """The button being visible has to match what the backend actually allows."""
-
-    app, _settings, admin, _token = app_env
-    app.state.content.create_book("Handbook", "handbook", admin)
-    editor = _make_user(app, "handbook-editor")
-    _grant(app, editor.id, "handbook", group_name="handbook-editor-group", can_write=True)
-
-    _login(client, "handbook-editor")
-    page = client.get("/books/handbook")
-    csrf_token = _csrf_from(page.text)
-    response = client.post(
-        "/manage/chapter",
-        data={"csrf_token": csrf_token, "book_slug": "handbook", "title": "Policies"},
-        follow_redirects=False,
-    )
-    assert response.status_code == 303
-    assert response.headers["location"] == "/books/handbook"
+    assert 'name="parent" value="handbook"' in editor_page.text
 
 
 def test_the_topbar_has_no_manage_content_link(client):
@@ -413,33 +351,32 @@ def test_the_topbar_has_no_manage_content_link(client):
 
 
 def test_creating_a_page_quick_redirects_to_the_book_page_with_its_new_card(
-    client, book_with_chapters
+    client, book_with_pages
 ):
     """The quick-create popover makes a blank page (no markdown editor step)
-    and lands back where its card is now visible, matching the book/chapter
-    creation flow -- not the full editor's own /pages/new, which is a
-    separate route reserved for actually writing content."""
+    and lands back where its card is now visible, rather than the full editor's
+    separate page-writing route."""
 
     _login(client, "admin")
     page = client.get("/books/handbook")
     csrf_token = _csrf_from(page.text)
     response = client.post(
         "/manage/page",
-        data={"csrf_token": csrf_token, "parent": "handbook/policies", "title": "Holidays"},
+        data={"csrf_token": csrf_token, "parent": "handbook", "title": "Holidays"},
         follow_redirects=False,
     )
     assert response.status_code == 303
     assert response.headers["location"] == "/books/handbook"
 
     book_page = client.get("/books/handbook")
-    assert 'href="/pages/handbook/policies/holidays"' in book_page.text
+    assert 'href="/pages/handbook/holidays"' in book_page.text
 
 
-def test_the_add_page_button_follows_write_access_not_admin_status(
-    app_env, client, book_with_chapters
+def test_add_page_form_targets_the_current_book(
+    app_env, client, book_with_pages
 ):
     """Page creation only needs a write grant (see AIContentService.create_page),
-    unlike book/chapter creation which is admin-only -- the button must track
+    unlike book creation which is admin-only -- the button must track
     that, not just is_admin, or a non-admin editor with a real write grant
     would never see it."""
 
@@ -447,21 +384,21 @@ def test_the_add_page_button_follows_write_access_not_admin_status(
     read_only = _make_user(app, "read-only")
     _grant(app, read_only.id, "handbook", group_name="read-only-group")
     editor = _make_user(app, "editor")
-    _grant(app, editor.id, "handbook/policies", group_name="editor-group", can_write=True)
+    _grant(app, editor.id, "handbook", group_name="editor-group", can_write=True)
 
     _login(client, "admin")
     admin_page = client.get("/books/handbook")
-    assert 'name="parent" value="handbook/policies"' in admin_page.text
+    assert 'name="parent" value="handbook"' in admin_page.text
     client.cookies.clear()
 
     _login(client, "read-only")
     reader_page = client.get("/books/handbook")
-    assert 'name="parent" value="handbook/policies"' not in reader_page.text
+    assert 'name="parent" value="handbook"' not in reader_page.text
     client.cookies.clear()
 
     _login(client, "editor")
     editor_page = client.get("/books/handbook")
-    assert 'name="parent" value="handbook/policies"' in editor_page.text
+    assert 'name="parent" value="handbook"' in editor_page.text
 
 
 def test_book_page_empty_state_for_a_book_with_nothing_in_it(app_env, client):
@@ -697,7 +634,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert "GitHub repository" in response.text
     assert "automatically synchronized to its <code>main</code> branch" in response.text
     assert 'data-admin-panel="groups"' in response.text
-    assert 'data-admin-panel="chapter-permissions"' in response.text
+    assert 'data-admin-panel="book-permissions"' in response.text
     assert "Groups &amp; Assignments" in response.text
     assert 'data-admin-section="groups"' in response.text
     assert 'data-admin-section="users"' in response.text
@@ -712,10 +649,10 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
         "primary Admin account cannot be deleted",
         "data-group-delete",
         "data-group-membership",
-        "data-chapter-permission",
-        "data-chapter-select-all",
-        "data-chapter-default",
-        "data-chapter-level",
+        "data-book-permission",
+        "data-book-select-all",
+        "data-book-default",
+        "data-book-level",
         "data-permission-delete",
     ):
         assert control in response.text

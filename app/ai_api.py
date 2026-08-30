@@ -588,32 +588,6 @@ def create_book(
         raise _content_error(exc) from exc
 
 
-@router.post("/ai/books/{book_slug}/chapters", response_model=CreatedResponse, status_code=201)
-def create_chapter(
-    book_slug: str,
-    payload: ContainerCreate,
-    request: Request,
-    user: Annotated[User, Depends(get_rate_limited_ai_user)],
-):
-    try:
-        with Session(request.app.state.engine) as session:
-            return _created(
-                request.app.state.ai_service.create_chapter(
-                    _authorization(request, session, user),
-                    book_slug=make_slug(book_slug, book_slug),
-                    title=payload.title,
-                    slug=payload.slug,
-                )
-            )
-    except (AccessDenied, ContentError, UnsafePath) as exc:
-        # Unlike book creation (a global, admin-only capability), a chapter's
-        # authorization is now write access to a specific book -- the same
-        # indistinguishable-from-missing shape create_page already uses, so a
-        # caller who can read but not write a book cannot use the denial to
-        # confirm it exists.
-        raise _content_error(exc) from exc
-
-
 def _create_page(parent: str, payload: PageCreate, request: Request, user: User):
     try:
         parent = normalize_relative_path(parent)
@@ -642,25 +616,6 @@ def create_book_page(
 ):
     try:
         parent = make_slug(book_slug, book_slug)
-    except UnsafePath as exc:
-        raise _content_error(exc) from exc
-    return _create_page(parent, payload, request, user)
-
-
-@router.post(
-    "/ai/books/{book_slug}/chapters/{chapter_slug}/pages",
-    response_model=CreatedResponse,
-    status_code=201,
-)
-def create_chapter_page(
-    book_slug: str,
-    chapter_slug: str,
-    payload: PageCreate,
-    request: Request,
-    user: Annotated[User, Depends(get_rate_limited_ai_user)],
-):
-    try:
-        parent = f"{make_slug(book_slug, book_slug)}/{make_slug(chapter_slug, chapter_slug)}"
     except UnsafePath as exc:
         raise _content_error(exc) from exc
     return _create_page(parent, payload, request, user)

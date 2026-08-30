@@ -45,7 +45,7 @@ from app.content import ContentRepository
 from app.default_groups import (
     ADMIN_GROUP_NAME,
     PUBLIC_GROUP_NAME,
-    copy_public_chapter_defaults,
+    copy_public_book_defaults,
     sync_admin_membership,
 )
 from app.git_backend import GitSyncError, scrub_git_output
@@ -143,8 +143,8 @@ class PermissionUpdate(BaseModel):
     can_write: bool = False
 
 
-class ChapterResponse(BaseModel):
-    """A chapter path available for assignment in the Settings matrix."""
+class BookResponse(BaseModel):
+    """A book path available for assignment in the Settings matrix."""
 
     path: str
 
@@ -375,17 +375,13 @@ def _target_kind(content: ContentRepository, prefix: str) -> str | None:
     if prefix.split("/")[0] in RESERVED_ROOT_NAMES:
         return None
     depth = path_depth(prefix)
-    if depth > 3:
+    if depth != 1:
         return None
     try:
         target = safe_join(content.docs, prefix)
     except UnsafePath:
         return None
-    if prefix.endswith(".md"):
-        return "page" if depth in {2, 3} and target.is_file() else None
-    if not target.is_dir():
-        return None
-    return "book" if depth == 1 else "chapter"
+    return "book" if target.is_dir() and not prefix.endswith(".md") else None
 
 
 def _normalize_grant_prefix(raw: str) -> str:
@@ -652,7 +648,7 @@ def create_group(payload: GroupCreate, request: Request, actor: AdminActor) -> G
         session.add(group)
         try:
             session.flush()
-            copy_public_chapter_defaults(session, group)
+            copy_public_book_defaults(session, group)
             session.commit()
         except IntegrityError as exc:
             session.rollback()
@@ -764,7 +760,7 @@ def create_permission(
     request: Request,
     actor: AdminActor,
 ) -> PermissionResponse:
-    """Grant a group read/write on one book or chapter.
+    """Grant a group read/write on one book.
 
     The target has to exist now.  A grant on a path that has never existed is
     almost always a typo, and there is nothing else in the system that would
@@ -788,12 +784,7 @@ def create_permission(
     if kind is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "No book, chapter, or page exists at that path prefix",
-        )
-    if kind == "page":
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Pages inherit permissions from their parent chapter or book",
+            "No book exists at that path prefix",
         )
     with Session(request.app.state.engine) as session:
         _require_group(session, payload.group_id)
@@ -883,15 +874,14 @@ def list_permissions(
         return [_permission_response(row) for row in session.exec(statement).all()]
 
 
-@router.get("/chapters", response_model=list[ChapterResponse])
-def list_chapters(request: Request, actor: AdminActor) -> list[ChapterResponse]:
-    """List every chapter an administrator can assign a group grant to."""
+@router.get("/books", response_model=list[BookResponse])
+def list_books(request: Request, actor: AdminActor) -> list[BookResponse]:
+    """List every book an administrator can assign a group grant to."""
 
     with Session(request.app.state.engine) as session:
         return [
-            ChapterResponse(path=f"{book['slug']}/{chapter['slug']}")
+            BookResponse(path=book["slug"])
             for book in _content(request).tree(session, actor)
-            for chapter in book["chapters"]
         ]
 
 
@@ -912,6 +902,9 @@ def list_orphaned_permissions(
 
     content = _content(request)
     with Session(request.app.state.engine) as session:
+        admin_group = session.exec(
+            select(Group).where(Group.name == ADMIN_GROUP_NAME)
+        ).one_or_none()
         rows = session.exec(select(Permission).order_by(Permission.id)).all()
         return [
             OrphanedPermissionResponse(
@@ -919,6 +912,7 @@ def list_orphaned_permissions(
                 reason=reason,
             )
             for row, reason in ((row, _orphan_reason(content, row)) for row in rows)
+            if admin_group is None or row.group_id != admin_group.id
             if reason is not None
         ]
 

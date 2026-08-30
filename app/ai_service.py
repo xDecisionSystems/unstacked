@@ -77,27 +77,13 @@ class AIContentService:
     ) -> CreatedContent:
         authorization.require_admin()
         target = make_slug(title, slug)
+        # Let the content layer report an ordinary duplicate before checking
+        # stale grants. Creating a book also installs the built-in Admin grant,
+        # so checking it first would turn a duplicate-book 409 into a 403.
+        if (self.content.docs / target).exists():
+            return self.content.create_book(title, slug, authorization.user)
         authorization.reject_orphaned_exact_grant(target)
         return self.content.create_book(title, slug, authorization.user)
-
-    def create_chapter(
-        self,
-        authorization: AuthorizationContext,
-        *,
-        book_slug: str,
-        title: str,
-        slug: str | None,
-    ) -> CreatedContent:
-        """A chapter is scoped under one book, unlike a book itself: a write
-        grant on that book is enough, the same requirement page creation
-        already has -- there is no reason a book-level editor needs an admin
-        to structure their own book into chapters."""
-
-        book_slug = make_slug(book_slug, book_slug)
-        authorization.require_write(book_slug)
-        target = f"{book_slug}/{make_slug(title, slug)}"
-        authorization.reject_orphaned_exact_grant(target)
-        return self.content.create_chapter(book_slug, title, slug, authorization.user)
 
     def create_page(
         self,
@@ -234,14 +220,6 @@ class AIContentService:
         path = authorization.require_ungranted_subtree(make_slug(slug, slug))
         return self.content.delete_book(path, authorization.user)
 
-    def delete_chapter(
-        self, authorization: AuthorizationContext, book_slug: str, chapter_slug: str
-    ) -> str:
-        path = authorization.require_ungranted_subtree(
-            f"{make_slug(book_slug, book_slug)}/{make_slug(chapter_slug, chapter_slug)}"
-        )
-        return self.content.delete_chapter(*path.split("/"), authorization.user)
-
     def move_page(
         self,
         authorization: AuthorizationContext,
@@ -266,13 +244,3 @@ class AIContentService:
         authorization.require_ungranted_subtree(source)
         authorization.reject_orphaned_exact_grant(make_slug(source, new_slug))
         return self.content.rename_book(source, new_slug, authorization.user)
-
-    def rename_chapter(
-        self, authorization: AuthorizationContext, book_slug: str, slug: str, new_slug: str
-    ) -> MovedContent:
-        authorization.require_admin()
-        source = f"{make_slug(book_slug, book_slug)}/{make_slug(slug, slug)}"
-        authorization.require_ungranted_subtree(source)
-        target = f"{source.rsplit('/', 1)[0]}/{make_slug(slug, new_slug)}"
-        authorization.reject_orphaned_exact_grant(target)
-        return self.content.rename_chapter(book_slug, slug, new_slug, authorization.user)

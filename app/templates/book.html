@@ -2,105 +2,40 @@
 {% block title %}{{ book.title }} · Unstacked{% endblock %}
 {% block content %}
 <div class="screen-heading dashboard-header">
-  <div><p class="eyebrow">BOOK</p><h1>{{ book.title }}</h1><p>{{ book.page_count }} pages across {{ book.chapters|length }} chapters.</p></div>
+  <div><p class="eyebrow">BOOK</p><h1>{{ book.title }}</h1><p>{{ book.page_count }} page{{ '' if book.page_count == 1 else 's' }}.</p></div>
   {% if book.can_write %}
   <details class="container-tags"><summary>Tags{% if book.tags %} · {{ book.tags|join(', ') }}{% endif %}</summary><form method="post" action="/containers/{{ book.slug }}/tags"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Book tags<input name="tags" value="{{ book.tags|join(', ') }}" placeholder="Policy, handbook"></label><button type="submit">Save tags</button></form></details>
   <details class="new-book-popover">
-    <summary class="add-content-button" title="Add a new chapter" aria-label="Add a new chapter">+ Add chapter</summary>
-    <form method="post" action="/manage/chapter" class="new-book-form">
+    <summary class="add-content-button" title="Add a new page" aria-label="Add a new page">+ Add page</summary>
+    <form method="post" action="/manage/page" class="new-book-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="book_slug" value="{{ book.slug }}">
+      <input type="hidden" name="parent" value="{{ book.slug }}">
       <label>Title<input name="title" required></label>
-      <button type="submit">Create chapter</button>
+      <button type="submit">Create page</button>
     </form>
   </details>
   {% endif %}
 </div>
-{% macro row_toggle(target_id) %}
-<button type="button" class="row-toggle" aria-expanded="true" aria-controls="{{ target_id }}" title="Collapse" aria-label="Collapse">&#9660;</button>
-{% endmacro %}
-{% macro page_cards(pages, parent, target_id) %}
-<div class="page-scroller" id="{{ target_id }}">
-  <button type="button" class="page-scroll page-scroll-left" data-scroll-target="{{ target_id }}-list" data-scroll-direction="-1" aria-label="Scroll pages left">&#9664;</button>
-  <ul class="page-cards" id="{{ target_id }}-list" data-parent="{{ parent }}">
-    {% for page in pages %}
-    <li class="page-card" draggable="true" data-key="{{ page.path }}" data-page-title="{{ page.label|lower }}">
-      <a draggable="false" href="/pages/{{ page.path }}"><span class="page-card-type">PAGE</span><strong>{{ page.label }}</strong>{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}<span class="page-card-open">Open →</span></a>
-    </li>
-    {% endfor %}
-  </ul>
-  <button type="button" class="page-scroll page-scroll-right" data-scroll-target="{{ target_id }}-list" data-scroll-direction="1" aria-label="Scroll pages right">&#9654;</button>
-</div>
-{% endmacro %}
 <section class="library-filters book-page-filters" aria-label="Filter pages"><label class="visually-hidden" for="page-filter">Search pages</label><input id="page-filter" type="search" placeholder="⌕  Filter pages by title…"></section>
 {% if book.pages %}
-<section class="chapter-row">
-  <div class="chapter-row-header">
-    <h2 class="chapter-row-title">Pages</h2>
-    {{ row_toggle('pages-row') }}
-  </div>
-  {{ page_cards(book.pages, book.slug, 'pages-row') }}
-</section>
-{% endif %}
-<div id="chapter-rows">
-{% for chapter in book.chapters %}
-<section class="chapter-row">
-  <div class="chapter-row-header">
-    {{ row_toggle(chapter.slug ~ '-pages') }}
-    <h2 class="chapter-row-title">{{ chapter.title }}</h2>
-    {% if chapter.can_write %}
-    <details class="container-tags"><summary>Tags{% if chapter.tags %} · {{ chapter.tags|join(', ') }}{% endif %}</summary><form method="post" action="/containers/{{ book.slug }}/{{ chapter.slug }}/tags"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Chapter tags<input name="tags" value="{{ chapter.tags|join(', ') }}" placeholder="Policy, onboarding"></label><button type="submit">Save tags</button></form></details>
-    <form class="chapter-visibility-toggle" method="post" action="/containers/{{ book.slug }}/{{ chapter.slug }}/visibility"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button name="public" value="{{ 'off' if chapter.public else 'on' }}" title="{{ 'Make chapter private' if chapter.public else 'Make chapter public' }}" aria-label="{{ 'Make chapter private' if chapter.public else 'Make chapter public' }}">{% if chapter.public %}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>{% else %}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/><path d="M4 4l16 16"/></svg>{% endif %}</button></form>
-    <details class="new-book-popover">
-      <summary class="add-content-button" title="Add a page to {{ chapter.title }}" aria-label="Add a page to {{ chapter.title }}">+ Add page</summary>
-      <form method="post" action="/manage/page" class="new-book-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="parent" value="{{ book.slug }}/{{ chapter.slug }}">
-        <label>Title<input name="title" required></label>
-        <button type="submit">Create page</button>
-      </form>
-    </details>
-    {% endif %}
-  </div>
-  {% if chapter.pages %}
-  {{ page_cards(chapter.pages, book.slug ~ '/' ~ chapter.slug, chapter.slug ~ '-pages') }}
-  {% else %}
-  <p class="empty-state" id="{{ chapter.slug }}-pages">No pages yet.</p>
-  {% endif %}
-</section>
-{% endfor %}
-</div>
-{% if not book.pages and not book.chapters %}
-<p class="empty-state">Nothing here yet.{% if book.can_write %} Use the + button above to add the first chapter.{% endif %}</p>
+<ul class="page-cards book-page-grid" id="book-page-cards" data-parent="{{ book.slug }}">
+  {% for page in book.pages %}
+  <li class="page-card" draggable="true" data-key="{{ page.path }}" data-page-title="{{ page.label|lower }}">
+    <a draggable="false" href="/pages/{{ page.path }}"><span class="page-card-type">PAGE</span><strong>{{ page.label }}</strong>{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}<span class="page-card-open">Open →</span></a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-state">Nothing here yet.{% if book.can_write %} Use the + button above to add the first page.{% endif %}</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}
 <script src="/static/reorder.js"></script>
 <script>
-document.querySelectorAll('.page-cards').forEach(function (list) {
-  initDragReorder(list, {
-    itemSelector: '.page-card',
-    storageKey: 'unstacked.page_order.' + list.dataset.parent,
-    axis: 'x',
-  });
-});
-document.querySelectorAll('.page-scroll').forEach(function (button) {
-  button.addEventListener('click', function () {
-    var list = document.getElementById(button.dataset.scrollTarget);
-    if (!list) return;
-    var direction = Number(button.dataset.scrollDirection);
-    list.scrollBy({ left: direction * Math.max(240, list.clientWidth * 0.75), behavior: 'smooth' });
-  });
-});
-document.querySelectorAll('.row-toggle').forEach(function (button) {
-  button.addEventListener('click', function () {
-    var target = document.getElementById(button.getAttribute('aria-controls'));
-    if (!target) return;
-    var collapsed = target.hidden;
-    target.hidden = !collapsed;
-    button.setAttribute('aria-expanded', String(collapsed));
-    button.innerHTML = collapsed ? '&#9660;' : '&#9654;';
-  });
+initDragReorder(document.querySelector('#book-page-cards'), {
+  itemSelector: '.page-card',
+  storageKey: 'unstacked.page_order.{{ book.slug }}',
+  axis: 'x',
 });
 const pageFilter=document.querySelector('#page-filter');
 pageFilter?.addEventListener('input',()=>document.querySelectorAll('.page-card').forEach(card=>card.hidden=!card.dataset.pageTitle.includes(pageFilter.value.toLowerCase())));

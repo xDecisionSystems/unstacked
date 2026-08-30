@@ -3,7 +3,11 @@ from sqlmodel import Session, select
 from app.auth import hash_password
 from app.config import Settings
 from app.content import ContentRepository
-from app.default_groups import ensure_default_groups, sync_admin_membership
+from app.default_groups import (
+    ensure_default_groups,
+    migrate_chapter_permission_paths,
+    sync_admin_membership,
+)
 from app.models import User, create_db_engine, migrate_schema
 
 
@@ -13,6 +17,7 @@ def main() -> None:
     engine = create_db_engine(settings.db_path)
     content = ContentRepository(settings)
     content.initialize()
+    migrate_chapter_permission_paths(engine, content.migrate_legacy_chapters())
     ensure_default_groups(engine, content.docs)
     with Session(engine) as session:
         existing = session.exec(select(User)).first()

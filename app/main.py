@@ -12,7 +12,7 @@ from app.ai_service import AIContentService
 from app.auth import LoginRateLimiter
 from app.config import Settings
 from app.content import ContentRepository
-from app.default_groups import ensure_default_groups
+from app.default_groups import ensure_default_groups, migrate_chapter_permission_paths
 from app.models import create_db_engine, migrate_schema
 from app.upload_limit import UploadSizeLimitMiddleware
 from app.web import router as web_router
@@ -27,6 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     engine = create_db_engine(settings.db_path)
     content = ContentRepository(settings)
     content.initialize()
+    migrate_chapter_permission_paths(engine, content.migrate_legacy_chapters())
     ensure_default_groups(engine, content.docs)
     content.set_default_groups_engine(engine)
 

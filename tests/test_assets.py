@@ -119,15 +119,11 @@ def _grant(app, settings, *, prefix: str, can_write: bool) -> str:
         return create_api_token(user, settings)
 
 
-def _seed_book(client: TestClient, token: str, *, chapter: bool = False) -> None:
+def _seed_book(client: TestClient, token: str) -> None:
     headers = bearer(token)
     assert client.post(
         "/api/ai/books", json={"title": "Knowledge"}, headers=headers
     ).status_code == 201
-    if chapter:
-        assert client.post(
-            "/api/ai/books/knowledge/chapters", json={"title": "Reference"}, headers=headers
-        ).status_code == 201
 
 
 def _upload(client: TestClient, token: str, name: str, data: bytes, mime: str = "image/png"):
@@ -539,7 +535,7 @@ def test_renaming_a_book_moves_assets_and_rewrites_relative_links(tmp_path):
     app, settings, token = _make_app(tmp_path)
     headers = bearer(token)
     with TestClient(app) as client:
-        _seed_book(client, token, chapter=True)
+        _seed_book(client, token)
         _upload(client, token, "logo.png", png(2, 2))
         assert client.post(
             "/api/ai/books/knowledge/pages",
@@ -547,10 +543,10 @@ def test_renaming_a_book_moves_assets_and_rewrites_relative_links(tmp_path):
             headers=headers,
         ).status_code == 201
         assert client.post(
-            "/api/ai/books/knowledge/chapters/reference/pages",
+            "/api/ai/books/knowledge/pages",
             json={
                 "title": "Details",
-                "markdown": "![Logo](../../assets/knowledge/logo.png)",
+                "markdown": "![Logo](../assets/knowledge/logo.png)",
             },
             headers=headers,
         ).status_code == 201
@@ -706,7 +702,7 @@ def test_an_uploaded_image_survives_a_strict_standalone_mkdocs_build(tmp_path):
 
     app, settings, token = _make_app(tmp_path)
     with TestClient(app) as client:
-        _seed_book(client, token, chapter=True)
+        _seed_book(client, token)
         assert _upload(client, token, "logo.png", png(8, 6)).status_code == 201
         assert client.post(
             "/api/ai/books/knowledge/pages",
@@ -717,10 +713,10 @@ def test_an_uploaded_image_survives_a_strict_standalone_mkdocs_build(tmp_path):
             headers=bearer(token),
         ).status_code == 201
         assert client.post(
-            "/api/ai/books/knowledge/chapters/reference/pages",
+            "/api/ai/books/knowledge/pages",
             json={
                 "title": "Detail",
-                "markdown": "# Detail\n\n![Logo](../../assets/knowledge/logo.png)\n",
+                "markdown": "# Detail\n\n![Logo](../assets/knowledge/logo.png)\n",
             },
             headers=bearer(token),
         ).status_code == 201

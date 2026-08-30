@@ -36,8 +36,7 @@ def content(app_env):
     app, _settings, admin, _token = app_env
     repository = app.state.content
     repository.create_book("Handbook", "handbook", admin)
-    repository.create_chapter("handbook", "Policies", "policies", admin)
-    repository.create_page("handbook/policies", "Leave", "leave", "# Leave", [], False, admin)
+    repository.create_page("handbook", "Leave", "leave", "# Leave", [], False, admin)
     repository.create_book("Archive", "archive", admin)
     repository.create_page("archive", "Old", "old", "# Old", [], False, admin)
     return repository
@@ -128,7 +127,7 @@ def test_grant_immediately_changes_a_second_users_view(app_env, client, content)
     app, settings, _admin, token = app_env
     reader = _make_user(app, "reader@example.com")
     reader_token = create_api_token(reader, settings)
-    page = "handbook/policies/leave.md"
+    page = "handbook/leave.md"
 
     assert client.get("/api/ai/tree", headers=bearer(reader_token)).json()["books"] == []
     with Session(app.state.engine) as session:
@@ -166,35 +165,28 @@ def test_revoking_a_grant_takes_effect_immediately_too(app_env, client, content)
     assert client.get("/api/ai/tree", headers=bearer(reader_token)).json()["books"] == []
 
 
-def test_book_with_no_accessible_chapters_is_hidden(app_env, client, content):
-    """A book-level grant must not reveal a shell after every chapter is denied."""
+def test_book_without_read_grant_is_hidden(app_env, client, content):
+    """A group without a book grant cannot discover that book in the tree."""
 
     app, settings, _admin, token = app_env
     reader = _make_user(app, "reader@example.com")
     reader_token = create_api_token(reader, settings)
-    group_id = _group_with_member(client, token, reader.id)
-    for path, can_read in (("handbook", True), ("handbook/policies", False)):
-        response = client.post(
-            "/api/admin/permissions",
-            json={"group_id": group_id, "path_prefix": path, "can_read": can_read},
-            headers=bearer(token),
-        )
-        assert response.status_code == 201
-
+    _group_with_member(client, token, reader.id)
     assert client.get("/api/ai/tree", headers=bearer(reader_token)).json()["books"] == []
 
 
-def test_chapter_permissions_list_and_update_without_a_grant_gap(app_env, client, content):
-    """The chapter matrix can discover paths and change an existing grant in place."""
+def test_book_permissions_list_and_update_without_a_grant_gap(app_env, client, content):
+    """The book matrix can discover paths and change an existing grant in place."""
 
     _app, _settings, _admin, token = app_env
     group_id = _group_with_member(client, token, 1)
-    assert client.get("/api/admin/chapters", headers=bearer(token)).json() == [
-        {"path": "handbook/policies"}
+    assert client.get("/api/admin/books", headers=bearer(token)).json() == [
+        {"path": "archive"},
+        {"path": "handbook"},
     ]
     created = client.post(
         "/api/admin/permissions",
-        json={"group_id": group_id, "path_prefix": "handbook/policies", "can_read": True},
+        json={"group_id": group_id, "path_prefix": "handbook", "can_read": True},
         headers=bearer(token),
     )
     updated = client.put(
@@ -254,11 +246,11 @@ def test_padded_prefix_is_repaired_rather_than_rejected(app_env, client, content
     ).json()["id"]
     response = client.post(
         "/api/admin/permissions",
-        json={"group_id": group_id, "path_prefix": "  /handbook/policies/  "},
+        json={"group_id": group_id, "path_prefix": "  /handbook/  "},
         headers=bearer(token),
     )
     assert response.status_code == 201
-    assert response.json()["path_prefix"] == "handbook/policies"
+    assert response.json()["path_prefix"] == "handbook"
 
 
 def test_grant_to_a_target_that_does_not_exist_is_rejected(app_env, client, content):
@@ -272,7 +264,7 @@ def test_grant_to_a_target_that_does_not_exist_is_rejected(app_env, client, cont
         headers=bearer(token),
     )
     assert response.status_code == 422
-    assert "No book, chapter, or page" in response.json()["detail"]
+    assert "No book exists" in response.json()["detail"]
 
 
 def test_write_grant_without_read_is_rejected(app_env, client, content):
@@ -724,7 +716,7 @@ def test_equal_specificity_conflict_is_explained(app_env, client, content):
 
     explanation = client.get(
         f"/api/admin/users/{reader.id}/access",
-        params={"path": "handbook/policies/leave.md"},
+        params={"path": "handbook/leave.md"},
         headers=bearer(token),
     ).json()
     assert explanation["can_read"] is False
@@ -735,24 +727,17 @@ def test_equal_specificity_conflict_is_explained(app_env, client, content):
     assert {rule["depth"] for rule in explanation["decisive_rules"]} == {1}
 
 
-def test_more_specific_grant_wins_over_an_inherited_deny(app_env, client, content):
-    app, _settings, _admin, token = app_env
-    reader = _make_user(app, "reader@example.com")
-    group_id = _group_with_member(client, token, reader.id)
-    for prefix, can_read in (("handbook", False), ("handbook/policies", True)):
-        client.post(
-            "/api/admin/permissions",
-            json={"group_id": group_id, "path_prefix": prefix, "can_read": can_read},
-            headers=bearer(token),
-        )
+def test_nested_permission_target_is_rejected(app_env, client, content):
+    """Pages inherit the book grant; only a book may be an ACL target."""
 
-    explanation = client.get(
-        f"/api/admin/users/{reader.id}/access",
-        params={"path": "handbook/policies/leave.md"},
+    _app, _settings, _admin, token = app_env
+    group_id = _group_with_member(client, token, 1)
+    response = client.post(
+        "/api/admin/permissions",
+        json={"group_id": group_id, "path_prefix": "handbook/leave.md"},
         headers=bearer(token),
-    ).json()
-    assert explanation["can_read"] is True
-    assert [rule["prefix"] for rule in explanation["decisive_rules"]] == ["handbook/policies"]
+    )
+    assert response.status_code == 422
 
 
 # --------------------------------------------------------------------------
@@ -793,11 +778,11 @@ def test_audit_log_never_carries_a_content_body(app_env, client, content, caplog
     with caplog.at_level(logging.INFO, logger="unstacked.audit"):
         client.post(
             "/api/admin/permissions",
-            json={"group_id": group_id, "path_prefix": "handbook/policies"},
+            json={"group_id": group_id, "path_prefix": "handbook"},
             headers=bearer(token),
         )
     message = [record for record in caplog.records if record.name == "unstacked.audit"][-1]
-    assert "path_prefix=handbook/policies" in message.getMessage()
+    assert "path_prefix=handbook" in message.getMessage()
     assert "# Leave" not in caplog.text
 
 

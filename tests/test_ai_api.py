@@ -22,15 +22,8 @@ def test_admin_can_create_and_download_complete_content(client, app_env):
     assert book.status_code == 201
     assert book.json()["path"] == "operations"
 
-    chapter = client.post(
-        "/api/ai/books/operations/chapters",
-        json={"title": "Runbooks"},
-        headers=headers,
-    )
-    assert chapter.status_code == 201
-
     page = client.post(
-        "/api/ai/books/operations/chapters/runbooks/pages",
+        "/api/ai/books/operations/pages",
         json={
             "title": "Restart Service",
             "markdown": "# Restart Service\n\nUse the safe restart procedure.",
@@ -39,21 +32,19 @@ def test_admin_can_create_and_download_complete_content(client, app_env):
         headers=headers,
     )
     assert page.status_code == 201
-    assert page.json()["path"] == "operations/runbooks/restart-service.md"
+    assert page.json()["path"] == "operations/restart-service.md"
 
     tree = client.get("/api/ai/tree", headers=headers)
     assert tree.status_code == 200
-    assert tree.json()["books"][0]["chapters"][0]["pages"] == [
-        "operations/runbooks/restart-service.md"
-    ]
+    assert tree.json()["books"][0]["pages"] == ["operations/restart-service.md"]
 
-    content = client.get("/api/ai/content/operations/runbooks/restart-service.md", headers=headers)
+    content = client.get("/api/ai/content/operations/restart-service.md", headers=headers)
     assert content.status_code == 200
     assert content.json()["metadata"]["title"] == "Restart Service"
     assert "safe restart" in content.json()["markdown"]
 
     download = client.get(
-        "/api/ai/content/operations/runbooks/restart-service.md?download=true",
+        "/api/ai/content/operations/restart-service.md?download=true",
         headers=headers,
     )
     assert download.status_code == 200
@@ -63,11 +54,11 @@ def test_admin_can_create_and_download_complete_content(client, app_env):
     export = client.get("/api/ai/export", headers=headers)
     assert export.status_code == 200
     with ZipFile(BytesIO(export.content)) as archive:
-        assert "docs/operations/runbooks/restart-service.md" in archive.namelist()
+        assert "docs/operations/restart-service.md" in archive.namelist()
 
     repo = Repo(settings.content_repo_path)
     commits = list(repo.iter_commits())
-    assert len(commits) == 4
+    assert len(commits) == 3
     assert commits[0].author.email == "admin@example.com"
     assert not repo.is_dirty(untracked_files=True)
 
@@ -78,14 +69,6 @@ def test_non_admin_can_create_page_only_with_parent_write(client, app_env):
     assert (
         client.post(
             "/api/ai/books", json={"title": "Engineering"}, headers=admin_headers
-        ).status_code
-        == 201
-    )
-    assert (
-        client.post(
-            "/api/ai/books/engineering/chapters",
-            json={"title": "Guides"},
-            headers=admin_headers,
         ).status_code
         == 201
     )
@@ -107,7 +90,7 @@ def test_non_admin_can_create_page_only_with_parent_write(client, app_env):
         session.add(
             Permission(
                 group_id=group.id,
-                path_prefix="engineering/guides",
+                path_prefix="engineering",
                 can_read=True,
                 can_write=True,
             )
@@ -120,7 +103,7 @@ def test_non_admin_can_create_page_only_with_parent_write(client, app_env):
     assert denied_book.status_code == 403
 
     created = client.post(
-        "/api/ai/books/engineering/chapters/guides/pages",
+        "/api/ai/books/engineering/pages",
         json={"title": "Agent Guide", "markdown": "# Agent Guide"},
         headers=headers,
     )

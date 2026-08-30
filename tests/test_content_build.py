@@ -14,15 +14,7 @@ def test_api_created_tree_builds_strictly_and_excludes_drafts(client, app_env):
     )
     assert (
         client.post(
-            "/api/ai/books/knowledge/chapters",
-            json={"title": "Reference"},
-            headers=headers,
-        ).status_code
-        == 201
-    )
-    assert (
-        client.post(
-            "/api/ai/books/knowledge/chapters/reference/pages",
+            "/api/ai/books/knowledge/pages",
             json={"title": "Public Page", "markdown": "# Public Page"},
             headers=headers,
         ).status_code
@@ -30,7 +22,7 @@ def test_api_created_tree_builds_strictly_and_excludes_drafts(client, app_env):
     )
     assert (
         client.post(
-            "/api/ai/books/knowledge/chapters/reference/pages",
+            "/api/ai/books/knowledge/pages",
             json={"title": "Draft Page", "markdown": "# Draft Page", "draft": True},
             headers=headers,
         ).status_code
@@ -51,8 +43,8 @@ def test_api_created_tree_builds_strictly_and_excludes_drafts(client, app_env):
     assert "### user" in workflow.read_text(encoding="utf-8")
     assert (site / "llm.md").read_text(encoding="utf-8") == workflow.read_text(encoding="utf-8")
     assert (site / "llm" / "index.html").is_file()
-    assert (site / "knowledge" / "reference" / "public-page" / "index.html").is_file()
-    assert not (site / "knowledge" / "reference" / "draft-page").exists()
+    assert (site / "knowledge" / "public-page" / "index.html").is_file()
+    assert not (site / "knowledge" / "draft-page").exists()
     assert "Draft Page" not in (site / "search" / "search_index.json").read_text()
 
 

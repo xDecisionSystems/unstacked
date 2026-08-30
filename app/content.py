@@ -357,7 +357,7 @@ controls.
 
 Read content safely:
 
-- `GET /api/ai/tree` lists only books, chapters, and pages you may read.
+- `GET /api/ai/tree` lists only books and pages you may read.
 - `GET /api/ai/content/{path}` returns page metadata and Markdown. Add
   `?download=true` only when the raw Markdown file is needed.
 - `GET /api/ai/export` returns an ACL-filtered ZIP of readable pages.
@@ -365,11 +365,8 @@ Read content safely:
 Create content deliberately:
 
 - `POST /api/ai/books` creates a book (admin permission required).
-- `POST /api/ai/books/{book}/chapters` creates a chapter (admin permission
-  required).
-- `POST /api/ai/books/{book}/pages` and
-  `POST /api/ai/books/{book}/chapters/{chapter}/pages` create pages when you
-  have write access to the parent.
+- `POST /api/ai/books/{book}/pages` creates a page when you have write access
+  to the book.
 
 Attach images deliberately:
 
@@ -380,7 +377,7 @@ Attach images deliberately:
 - The reply's `path` is repository-relative, e.g. `assets/{book}/logo.png`.
   Reference it from a page with a *relative* Markdown link so it resolves in
   the static build too: `![Alt](../assets/{book}/logo.png)` from a page in the
-  book, one more `../` from a page in a chapter.
+  book.
 - `GET /api/ai/books/{book}/assets` lists them; `DELETE
   /api/ai/books/{book}/assets/{filename}` removes one.
 
@@ -450,6 +447,97 @@ class ContentRepository:
                 # without a remote and let the admin API report why.
                 self.backup_config_error = scrub_git_output(str(exc))
 
+    def migrate_legacy_chapters(self) -> dict[str, str]:
+        """Promote legacy ``book/chapter`` directories into standalone books.
+
+        The mapping is retained at the content-repository root so an
+        interrupted startup can resume without guessing a new destination.
+        A pre-existing destination is never overwritten; that turns a manual
+        conflict into an actionable error instead of losing content.
+        """
+
+        marker = self.root / ".unstacked-chapter-book-migration.json"
+        with self.git.write_lock():
+            if marker.exists():
+                try:
+                    mapping = json.loads(marker.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    raise ContentError("chapter migration marker is malformed") from exc
+                if not isinstance(mapping, dict) or not all(
+                    isinstance(old, str) and isinstance(new, str)
+                    for old, new in mapping.items()
+                ):
+                    raise ContentError("chapter migration marker is malformed")
+            else:
+                mapping: dict[str, str] = {}
+                reserved = {
+                    child.name
+                    for child in self.docs.iterdir()
+                    if child.is_dir() and child.name != ASSETS_ROOT
+                }
+                for book in sorted(self.docs.iterdir()):
+                    if not book.is_dir() or book.name == ASSETS_ROOT or book.name.startswith("."):
+                        continue
+                    for chapter in sorted(book.iterdir()):
+                        if not chapter.is_dir() or chapter.name.startswith("."):
+                            continue
+                        stem = chapter.name
+                        candidate = stem
+                        if candidate in reserved:
+                            candidate = f"{book.name}-{stem}"
+                        suffix = 2
+                        while candidate in reserved:
+                            candidate = f"{book.name}-{stem}-{suffix}"
+                            suffix += 1
+                        reserved.add(candidate)
+                        mapping[f"{book.name}/{chapter.name}"] = candidate
+                if not mapping:
+                    return {}
+                marker.write_text(
+                    json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+                )
+
+            affected = [str(marker.relative_to(self.root))]
+            moved = False
+            for old, new in mapping.items():
+                source = safe_join(self.docs, old)
+                destination = safe_join(self.docs, new)
+                if source.exists() and destination.exists():
+                    raise ContentConflict(f"chapter migration destination already exists: {new}")
+                if source.exists():
+                    if not source.is_dir():
+                        raise ContentError(f"legacy chapter is not a directory: {old}")
+                    shutil.move(str(source), str(destination))
+                    affected.extend([f"docs/{old}", f"docs/{new}"])
+                    moved = True
+                elif not destination.is_dir():
+                    raise ContentError(f"chapter migration is incomplete: {old}")
+
+            # A legacy book that held only chapters has no meaning after its
+            # children were promoted. Preserve any loose pages (and their
+            # book) rather than attempting an implicit second migration.
+            for old in mapping:
+                parent = old.split("/", 1)[0]
+                legacy_book = safe_join(self.docs, parent)
+                if legacy_book.is_dir() and not any(
+                    child.name != ".pages" for child in legacy_book.iterdir()
+                ):
+                    nav = legacy_book / ".pages"
+                    if nav.exists():
+                        nav.unlink()
+                        affected.append(f"docs/{parent}/.pages")
+                    legacy_book.rmdir()
+                    affected.append(f"docs/{parent}")
+                    moved = True
+            if moved:
+                self.git.commit_paths(
+                    affected,
+                    name="Unstacked migration",
+                    email="system@unstacked.local",
+                    message="Promote legacy chapters to books",
+                )
+            return dict(mapping)
+
     def _bootstrap_repository(self) -> None:
         if self.root.exists() and any(self.root.iterdir()):
             raise ContentError("content path is non-empty and is not a git repository")
@@ -512,6 +600,10 @@ class ContentRepository:
             except Exception:
                 shutil.rmtree(book, ignore_errors=True)
                 raise
+        if self._default_groups_engine is not None:
+            from app.default_groups import grant_admin_group_write
+
+            grant_admin_group_write(self._default_groups_engine, slug)
         return CreatedContent("book", slug, slug, commit)
 
     def create_chapter(
@@ -543,12 +635,7 @@ class ContentRepository:
             except Exception:
                 shutil.rmtree(chapter, ignore_errors=True)
                 raise
-        path = f"{book_slug}/{slug}"
-        if self._default_groups_engine is not None:
-            from app.default_groups import grant_admin_group_write
-
-            grant_admin_group_write(self._default_groups_engine, path)
-        return CreatedContent("chapter", path, slug, commit)
+        return CreatedContent("chapter", f"{book_slug}/{slug}", slug, commit)
 
     def create_page(
         self,
@@ -638,7 +725,7 @@ class ContentRepository:
         try:
             with self.git.write_lock():
                 page_relative = normalize_relative_path(relative)
-                if not page_relative.endswith(".md") or path_depth(page_relative) not in {2, 3}:
+                if not page_relative.endswith(".md") or path_depth(page_relative) != 2:
                     raise ContentMissing("page not found")
                 tree = ConfinedTree(self.docs)
                 try:
@@ -694,7 +781,7 @@ class ContentRepository:
         title = self._validate_title(title)
         with self.git.write_lock():
             page_relative = normalize_relative_path(relative)
-            if not page_relative.endswith(".md") or path_depth(page_relative) not in {2, 3}:
+            if not page_relative.endswith(".md") or path_depth(page_relative) != 2:
                 raise ContentMissing("page not found")
             tree = ConfinedTree(self.docs)
             try:
@@ -862,7 +949,7 @@ class ContentRepository:
 
         with self.git.write_lock():
             page_relative = normalize_relative_path(relative)
-            if not page_relative.endswith(".md") or path_depth(page_relative) not in {2, 3}:
+            if not page_relative.endswith(".md") or path_depth(page_relative) != 2:
                 raise ContentMissing("page not found")
             parent, page_name = page_relative.rsplit("/", 1)
             tree = ConfinedTree(self.docs)
@@ -917,7 +1004,7 @@ class ContentRepository:
 
         with self.git.write_lock():
             page_relative = normalize_relative_path(relative)
-            if not page_relative.endswith(".md") or path_depth(page_relative) not in {2, 3}:
+            if not page_relative.endswith(".md") or path_depth(page_relative) != 2:
                 raise ContentMissing("page not found")
             parent = page_relative.rsplit("/", 1)[0]
             target_parent = self._validate_page_parent(new_parent if new_parent else parent)
@@ -1212,71 +1299,37 @@ class ContentRepository:
         pages = []
         for page in sorted(self.docs.rglob("*.md")):
             relative = page.relative_to(self.docs).as_posix()
-            if path_depth(relative) not in {2, 3}:
+            if path_depth(relative) != 2:
                 continue
             if policy.decide(relative).can_read:
                 pages.append(relative)
         return pages
 
     def tree(self, session: Session, user: User) -> list[dict]:
-        """A caller's full navigable structure: every book/chapter they can
-        at least *see*, not only ones already holding a page they can read.
+        """Return visible books and their readable direct pages.
 
-        The directory walk is gated by ``can_view_container`` rather than
-        being admin-only: that predicate already returns ``True``
-        unconditionally for an admin, so one walk covers both cases. Without
-        it, a book or chapter a non-admin has just been granted write (or
-        read) access to -- but which has no pages in it yet -- would never
-        appear here at all, since the pages loop below is the only other
-        source of a book/chapter entry. That would make a freshly granted,
-        still-empty container permanently unreachable through this tree for
-        anyone but an admin.
+        Books are the only navigation and permission container in the flat
+        model; directories below a book are intentionally ignored.
         """
 
-        pages = self.authorized_pages(session, user)
         policy = load_policy(session, user)
         books: dict[str, dict] = {}
         for book_path in sorted(self.docs.iterdir()):
             if (
                 not book_path.is_dir()
-                or book_path.name == "assets"
+                or book_path.name == ASSETS_ROOT
                 or book_path.name.startswith(".")
             ):
                 continue
-            if not policy.can_view_container(book_path.name):
+            if policy.can_view_container(book_path.name):
+                books[book_path.name] = {"slug": book_path.name, "pages": []}
+        for path in self.authorized_pages(session, user):
+            if path_depth(path) != 2:
                 continue
-            book = books.setdefault(
-                book_path.name,
-                {"slug": book_path.name, "pages": [], "chapters": {}},
-            )
-            for chapter_path in sorted(book_path.iterdir()):
-                if chapter_path.is_dir() and not chapter_path.name.startswith("."):
-                    chapter_relative = f"{book_path.name}/{chapter_path.name}"
-                    if policy.can_view_container(chapter_relative):
-                        book["chapters"].setdefault(
-                            chapter_path.name,
-                            {"slug": chapter_path.name, "pages": []},
-                        )
-        for path in pages:
-            parts = path.split("/")
-            if len(parts) not in {2, 3}:
-                continue
-            book = books.setdefault(parts[0], {"slug": parts[0], "pages": [], "chapters": {}})
-            if len(parts) == 2:
-                book["pages"].append(path)
-            else:
-                chapter = book["chapters"].setdefault(parts[1], {"slug": parts[1], "pages": []})
-                chapter["pages"].append(path)
-        result = []
-        for book in books.values():
-            book["chapters"] = list(book["chapters"].values())
-            # A book-level allow can coexist with more-specific denies on
-            # every chapter.  In that case it would otherwise render as an
-            # empty shell that reveals the book exists but offers no readable
-            # chapter. Direct book pages remain a valid reason to show it.
-            if policy.is_admin or book["chapters"] or book["pages"]:
-                result.append(book)
-        return result
+            book_slug = path.split("/", 1)[0]
+            if book_slug in books:
+                books[book_slug]["pages"].append(path)
+        return list(books.values())
 
     def export_zip(self, session: Session, user: User) -> bytes:
         pages = self.authorized_pages(session, user)
@@ -1519,14 +1572,11 @@ class ContentRepository:
         return title.strip()
 
     def _validate_page_parent(self, parent: str) -> str:
-        """Normalize a book or chapter path a page may legally live in."""
+        """Normalize the book path a page may legally live in."""
 
         parent = normalize_relative_path(parent)
-        # A book or a chapter, never deeper: the tree model and every nav
-        # listing assume at most two levels, so a page below that would be
-        # published to the static site yet invisible in the app.
-        if path_depth(parent) not in {1, 2}:
-            raise ContentError("pages live directly in a book or in one of its chapters")
+        if path_depth(parent) != 1:
+            raise ContentError("pages live directly in a book")
         if parent.split("/")[0] in RESERVED_ROOT_NAMES:
             raise ContentError("reserved location")
         return parent

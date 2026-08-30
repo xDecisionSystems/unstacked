@@ -56,13 +56,13 @@ def repo(app_env) -> Repo:
 
 @pytest.fixture
 def seeded(content, actor):
-    """A book with a loose page plus a chapter holding one page."""
+    """Two books, each with pages directly beneath it."""
 
     content.create_book("Ops", None, actor)
-    content.create_chapter("ops", "Runbooks", None, actor)
+    content.create_book("Runbooks", None, actor)
     content.create_page("ops", "Overview", None, "overview body", ["intro"], False, actor)
     content.create_page(
-        "ops/runbooks", "Restart", None, "restart body", ["oncall"], False, actor
+        "runbooks", "Restart", None, "restart body", ["oncall"], False, actor
     )
     return content
 
@@ -235,8 +235,7 @@ def test_deleted_page_keeps_its_history_and_can_be_restored(seeded, docs, actor)
     assert "overview body" in restored.read_text(encoding="utf-8")
 
 
-def test_deleting_a_book_takes_its_chapters_and_pages_with_it(seeded, docs, actor, repo):
-    """A surviving chapter would be unreachable in the app yet still built."""
+def test_deleting_a_book_takes_its_pages_with_it(seeded, docs, actor, repo):
 
     seeded.delete_book("ops", actor)
 
@@ -244,13 +243,13 @@ def test_deleting_a_book_takes_its_chapters_and_pages_with_it(seeded, docs, acto
     assert not repo.is_dirty()
     assert "Delete book: ops" in repo.head.commit.message
     # Every removed page is still reachable through history.
-    assert seeded.page_history("ops/runbooks/restart.md")
+    assert (docs / "runbooks" / "restart.md").is_file()
 
 
-def test_deleting_a_chapter_leaves_the_rest_of_the_book_alone(seeded, docs, actor, repo):
-    seeded.delete_chapter("ops", "runbooks", actor)
+def test_deleting_a_book_leaves_other_books_alone(seeded, docs, actor, repo):
+    seeded.delete_book("runbooks", actor)
 
-    assert not (docs / "ops" / "runbooks").exists()
+    assert not (docs / "runbooks").exists()
     assert (docs / "ops" / "overview.md").is_file()
     assert not repo.is_dirty()
 
@@ -273,8 +272,8 @@ def test_a_moved_page_is_byte_identical_so_git_sees_a_rename(seeded, docs, actor
     """Rewriting the file during a move would look like an unrelated delete plus create."""
 
     before = (docs / "ops" / "overview.md").read_bytes()
-    seeded.move_page("ops/overview.md", "ops/runbooks", None, actor)
-    assert (docs / "ops" / "runbooks" / "overview.md").read_bytes() == before
+    seeded.move_page("ops/overview.md", "runbooks", None, actor)
+    assert (docs / "runbooks" / "overview.md").read_bytes() == before
 
 
 def test_renaming_a_book_carries_every_descendant_and_its_history(seeded, docs, actor, repo):
@@ -283,35 +282,34 @@ def test_renaming_a_book_carries_every_descendant_and_its_history(seeded, docs, 
     assert moved.path == "operations"
     assert moved.previous_path == "ops"
     assert not (docs / "ops").exists()
-    assert (docs / "operations" / "runbooks" / "restart.md").is_file()
+    assert (docs / "runbooks" / "restart.md").is_file()
     assert not repo.is_dirty()
     messages = [
-        revision.message for revision in seeded.page_history("operations/runbooks/restart.md")
+        revision.message for revision in seeded.page_history("runbooks/restart.md")
     ]
     assert any("Create page" in message for message in messages)
 
 
-def test_renaming_a_chapter_stays_inside_its_book(seeded, docs, actor):
-    moved = seeded.rename_chapter("ops", "runbooks", "playbooks", actor)
+def test_renaming_a_book_keeps_its_pages(seeded, docs, actor):
+    moved = seeded.rename_book("runbooks", "playbooks", actor)
 
-    assert moved.path == "ops/playbooks"
-    assert (docs / "ops" / "playbooks" / "restart.md").is_file()
-    assert not (docs / "ops" / "runbooks").exists()
+    assert moved.path == "playbooks"
+    assert (docs / "playbooks" / "restart.md").is_file()
+    assert not (docs / "runbooks").exists()
 
 
-def test_move_cannot_create_a_third_level(seeded, docs, actor):
-    """The two-level limit is what keeps the tree and the built site in agreement."""
+def test_move_cannot_create_a_nested_parent(seeded, docs, actor):
 
-    (docs / "ops" / "runbooks" / "deeper").mkdir()
-    with pytest.raises(ContentError, match="book or in one of its chapters"):
-        seeded.move_page("ops/overview.md", "ops/runbooks/deeper", None, actor)
+    (docs / "ops" / "deeper").mkdir()
+    with pytest.raises(ContentError, match="pages live directly in a book"):
+        seeded.move_page("ops/overview.md", "ops/deeper", None, actor)
     assert (docs / "ops" / "overview.md").is_file()
 
 
 def test_move_refuses_to_overwrite_an_existing_page(seeded, actor):
-    seeded.create_page("ops/runbooks", "Overview", None, "other body", [], False, actor)
+    seeded.create_page("runbooks", "Overview", None, "other body", [], False, actor)
     with pytest.raises(ContentExists):
-        seeded.move_page("ops/overview.md", "ops/runbooks", None, actor)
+        seeded.move_page("ops/overview.md", "runbooks", None, actor)
 
 
 def test_move_refuses_a_missing_destination(seeded, actor):
@@ -323,22 +321,22 @@ def test_explicit_navigation_order_follows_a_rename_and_a_delete(seeded, docs, a
     """Operators may pin an order; a stale entry there fails `mkdocs build --strict`."""
 
     navigation = docs / "ops" / ".pages"
-    set_order(navigation, ["overview.md", "runbooks"])
+    set_order(navigation, ["overview.md"])
 
     seeded.move_page("ops/overview.md", None, "summary", actor)
-    assert read_navigation(navigation).entries == ["summary.md", "runbooks"]
+    assert read_navigation(navigation).entries == ["summary.md"]
 
     seeded.delete_page("ops/summary.md", actor)
-    assert read_navigation(navigation).entries == ["runbooks"]
+    assert read_navigation(navigation).entries == []
 
 
 def test_moving_into_a_pinned_parent_adds_the_page_to_its_order(seeded, docs, actor):
     """Without a wildcard an unlisted page would silently vanish from the nav."""
 
-    navigation = docs / "ops" / "runbooks" / ".pages"
+    navigation = docs / "runbooks" / ".pages"
     set_order(navigation, ["restart.md"])
 
-    seeded.move_page("ops/overview.md", "ops/runbooks", None, actor)
+    seeded.move_page("ops/overview.md", "runbooks", None, actor)
     assert read_navigation(navigation).entries == ["restart.md", "overview.md"]
 
 
@@ -365,7 +363,7 @@ def test_moving_into_a_pinned_parent_adds_the_page_to_its_order(seeded, docs, ac
             id="delete-page",
         ),
         pytest.param(
-            lambda content, actor: content.move_page("ops/overview.md", "ops/runbooks", "x", actor),
+            lambda content, actor: content.move_page("ops/overview.md", "runbooks", "x", actor),
             id="move-page",
         ),
         pytest.param(
@@ -375,10 +373,6 @@ def test_moving_into_a_pinned_parent_adds_the_page_to_its_order(seeded, docs, ac
         pytest.param(
             lambda content, actor: content.rename_book("ops", "operations", actor),
             id="rename-book",
-        ),
-        pytest.param(
-            lambda content, actor: content.rename_chapter("ops", "runbooks", "playbooks", actor),
-            id="rename-chapter",
         ),
     ],
 )
@@ -517,15 +511,15 @@ def test_the_content_folder_still_builds_after_a_full_lifecycle(app_env, seeded,
     )
     seeded.set_page_title("ops/overview.md", "Operational Overview", actor)
     seeded.set_container_title("ops", "Operations Handbook", actor)
-    seeded.move_page("ops/overview.md", "ops/runbooks", "summary", actor)
-    seeded.rename_chapter("ops", "runbooks", "playbooks", actor)
+    seeded.move_page("ops/overview.md", "runbooks", "summary", actor)
+    seeded.rename_book("runbooks", "playbooks", actor)
     seeded.rename_book("ops", "operations", actor)
-    seeded.delete_page("operations/playbooks/restart.md", actor)
+    seeded.delete_page("playbooks/restart.md", actor)
 
     result = _build(settings)
     assert result.returncode == 0, result.stdout + result.stderr
     site = Path(settings.content_repo_path) / "site"
-    assert (site / "operations" / "playbooks" / "summary" / "index.html").is_file()
+    assert (site / "playbooks" / "summary" / "index.html").is_file()
     assert not (site / "ops").exists()
 
 
@@ -537,12 +531,12 @@ def test_the_content_folder_still_builds_after_a_book_is_deleted(app_env, seeded
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_emptying_a_chapter_still_leaves_a_buildable_tree(app_env, seeded, docs, actor):
+def test_emptying_a_book_still_leaves_a_buildable_tree(app_env, seeded, docs, actor):
     """Deleting the last page leaves a `.pages` with nothing left to order."""
 
     _app, settings, _admin, _token = app_env
-    seeded.delete_page("ops/runbooks/restart.md", actor)
-    assert (docs / "ops" / "runbooks" / ".pages").is_file()
+    seeded.delete_page("runbooks/restart.md", actor)
+    assert (docs / "runbooks" / ".pages").is_file()
 
     result = _build(settings)
     assert result.returncode == 0, result.stdout + result.stderr

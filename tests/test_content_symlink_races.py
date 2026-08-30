@@ -168,7 +168,7 @@ def test_move_rejects_source_parent_swapped_after_confined_snapshot(
     _swap_after_read(monkeypatch, book, outside, "ops/overview.md", method="read_bytes")
 
     with pytest.raises(_UNSAFE_MUTATION):
-        seeded.move_page("ops/overview.md", "ops/runbooks", "summary", actor)
+        seeded.move_page("ops/overview.md", "ops", "summary", actor)
 
     assert outside_page.read_text(encoding="utf-8") == "outside move sentinel\n"
 
@@ -198,53 +198,3 @@ def _swap_after_walk(monkeypatch, container: Path, outside: Path, relative: str)
         return result
 
     monkeypatch.setattr(ConfinedTree, "walk_files", walk_then_swap)
-
-
-@pytest.fixture
-def seeded_chapter(content, actor):
-    """A book with a chapter, for exercising the container-level races above."""
-
-    content.create_book("Ops", None, actor)
-    content.create_chapter("ops", "Runbooks", None, actor)
-    content.create_page("ops/runbooks", "Restart", None, "restart body", [], False, actor)
-    return content
-
-
-def test_delete_chapter_rejects_book_swapped_after_confined_walk(
-    seeded_chapter, docs, actor, monkeypatch, tmp_path: Path
-):
-    """A recursive delete must not follow a book substituted after its walk."""
-
-    book = docs / "ops"
-    outside = tmp_path / "outside-delete-chapter"
-    outside.mkdir()
-    (outside / "runbooks").mkdir()
-    sentinel = outside / "runbooks" / "restart.md"
-    sentinel.write_text("outside chapter delete sentinel\n", encoding="utf-8")
-    _swap_after_walk(monkeypatch, book, outside, "ops/runbooks")
-
-    with pytest.raises(_UNSAFE_MUTATION):
-        seeded_chapter.delete_chapter("ops", "runbooks", actor)
-
-    assert sentinel.read_text(encoding="utf-8") == "outside chapter delete sentinel\n"
-    assert book.is_symlink()
-
-
-def test_rename_chapter_rejects_book_swapped_after_confined_walk(
-    seeded_chapter, docs, actor, monkeypatch, tmp_path: Path
-):
-    """A recursive rename must not follow a book substituted after its walk."""
-
-    book = docs / "ops"
-    outside = tmp_path / "outside-rename-chapter"
-    outside.mkdir()
-    (outside / "runbooks").mkdir()
-    sentinel = outside / "runbooks" / "restart.md"
-    sentinel.write_text("outside chapter rename sentinel\n", encoding="utf-8")
-    _swap_after_walk(monkeypatch, book, outside, "ops/runbooks")
-
-    with pytest.raises(_UNSAFE_MUTATION):
-        seeded_chapter.rename_chapter("ops", "runbooks", "playbooks", actor)
-
-    assert sentinel.read_text(encoding="utf-8") == "outside chapter rename sentinel\n"
-    assert book.is_symlink()

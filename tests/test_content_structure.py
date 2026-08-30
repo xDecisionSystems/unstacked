@@ -9,25 +9,21 @@ from app.models import User
 from tests.conftest import bearer
 
 
-def test_pages_cannot_be_created_below_a_chapter(client, app_env):
+def test_pages_cannot_be_created_below_a_book(client, app_env):
     """A deeper page would build into the static site yet never appear in the tree."""
 
     _app, settings, _admin, token = app_env
     headers = bearer(token)
     client.post("/api/ai/books", json={"title": "Ops"}, headers=headers)
-    client.post("/api/ai/books/ops/chapters", json={"title": "Runbooks"}, headers=headers)
-
-    # Fabricate a third level the way a stray operator mkdir would.
-    nested = settings.content_repo_path / "docs" / "ops" / "runbooks" / "deeper"
+    # Fabricate a nested directory the way a stray operator mkdir would.
+    nested = settings.content_repo_path / "docs" / "ops" / "deeper"
     nested.mkdir(parents=True)
 
     content = ContentRepository(settings)
     with Session(_app.state.engine) as session:
         actor = session.exec(select(User)).first()
-        with pytest.raises(ContentError, match="book or in one of its chapters"):
-            content.create_page(
-                "ops/runbooks/deeper", "Too Deep", None, "body", [], False, actor
-            )
+        with pytest.raises(ContentError, match="pages live directly in a book"):
+            content.create_page("ops/deeper", "Too Deep", None, "body", [], False, actor)
 
 
 def test_pages_cannot_be_created_in_the_assets_tree(client, app_env):

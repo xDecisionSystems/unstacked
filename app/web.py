@@ -110,7 +110,7 @@ def _slug_title(slug: str) -> str:
 
 
 def _container_title(docs: Path, *parts: str) -> str:
-    """Read a book/chapter's display title from its ``.pages`` file.
+    """Read a book's display title from its ``.pages`` file.
 
     Falls back to a humanized slug when the file is missing or malformed --
     the tree must still render even if the container navigation file is
@@ -159,14 +159,9 @@ def _public_page(content, target: str) -> bool:
     parts = target.removesuffix(".md").split("/")
     if metadata.get("draft"):
         return False
-    # A nested page always follows its chapter.  The book setting governs its
-    # direct pages only, which keeps a public book with a private chapter a
-    # meaningful mixed-visibility state.
-    return (
-        _container_public(content.docs, parts[0], parts[1])
-        if len(parts) == 3
-        else _container_public(content.docs, parts[0])
-    )
+    # Pages inherit the visibility of their book.  The book/page model has
+    # no intermediate container whose visibility could override this.
+    return len(parts) == 2 and _container_public(content.docs, parts[0])
 
 
 def _public_context(request: Request) -> dict:
@@ -202,43 +197,16 @@ def _tree_view_model(
 ) -> list[dict]:
     """Turn ``AIContentService.tree()``'s raw dicts into a display-ready shape.
 
-    Container titles come from each book/chapter's ``.pages`` file rather
-    than a per-page front-matter read: there are far fewer containers than
-    pages, and the sidebar renders on every authenticated request. Page
-    labels use the slug rather than the front-matter title for the same
-    reason -- the full title is still shown once the page itself is open.
-
-    ``can_write`` per book/chapter drives whether its "add a chapter"/"add a
-    page" button renders: unlike creating a book itself (unavoidably
-    admin-only -- there is no existing path to hold a grant on), both of
-    those only require a write grant on the container they're added to, so a
-    non-admin editor must still see them wherever they actually have one. A
-    non-throwing policy check, same as ``can_restore`` above -- there is
-    nothing to deny here, only to hide.
+    Book titles come from each book's ``.pages`` file rather than a per-page
+    front-matter read.  Page labels use their front matter where available.
+    A book's write decision controls its single add-page control.
     """
 
     books = []
     for book in raw_tree:
-        chapters = [
-            {
-                "slug": chapter["slug"],
-                "title": _container_title(content.docs, book["slug"], chapter["slug"]),
-                "pages": [_page_view(content, p) for p in chapter["pages"]],
-                "can_write": authorization.policy.decide(
-                    f"{book['slug']}/{chapter['slug']}"
-                ).can_write,
-                "tags": _container_tags(content.docs, book["slug"], chapter["slug"]),
-                "public": _container_public(content.docs, book["slug"], chapter["slug"]),
-            }
-            for chapter in book.get("chapters", [])
-        ]
         pages = [_page_view(content, p) for p in book["pages"]]
         book_tags: set[str] = set(_container_tags(content.docs, book["slug"]))
-        all_pages = [
-            *book["pages"],
-            *(page for chapter in book.get("chapters", []) for page in chapter["pages"]),
-        ]
-        for page in all_pages:
+        for page in book["pages"]:
             try:
                 metadata, _body, _raw = content.read_page(page)
             except (ContentError, UnsafePath):
@@ -246,25 +214,18 @@ def _tree_view_model(
             book_tags.update(
                 tag for tag in metadata.get("tags", []) if isinstance(tag, str) and tag
             )
-        book_public = _container_public(content.docs, book["slug"])
-        visibility_states = [book_public, *(chapter["public"] for chapter in chapters)]
         books.append(
             {
                 "slug": book["slug"],
                 "title": _container_title(content.docs, book["slug"]),
                 "pages": pages,
-                "chapters": chapters,
-                "page_count": len(pages) + sum(len(chapter["pages"]) for chapter in chapters),
+                "page_count": len(pages),
                 "tags": sorted(book_tags, key=str.casefold),
                 "can_write": authorization.policy.decide(book["slug"]).can_write,
-                "public": book_public,
-                "visibility": (
-                    "public"
-                    if all(visibility_states)
-                    else "mixed"
-                    if any(visibility_states)
-                    else "private"
-                ),
+                "public": _container_public(content.docs, book["slug"]),
+                "visibility": "public"
+                if _container_public(content.docs, book["slug"])
+                else "private",
             }
         )
     return books
@@ -273,8 +234,6 @@ def _tree_view_model(
 def _breadcrumbs(docs: Path, path: str, metadata: dict) -> list[str]:
     parts = path.split("/")
     crumbs = [_container_title(docs, parts[0])]
-    if len(parts) == 3:
-        crumbs.append(_container_title(docs, parts[0], parts[1]))
     title = metadata.get("title") if isinstance(metadata, dict) else None
     crumbs.append(title or _slug_title(parts[-1].removesuffix(".md")))
     return crumbs
@@ -318,8 +277,6 @@ def _search_breadcrumbs(content, path: str) -> list[str]:
 
     parts = path.removesuffix(".md").split("/")
     breadcrumbs = [_container_title(content.docs, parts[0])]
-    if len(parts) == 3:
-        breadcrumbs.append(_container_title(content.docs, parts[0], parts[1]))
     return breadcrumbs
 
 
@@ -452,7 +409,7 @@ def book_view(
     book_slug: str,
     user: Annotated[User | None, Depends(_optional_normal_web_user)],
 ) -> Response:
-    """A single book's chapters and pages, one scrollable row per chapter.
+    """A single book's pages, shown as one reorderable card grid.
 
     Reuses the same ACL-filtered ``tree`` context every page already builds
     rather than a second query -- a book absent from it is either nonexistent
@@ -475,25 +432,10 @@ def book_view(
         if not pages and not _container_public(content.docs, book_slug):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
         context = _public_context(request)
-        direct_pages = [page for page in pages if page["path"].count("/") == 1]
-        chapters: dict[str, list[dict[str, object]]] = {}
-        for page in pages:
-            parts = page["path"].split("/")
-            if len(parts) == 3:
-                chapters.setdefault(parts[1], []).append(page)
         context["book"] = {
             "slug": book_slug,
             "title": _container_title(content.docs, book_slug),
-            "pages": direct_pages,
-            "chapters": [
-                {
-                    "slug": slug,
-                    "title": _container_title(content.docs, book_slug, slug),
-                    "pages": chapter_pages,
-                    "can_write": False,
-                }
-                for slug, chapter_pages in chapters.items()
-            ],
+            "pages": pages,
             "page_count": len(pages),
             "tags": [],
             "can_write": False,
@@ -1021,25 +963,6 @@ async def create_book_submit(
     return RedirectResponse(f"/pages/new?parent={created.path}", status_code=303)
 
 
-@router.post("/manage/chapter", include_in_schema=False, dependencies=[Depends(require_csrf)])
-async def create_chapter_submit(
-    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
-) -> Response:
-    form = await _read_form(request)
-    with Session(request.app.state.engine) as session:
-        try:
-            created = request.app.state.ai_service.create_chapter(
-                _authorization(session, user),
-                book_slug=form.get("book_slug", ""),
-                title=form.get("title", ""),
-                slug=form.get("slug") or None,
-            )
-        except (AccessDenied, ContentError, UnsafePath) as exc:
-            return _manage_error_response(request, session, user, exc)
-    book_slug = created.path.rsplit("/", 1)[0]
-    return RedirectResponse(f"/books/{book_slug}", status_code=303)
-
-
 @router.post(
     "/containers/{container_path:path}/tags",
     include_in_schema=False,
@@ -1082,7 +1005,7 @@ async def create_page_quick_submit(
     request: Request, user: Annotated[User, Depends(require_normal_web_user)]
 ) -> Response:
     """A blank page, the same "create empty, fill in later" shape as a new
-    book or chapter -- unlike ``POST /pages/new``, which carries a full
+    book -- unlike ``POST /pages/new``, which carries a full
     markdown body from the editor and belongs to that flow alone. Lands back
     on the book page so the new card is right there to click into, rather
     than opening the editor immediately.
@@ -1121,26 +1044,6 @@ async def rename_book_submit(
     return RedirectResponse(f"/pages/new?parent={moved.path}", status_code=303)
 
 
-@router.post(
-    "/manage/chapter/rename", include_in_schema=False, dependencies=[Depends(require_csrf)]
-)
-async def rename_chapter_submit(
-    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
-) -> Response:
-    form = await _read_form(request)
-    with Session(request.app.state.engine) as session:
-        try:
-            moved = request.app.state.ai_service.rename_chapter(
-                _authorization(session, user),
-                form.get("book_slug", ""),
-                form.get("chapter_slug", ""),
-                form.get("new_slug", ""),
-            )
-        except (AccessDenied, ContentError, UnsafePath) as exc:
-            return _manage_error_response(request, session, user, exc)
-    return RedirectResponse(f"/pages/new?parent={moved.path}", status_code=303)
-
-
 @router.post("/manage/book/delete", include_in_schema=False, dependencies=[Depends(require_csrf)])
 async def delete_book_submit(
     request: Request, user: Annotated[User, Depends(require_normal_web_user)]
@@ -1150,25 +1053,6 @@ async def delete_book_submit(
         try:
             request.app.state.ai_service.delete_book(
                 _authorization(session, user), form.get("book_slug", "")
-            )
-        except (AccessDenied, ContentError, UnsafePath) as exc:
-            return _manage_error_response(request, session, user, exc)
-    return RedirectResponse("/tree", status_code=303)
-
-
-@router.post(
-    "/manage/chapter/delete", include_in_schema=False, dependencies=[Depends(require_csrf)]
-)
-async def delete_chapter_submit(
-    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
-) -> Response:
-    form = await _read_form(request)
-    with Session(request.app.state.engine) as session:
-        try:
-            request.app.state.ai_service.delete_chapter(
-                _authorization(session, user),
-                form.get("book_slug", ""),
-                form.get("chapter_slug", ""),
             )
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)

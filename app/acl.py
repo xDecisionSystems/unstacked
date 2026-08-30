@@ -89,10 +89,10 @@ class AccessPolicy:
                 matching_rules=(),
                 decisive_rules=(),
             )
-        # Pages are files, but they are never permission boundaries.  A page
-        # always inherits the access rules of its containing chapter (or its
-        # book when it is a top-level page), so a stale or accidental
-        # page-specific grant cannot make one page differ from its siblings.
+    # Pages are files, but never permission boundaries. In the current
+    # book/page model their direct parent is always the book. Keeping this
+    # generic parent calculation also makes legacy nested paths resolve
+    # safely during the one-time migration rather than broadening a grant.
         permission_path = _page_parent_path(path)
         matching = tuple(
             rule
@@ -159,10 +159,8 @@ def _page_parent_path(path: str) -> str:
     parts = path.split("/")
     if not path.endswith(".md"):
         return path
-    if len(parts) == 2:
-        return parts[0]
-    if len(parts) == 3:
-        return "/".join(parts[:2])
+    if len(parts) >= 2:
+        return "/".join(parts[:-1])
     return path
 
 

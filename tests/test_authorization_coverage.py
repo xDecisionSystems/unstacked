@@ -107,10 +107,6 @@ def test_service_and_api_keep_admin_and_write_operations_behind_authorization(ap
         with pytest.raises(AccessDenied):
             service.create_book(authorization, title="Forbidden", slug=None)
         with pytest.raises(AccessDenied):
-            service.create_chapter(
-                authorization, book_slug="shared", title="Forbidden", slug=None
-            )
-        with pytest.raises(AccessDenied):
             service.move_page(authorization, "shared/read-only.md", None, None)
         with pytest.raises(AccessDenied):
             service.update_page(authorization, "shared/read-only.md")
@@ -123,17 +119,8 @@ def test_service_and_api_keep_admin_and_write_operations_behind_authorization(ap
         client.post("/api/ai/books", json={"title": "Forbidden"}, headers=headers).status_code
         == 403
     )
-    # A readable-but-read-only parent must not be writable through the route,
-    # for a chapter same as a page -- both need a write grant, not admin, so
-    # both fold AccessDenied into the same indistinguishable-from-missing 404.
-    assert (
-        client.post(
-            "/api/ai/books/shared/chapters",
-            json={"title": "Forbidden"},
-            headers=headers,
-        ).status_code
-        == 404
-    )
+    # A readable-but-read-only book is not writable through the route; access
+    # denial folds into the same indistinguishable-from-missing 404.
     assert (
         client.post(
             "/api/ai/books/shared/pages",

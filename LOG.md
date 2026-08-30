@@ -10,6 +10,22 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 06:49 UTC — Codex
+Replaced the chapter hierarchy with a book-and-page model: legacy chapters
+promote to books at startup, their effective grants are preserved, and the
+web/settings UI now uses book-level permissions and a draggable page grid.
+- Files: `app/acl.py`, `app/admin_api.py`, `app/ai_api.py`,
+  `app/ai_service.py`, `app/bootstrap.py`, `app/content.py`,
+  `app/default_groups.py`, `app/main.py`, `app/static/style.css`,
+  `app/templates/admin.html`, `app/templates/book.html`,
+  `app/templates/manage.html`, `app/templates/move_page.html`,
+  `app/templates/tree.html`, `app/web.py`, `tests/test_admin_api.py`,
+  `tests/test_ai_api.py`, `tests/test_assets.py`, `tests/test_authorization_coverage.py`,
+  `tests/test_book_migration.py`, `tests/test_content_build.py`,
+  `tests/test_content_lifecycle.py`, `tests/test_content_structure.py`,
+  `tests/test_content_symlink_races.py`, `tests/test_default_groups.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 06:28 UTC — Codex
 Stopped inaccessible book shells from appearing when every chapter is denied
 by a more-specific permission rule.
@@ -88,8 +104,3 @@ password field in Settings.
 Made Settings form validation errors readable so failed user creation explains
 the invalid field instead of displaying `object Object`.
 - Files: `app/templates/admin.html`, `LOG.md`
-
-## 2026-08-30 04:56 UTC — Codex
-Fixed mixed book visibility so chapter settings take precedence for nested
-pages and the glasses state reflects both book and chapter visibility.
-- Files: `app/web.py`, `LOG.md`

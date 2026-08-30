@@ -6,7 +6,7 @@
 <p>Moving a page is administrator-only because its location defines access.</p>
 <form class="editor-form" method="post" action="/pages/{{ moving_path }}/move">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label>Destination parent path<input name="parent" required placeholder="book or book/chapter"></label>
+  <label>Destination book path<input name="parent" required placeholder="book"></label>
   <label>New URL slug (optional)<input name="slug" placeholder="Leave blank to retain the current slug"></label>
   <div class="form-actions"><button type="submit">Move page</button><a class="button" href="/pages/{{ moving_path }}">Cancel</a></div>
 </form>
