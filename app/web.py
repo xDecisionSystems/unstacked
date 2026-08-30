@@ -250,6 +250,13 @@ def _tree_view_model(
                 "tags": sorted(book_tags, key=str.casefold),
                 "can_write": authorization.policy.decide(book["slug"]).can_write,
                 "public": _container_public(content.docs, book["slug"]),
+                "visibility": (
+                    "public"
+                    if _container_public(content.docs, book["slug"])
+                    else "mixed"
+                    if any(chapter["public"] for chapter in chapters)
+                    else "private"
+                ),
             }
         )
     return books

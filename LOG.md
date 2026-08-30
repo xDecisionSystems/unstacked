@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 04:46 UTC — Codex
+Replaced book-card eye controls with clear, mixed, and filled glasses states
+that reflect private, mixed-descendant, and fully public visibility.
+- Files: `app/web.py`, `app/templates/tree.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 04:43 UTC — Codex
 Applied the accessible open/closed eye visibility toggle to book cards, matching
 the chapter-card visibility interaction.
