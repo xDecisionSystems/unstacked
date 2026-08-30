@@ -697,6 +697,8 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert "GitHub repository" in response.text
     assert "automatically synchronized to its <code>main</code> branch" in response.text
     assert 'data-admin-panel="groups"' in response.text
+    assert 'data-admin-panel="chapter-permissions"' in response.text
+    assert "Groups &amp; Assignments" in response.text
     assert 'data-admin-section="groups"' in response.text
     assert 'data-admin-section="users"' in response.text
     assert "selectPanel" in response.text
@@ -707,7 +709,9 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
         "data-user-deactivate",
         "data-user-delete",
         "data-group-delete",
-            "data-group-membership",
+        "data-group-membership",
+        "data-chapter-permission",
+        "data-chapter-select-all",
         "data-permission-delete",
     ):
         assert control in response.text

@@ -129,6 +129,19 @@ class PermissionResponse(BaseModel):
     can_write: bool
 
 
+class PermissionUpdate(BaseModel):
+    """The access level for an existing, exact path grant."""
+
+    can_read: bool
+    can_write: bool = False
+
+
+class ChapterResponse(BaseModel):
+    """A chapter path available for assignment in the Settings matrix."""
+
+    path: str
+
+
 class OrphanedPermissionResponse(PermissionResponse):
     """A stored grant that can no longer match anything on disk."""
 
@@ -794,6 +807,50 @@ def create_permission(
         return _permission_response(row)
 
 
+@router.put(
+    "/permissions/{permission_id}",
+    response_model=PermissionResponse,
+    dependencies=CsrfGuard,
+)
+def update_permission(
+    permission_id: int,
+    payload: PermissionUpdate,
+    request: Request,
+    actor: AdminActor,
+) -> PermissionResponse:
+    """Change a stored grant without a delete-and-recreate gap."""
+
+    if payload.can_write and not payload.can_read:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "A write grant requires read; deny both instead",
+        )
+    if not payload.can_read and _public_repository_is_linked(request):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "A private GitHub repository is required for a group with restricted read access",
+        )
+    with Session(request.app.state.engine) as session:
+        row = session.get(Permission, permission_id)
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Permission not found")
+        row.can_read = payload.can_read
+        row.can_write = payload.can_write
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        _audit(
+            "admin.permission.update",
+            actor,
+            permission_id=row.id,
+            group_id=row.group_id,
+            path_prefix=row.path_prefix,
+            can_read=row.can_read,
+            can_write=row.can_write,
+        )
+        return _permission_response(row)
+
+
 @router.get("/permissions", response_model=list[PermissionResponse])
 def list_permissions(
     request: Request,
@@ -805,6 +862,18 @@ def list_permissions(
         if group_id is not None:
             statement = statement.where(Permission.group_id == group_id)
         return [_permission_response(row) for row in session.exec(statement).all()]
+
+
+@router.get("/chapters", response_model=list[ChapterResponse])
+def list_chapters(request: Request, actor: AdminActor) -> list[ChapterResponse]:
+    """List every chapter an administrator can assign a group grant to."""
+
+    with Session(request.app.state.engine) as session:
+        return [
+            ChapterResponse(path=f"{book['slug']}/{chapter['slug']}")
+            for book in _content(request).tree(session, actor)
+            for chapter in book["chapters"]
+        ]
 
 
 @router.get("/permissions/orphaned", response_model=list[OrphanedPermissionResponse])

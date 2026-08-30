@@ -166,6 +166,28 @@ def test_revoking_a_grant_takes_effect_immediately_too(app_env, client, content)
     assert client.get("/api/ai/tree", headers=bearer(reader_token)).json()["books"] == []
 
 
+def test_chapter_permissions_list_and_update_without_a_grant_gap(app_env, client, content):
+    """The chapter matrix can discover paths and change an existing grant in place."""
+
+    _app, _settings, _admin, token = app_env
+    group_id = _group_with_member(client, token, 1)
+    assert client.get("/api/admin/chapters", headers=bearer(token)).json() == [
+        {"path": "handbook/policies"}
+    ]
+    created = client.post(
+        "/api/admin/permissions",
+        json={"group_id": group_id, "path_prefix": "handbook/policies", "can_read": True},
+        headers=bearer(token),
+    )
+    updated = client.put(
+        f"/api/admin/permissions/{created.json()['id']}",
+        json={"can_read": True, "can_write": True},
+        headers=bearer(token),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["can_write"] is True
+
+
 @pytest.mark.parametrize(
     "prefix",
     ["", "   ", "..", "book/../secret", "book//page", "book/./page", "book\\page"],

@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 05:51 UTC — Codex
+Renamed the groups settings section and added a chapter-by-group permissions
+matrix with read/write levels and per-group select-all controls.
+- Files: `app/admin_api.py`, `app/templates/admin.html`,
+  `app/static/style.css`, `tests/test_admin_api.py`, `tests/test_web.py`,
+  `LOG.md`
+
 ## 2026-08-30 05:34 UTC — Codex
 Redesigned Groups as a user-by-group checkbox matrix with direct membership
 toggle actions and compact group deletion controls.
@@ -89,54 +96,3 @@ Reframed the Settings backup control as a dedicated GitHub repository link,
 with private-repository safeguards and clear automatic synchronization to the
 content repository's `main` branch.
 - Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 01:14 UTC — Codex
-Made administrator-created user passwords permanent by default, while keeping
-the bootstrap account's first-login password-change safeguard unchanged.
-- Files: `app/admin_api.py`, `app/templates/admin.html`,
-  `tests/test_admin_api.py`, `LOG.md`
-
-## 2026-08-30 01:13 UTC — Codex
-Renamed the administration surface to Settings, replaced the top-bar Admin
-label with an accessible gear link, and separated Users from the combined
-Groups & permissions panel.
-- Files: `app/web.py`, `app/templates/base.html`, `app/templates/admin.html`,
-  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 00:59 UTC — Codex
-Changed the Administration sidebar into section navigation: each link now
-shows only its related settings panel, updates the heading, and preserves a
-direct URL fragment for the selected panel.
-- Files: `app/templates/admin.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 00:35 UTC — Codex
-Added portable front-matter tags to book and chapter containers, with
-admin-only editing in their respective headers; tags remain valid MkDocs
-metadata rather than database content.
-- Files: `app/nav.py`, `app/content.py`, `app/ai_service.py`, `app/web.py`,
-  `app/templates/book.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 23:02 UTC — Codex
-Rebuilt the administration view around the Figma sidebar, access metrics, and
-structured management panels; replaced tiny chapter/page plus controls with
-clear labeled actions.
-- Files: `app/templates/admin.html`, `app/templates/book.html`,
-  `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 22:58 UTC — Codex
-Anchored chapter page-creation popovers to their full headers and constrained
-their width so they remain visible beside scrollable page-card rows.
-- Files: `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 22:42 UTC — Codex
-Replaced EasyMDE with TOAST UI Editor in both editing surfaces, loading its
-chart, syntax-highlighting, color, merged-table, and UML plugins while keeping
-the existing Markdown form submission intact.
-- Files: `app/templates/page.html`, `app/templates/editor.html`,
-  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 22:30 UTC — Codex
-Forced EasyMDE toolbar glyphs and their text fallbacks to a high-contrast
-black so they remain visible against the pale Markdown toolbar.
-- Files: `app/static/style.css`, `LOG.md`
