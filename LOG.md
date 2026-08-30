@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 19:08 UTC — Codex
+Documented the phased implementation plan for a Git-versioned, editable
+Markdown homepage with ACL-aware, reorderable widgets.
+- Files: `plans/plan_editable_widget_home.md`, `LOG.md`
+
 ## 2026-08-30 18:39 UTC — Codex
 Added a generated badger-at-a-typewriter header logo and administrator-managed
 branding controls for a custom workspace name and validated raster logo.
@@ -116,9 +121,3 @@ filled selected state and white icon for clear status contrast.
 Fixed Chapter Permissions icon contrast so every dash, eye, and pencil remains
 burgundy and visible against its button background.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 05:59 UTC — Codex
-Replaced Chapter Permissions dropdowns with accessible dash, eye, and pencil
-icon controls for no access, read, and read/write assignments.
-- Files: `app/templates/admin.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
