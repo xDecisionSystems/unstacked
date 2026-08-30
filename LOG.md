@@ -10,6 +10,21 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 23:27 UTC — Codex
+Replaced the temporary native Markdown toolbar with Milkdown Crepe, a
+WYSIWYG Markdown editor. Crepe is loaded from pinned v7.21.1 browser assets
+and submits `getMarkdown()` to the unchanged form routes, so content remains
+plain Markdown on disk. Included the required Crepe styles and workspace
+theme-token overrides. Image-block and LaTex features are intentionally off:
+uploads will continue through the app's validated asset path rather than an
+editor-side bypass. The native textarea remains as a usable fallback if the
+editor bundle cannot load. All pinned CDN assets returned 200; focused editor
+tests and ruff pass. Verified with production Compose on port 18765:
+`/healthz` returned 200 and the Milkdown script was served.
+- Files: `app/static/markdown-editor.js`, `app/static/style.css`,
+  `app/templates/editor.html`, `app/templates/home_editor.html`,
+  `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 23:07 UTC — Codex
 Replaced Toast UI across page, standalone-page, and home Markdown editing
 with a lightweight native textarea editor owned by the application. The new
@@ -334,13 +349,3 @@ Replaced text-based home-feature actions with visible star toggles that retain
 their selected state and return the user to the current book or library view.
 - Files: `app/static/style.css`, `app/templates/book.html`,
   `app/templates/tree.html`, `app/web.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 17:18 UTC — Codex
-Added optional, safe page-card images. Images are Git-tracked book assets,
-validated against the page's book, available through the page editor and API,
-and displayed on book and featured-home page cards.
-- Files: `app/ai_api.py`, `app/ai_service.py`, `app/content.py`,
-  `app/static/style.css`, `app/templates/book.html`,
-  `app/templates/editor.html`, `app/templates/page.html`,
-  `app/templates/tree.html`, `app/web.py`, `tests/test_assets.py`,
-  `tests/test_web.py`, `LOG.md`
