@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 01:14 UTC — Codex
+Made administrator-created user passwords permanent by default, while keeping
+the bootstrap account's first-login password-change safeguard unchanged.
+- Files: `app/admin_api.py`, `app/templates/admin.html`,
+  `tests/test_admin_api.py`, `LOG.md`
+
 ## 2026-08-30 01:13 UTC — Codex
 Renamed the administration surface to Settings, replaced the top-bar Admin
 label with an accessible gear link, and separated Users from the combined
@@ -96,8 +102,3 @@ Moved Save/Cancel to the left of the editor box and replaced the draft notice
 with a compact Draft badge immediately beside the title for draft pages.
 - Files: `app/templates/page.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:53 UTC — Codex
-Moved the Draft toggle into the hidden inline editor, so it appears only while
-editing rather than in the normal page title row.
-- Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`

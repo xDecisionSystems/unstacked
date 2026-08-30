@@ -553,6 +553,7 @@ def test_created_user_can_authenticate_with_the_password_the_admin_set(app_env, 
             "/auth/login", json={"username": "new-person", "password": NEW_PASSWORD}
         )
         assert login.status_code == 200
+        assert login.json()["must_change_password"] is False
 
 
 def test_duplicate_email_is_a_conflict(app_env, client):

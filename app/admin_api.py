@@ -78,8 +78,8 @@ class UserCreate(BaseModel):
     email: EmailStr
     display_name: str = Field(min_length=1, max_length=200)
     # There is no mail transport in this deployment model, so an administrator
-    # sets the initial password directly and communicates it out of band; the
-    # recipient changes it afterwards.  No invitation tokens are minted here.
+    # sets the initial password directly and communicates it out of band. No
+    # invitation tokens are minted here.
     password: str = Field(min_length=MINIMUM_PASSWORD_LENGTH, max_length=1024)
     is_admin: bool = False
 
@@ -491,11 +491,10 @@ def create_user(payload: UserCreate, request: Request, actor: AdminActor) -> Use
             password_hash=hash_password(payload.password),
             display_name=payload.display_name,
             is_admin=payload.is_admin,
-            # The administrator sets this password and hands it to the
-            # recipient out of band; forcing a change on first login matches
-            # bootstrap's own admin account and means the admin-chosen value
-            # is never the account's long-term credential.
-            must_change_password=True,
+            # An administrator may choose a permanent password for a new
+            # account. Bootstrap credentials remain the separate case that
+            # must be replaced on first use.
+            must_change_password=False,
         )
         session.add(user)
         try:
