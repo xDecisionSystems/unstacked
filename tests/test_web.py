@@ -321,6 +321,8 @@ def test_home_edit_round_trip_updates_markdown_and_title(app_env, client):
     assert "@milkdown/crepe@7.21.1" in editor.text
     assert "lib/theme/common/style.css" not in editor.text
     assert "top-bar.css" in editor.text
+    assert "@milkdown/prose@7.21.1/lib/style/prosemirror.css" in editor.text
+    assert "@milkdown/kit@7.21.1/lib/prose" not in editor.text
     assert 'name="widgets_json"' in editor.text
     assert 'data-id="featured"' in editor.text
     csrf_token = _csrf_from(editor.text)
@@ -702,6 +704,8 @@ def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, c
     assert "@milkdown/crepe@7.21.1" in response.text
     assert "lib/theme/common/style.css" not in response.text
     assert "top-bar.css" in response.text
+    assert "@milkdown/prose@7.21.1/lib/style/prosemirror.css" in response.text
+    assert "@milkdown/kit@7.21.1/lib/prose" not in response.text
     assert "toastui" not in response.text.lower()
     assert 'aria-label="Breadcrumb"' not in response.text
 
@@ -753,6 +757,8 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
     assert "@milkdown/crepe@7.21.1" in editor.text
     assert "lib/theme/common/style.css" not in editor.text
     assert "top-bar.css" in editor.text
+    assert "@milkdown/prose@7.21.1/lib/style/prosemirror.css" in editor.text
+    assert "@milkdown/kit@7.21.1/lib/prose" not in editor.text
     assert "toastui" not in editor.text.lower()
     assert 'name="card_image"' in editor.text
     csrf_token = _csrf_from(editor.text)

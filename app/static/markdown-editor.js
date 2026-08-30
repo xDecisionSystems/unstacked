@@ -1,5 +1,5 @@
 (() => {
-  const MILKDOWN_URL = 'https://esm.sh/@milkdown/crepe@7.21.1?bundle&target=es2020';
+  const MILKDOWN_URL = 'https://cdn.jsdelivr.net/npm/@milkdown/crepe@7.21.1/+esm';
 
   async function mount(textarea, Crepe) {
     if (textarea.dataset.enhanced === 'true') return;
@@ -12,6 +12,7 @@
         root,
         defaultValue: textarea.value,
         features: {
+          [Crepe.Feature.Cursor]: false,
           [Crepe.Feature.ImageBlock]: false,
           [Crepe.Feature.TopBar]: true,
         },

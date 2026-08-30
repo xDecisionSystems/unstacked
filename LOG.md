@@ -10,6 +10,22 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 23:42 UTC — Codex
+Corrected the remaining Milkdown CDN failures visible in Safari. The prior
+paths pointed at package-relative stylesheet wrappers that only work after a
+bundler rewrites them; they now load the pinned underlying `@milkdown/prose`
+styles directly. Switched the browser editor import from esm.sh to the
+pinned jsDelivr ESM bundle, whose source map resolves, and disabled Crepe's
+collaboration cursor feature so it does not request unused cursor CSS.
+The regular rich-text controls remain enabled; image upload remains disabled
+until it can use a server-validated browser upload flow. All pinned runtime
+assets return 200, and focused tests and ruff pass. Production Compose
+started cleanly on port 18765; `/healthz` returned 200 and served the new
+editor bundle before teardown.
+- Files: `app/static/markdown-editor.js`, `app/templates/editor.html`,
+  `app/templates/home_editor.html`, `app/templates/page.html`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 23:34 UTC — Codex
 Fixed Milkdown’s CSS delivery after Safari exposed real 404s for styles that
 were written for a bundler rather than direct CDN use. Replaced the broken
@@ -349,11 +365,3 @@ branding controls for a custom workspace name and validated raster logo.
 - Files: `app/admin_api.py`, `app/branding.py`, `app/config.py`,
   `app/static/branding/badger-typewriter.png`, `app/static/style.css`,
   `app/templates/admin.html`, `app/templates/base.html`, `app/web.py`, `LOG.md`
-
-## 2026-08-30 18:34 UTC — Codex
-Separated the workspace landing page from content libraries: Home now shows
-only featured items, while new Books and permission-filtered Pages views are
-available from the top navigation.
-- Files: `app/static/style.css`, `app/templates/base.html`,
-  `app/templates/books.html`, `app/templates/pages.html`,
-  `app/templates/tree.html`, `app/web.py`, `tests/test_web.py`, `LOG.md`
