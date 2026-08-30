@@ -750,6 +750,11 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
         "editor-plugin-chart.min.js"
     )
     assert "editor-plugin-chart" in editor.text
+    # Despite the "-all" name, this plugin references window.Prism directly
+    # and does not bundle it -- the same missing-dependency shape as chart.
+    assert editor.text.index("prism.min.js") < editor.text.index(
+        "editor-plugin-code-syntax-highlight-all.min.js"
+    )
     assert "editor-plugin-code-syntax-highlight" in editor.text
     # Unlike the other plugins, color-syntax has no "-all" bundle variant --
     # that filename 404s. It also has its own separate library dependency

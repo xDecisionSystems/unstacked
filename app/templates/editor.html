@@ -25,6 +25,11 @@
 <link rel="stylesheet" href="https://uicdn.toast.com/chart/latest/toastui-chart.min.css">
 <script src="https://uicdn.toast.com/chart/latest/toastui-chart.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-chart/latest/toastui-editor-plugin-chart.min.js"></script>
+<!-- Despite the "-all" name, this plugin does not bundle Prism.js -- it
+     references window.Prism directly and throws without it, the same
+     missing-peer-dependency shape as the chart and color-syntax plugins. -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
 <script src="https://uicdn.toast.com/editor-plugin-code-syntax-highlight/latest/toastui-editor-plugin-code-syntax-highlight-all.min.js"></script>
 <!-- Unlike the other plugins, color-syntax ships no "-all" bundle variant;
      that filename 404s and was never actually loading. Once it does load,

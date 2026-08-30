@@ -10,6 +10,37 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 22:47 UTC — Claude Code
+Third round on the Toast UI toolbar bug. With the color-picker fix
+confirmed live (`GET /version` showed the deployed commit, and its specific
+console error was gone), a fresh console check still showed a `SyntaxError`
+with no source-file attribution -- unusual enough to suspect a browser
+extension, ruled out by the user reproducing it in a Private Browsing
+window.
+
+Went back and checked the one plugin never actually verified for hidden
+dependencies: `code-syntax-highlight`. Despite its "-all" filename
+(everywhere else in this set, "-all" meant "self-contained bundle"), it
+references `window.Prism` directly and does not include Prism.js -- the
+same missing-peer-dependency shape as chart and color-syntax, just from a
+different, unrelated library (Prism ships from cdnjs, not uicdn.toast.com).
+Added Prism.js + its theme CSS before the plugin script in all three
+templates.
+
+Also re-checked `table-merged-cell` and `uml` more thoroughly this time
+(broader pattern match, not just `window.X`) before calling the set clean:
+`table-merged-cell` references nothing external; `uml` does reference a
+`plantuml-encoder` dependency and an external plantuml.com rendering
+service, but both are inside a lazily-invoked, try/caught code path used
+only when someone actually renders a UML diagram -- not at editor
+construction time -- so left alone rather than adding a dependency nothing
+has exercised yet.
+
+Extended the existing regression test with the same load-order assertion
+pattern. Full suite green, ruff clean.
+- Files: `app/templates/page.html`, `app/templates/editor.html`,
+  `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 22:23 UTC — Claude Code
 Follow-up to the Toast UI toolbar fix: with `GET /version` confirming the
 live site really was running the earlier fix, the user still saw the "H"
@@ -305,19 +336,3 @@ their book containers out of the dashboard.
 - Files: `app/content.py`, `app/default_groups.py`, `app/web.py`,
   `app/templates/tree.html`, `tests/test_ai_api.py`,
   `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 06:49 UTC — Codex
-Replaced the chapter hierarchy with a book-and-page model: legacy chapters
-promote to books at startup, their effective grants are preserved, and the
-web/settings UI now uses book-level permissions and a draggable page grid.
-- Files: `app/acl.py`, `app/admin_api.py`, `app/ai_api.py`,
-  `app/ai_service.py`, `app/bootstrap.py`, `app/content.py`,
-  `app/default_groups.py`, `app/main.py`, `app/static/style.css`,
-  `app/templates/admin.html`, `app/templates/book.html`,
-  `app/templates/manage.html`, `app/templates/move_page.html`,
-  `app/templates/tree.html`, `app/web.py`, `tests/test_admin_api.py`,
-  `tests/test_ai_api.py`, `tests/test_assets.py`, `tests/test_authorization_coverage.py`,
-  `tests/test_book_migration.py`, `tests/test_content_build.py`,
-  `tests/test_content_lifecycle.py`, `tests/test_content_structure.py`,
-  `tests/test_content_symlink_races.py`, `tests/test_default_groups.py`,
-  `tests/test_web.py`, `LOG.md`
