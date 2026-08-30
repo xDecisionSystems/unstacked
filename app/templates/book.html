@@ -21,7 +21,7 @@
 <ul class="page-cards book-page-grid" id="book-page-cards" data-parent="{{ book.slug }}">
   {% for page in book.pages %}
   <li class="page-card" draggable="true" data-key="{{ page.path }}" data-page-title="{{ page.label|lower }}">
-    <a draggable="false" href="/pages/{{ page.path }}"><span class="page-card-type">PAGE</span><strong>{{ page.label }}</strong>{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}<span class="page-card-open">Open →</span></a>{% if is_admin %}<form class="card-home-action" method="post" action="/home/feature"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target" value="{{ page.path }}.md"><button type="submit">Feature on home</button></form>{% endif %}
+    <a draggable="false" href="/pages/{{ page.path }}">{% if page.card_image %}<img class="page-card-image" src="/assets/{{ page.card_image }}" alt="">{% endif %}<span class="page-card-type">PAGE</span><strong>{{ page.label }}</strong>{% if page.draft %}<span class="draft-badge">Draft</span>{% endif %}<span class="page-card-open">Open →</span></a>{% if is_admin %}<form class="card-home-action" method="post" action="/home/feature"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target" value="{{ page.path }}.md"><button type="submit">Feature on home</button></form>{% endif %}
   </li>
   {% endfor %}
 </ul>

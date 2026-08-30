@@ -95,6 +95,7 @@ class AIContentService:
         markdown: str,
         tags: list[str],
         draft: bool,
+        card_image: str | None = None,
     ) -> CreatedContent:
         parent = authorization.require_write(parent)
         target = f"{parent}/{make_slug(title, slug)}.md"
@@ -107,6 +108,7 @@ class AIContentService:
             tags,
             draft,
             authorization.user,
+            card_image=card_image,
         )
 
     def set_container_tags(

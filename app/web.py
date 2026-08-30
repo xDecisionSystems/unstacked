@@ -180,15 +180,17 @@ def _page_view(content, path: str) -> dict[str, str | bool]:
         metadata, _markdown, _raw = content.read_page(path)
         draft = bool(metadata.get("draft"))
         label = metadata.get("title") or _slug_title(slug)
+        card_image = metadata.get("card_image")
     except (ContentError, UnsafePath):
         # A hand-edited broken page must not make every authenticated view
         # fail.  The page route will present the actual error when opened.
-        draft, label = False, _slug_title(slug)
+        draft, label, card_image = False, _slug_title(slug), None
     return {
         "path": path.removesuffix(".md"),
         "label": label,
         "draft": draft,
         "public": bool(metadata.get("public")) if "metadata" in locals() else False,
+        "card_image": card_image if isinstance(card_image, str) else None,
     }
 
 
@@ -555,6 +557,7 @@ def _editor_context(
             "draft": "on" if metadata.get("draft") else "",
             "base_blob_sha": content.page_blob_sha(path),
             "parent": path.rsplit("/", 1)[0],
+            "card_image": str(metadata.get("card_image") or ""),
         }
     context.update({"form": form or {}, "error": error, "editing_path": path})
     return templates.TemplateResponse(request, "editor.html", context, status_code=status_code)
@@ -751,6 +754,7 @@ async def save_page(
                 _tags(form.get("tags", "")),
                 form.get("draft") == "on",
                 base_blob_sha=form.get("base_blob_sha", ""),
+                card_image=form.get("card_image") or None,
             )
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             return _editor_context(
@@ -853,7 +857,14 @@ def new_page(
             request,
             session,
             user,
-            form={"title": "", "markdown": "", "tags": "", "draft": "", "parent": parent},
+            form={
+                "title": "",
+                "markdown": "",
+                "tags": "",
+                "draft": "",
+                "parent": parent,
+                "card_image": "",
+            },
         )
 
 
@@ -874,6 +885,7 @@ async def create_page_submit(
                 markdown=form.get("markdown", ""),
                 tags=_tags(form.get("tags", "")),
                 draft=form.get("draft") == "on",
+                card_image=form.get("card_image") or None,
             )
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             return _editor_context(
@@ -1179,6 +1191,7 @@ def page_view(
                     "draft": bool(metadata.get("draft")),
                     "public": bool(metadata.get("public")),
                     "base_blob_sha": content.page_blob_sha(target),
+                    "card_image": str(metadata.get("card_image") or ""),
                 },
                 "available_tags": sorted(available_tags, key=str.casefold),
             }

@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 17:18 UTC — Codex
+Added optional, safe page-card images. Images are Git-tracked book assets,
+validated against the page's book, available through the page editor and API,
+and displayed on book and featured-home page cards.
+- Files: `app/ai_api.py`, `app/ai_service.py`, `app/content.py`,
+  `app/static/style.css`, `app/templates/book.html`,
+  `app/templates/editor.html`, `app/templates/page.html`,
+  `app/templates/tree.html`, `app/web.py`, `tests/test_assets.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 17:07 UTC — Codex
 Replaced fake home books with a Git-versioned curated home layout that can
 feature real books or pages, and allowed exact permissions only for featured
@@ -107,9 +117,4 @@ toggle actions and compact group deletion controls.
 ## 2026-08-30 05:21 UTC — Codex
 Expanded the new-user password checklist to show length, uppercase, lowercase,
 and number requirements with individual live red/green feedback.
-- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 05:15 UTC — Codex
-Added live password-requirement feedback to Settings: red until 12 characters
-are entered, then green.
 - Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`

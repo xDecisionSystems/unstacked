@@ -196,6 +196,7 @@ class PageCreate(ContainerCreate):
         max_length=100,
     )
     draft: bool = False
+    card_image: str | None = Field(default=None, max_length=500)
 
 
 class CreatedResponse(BaseModel):
@@ -601,6 +602,7 @@ def _create_page(parent: str, payload: PageCreate, request: Request, user: User)
                     markdown=payload.markdown,
                     tags=payload.tags,
                     draft=payload.draft,
+                    card_image=payload.card_image,
                 )
             )
     except (AccessDenied, ContentError, UnsafePath) as exc:

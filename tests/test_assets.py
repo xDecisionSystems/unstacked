@@ -134,6 +134,42 @@ def _upload(client: TestClient, token: str, name: str, data: bytes, mime: str = 
     )
 
 
+def test_page_card_image_must_be_an_uploaded_image_from_its_book(tmp_path: Path):
+    """Card art is content metadata, but never an arbitrary URL or cross-book asset."""
+
+    app, _settings, token = _make_app(tmp_path)
+    with TestClient(app) as client:
+        _seed_book(client, token)
+        uploaded = _upload(client, token, "cover.png", png(4, 3))
+        assert uploaded.status_code == 201
+        card_image = uploaded.json()["path"]
+
+        created = client.post(
+            "/api/ai/books/knowledge/pages",
+            json={"title": "Welcome", "card_image": card_image},
+            headers=bearer(token),
+        )
+        assert created.status_code == 201
+        page = client.get("/api/ai/content/knowledge/welcome.md", headers=bearer(token))
+        assert page.json()["metadata"]["card_image"] == card_image
+
+        assert (
+            client.post("/api/ai/books", json={"title": "Other"}, headers=bearer(token)).status_code
+            == 201
+        )
+        other_image = client.post(
+            "/api/ai/books/other/assets",
+            files={"file": ("other.png", png(4, 3), "image/png")},
+            headers=bearer(token),
+        ).json()["path"]
+        rejected = client.post(
+            "/api/ai/books/knowledge/pages",
+            json={"title": "Wrong cover", "card_image": other_image},
+            headers=bearer(token),
+        )
+        assert rejected.status_code == 422
+
+
 # --- Detection ---------------------------------------------------------------
 
 
@@ -566,7 +602,7 @@ def test_renaming_a_book_moves_assets_and_rewrites_relative_links(tmp_path):
     assert (docs / "assets/handbook/logo.png").is_file()
     assert "assets/handbook/logo.png" in (docs / "handbook/overview.md").read_text()
     assert "assets/handbook/logo.png" in (
-        docs / "handbook/reference/details.md"
+        docs / "handbook/details.md"
     ).read_text()
 
 
@@ -733,7 +769,7 @@ def test_an_uploaded_image_survives_a_strict_standalone_mkdocs_build(tmp_path):
     # The asset is copied verbatim, so a browser loads it straight from disk
     # without any application route in the way.
     assert (site / "assets" / "knowledge" / "logo.png").read_bytes() == png(8, 6)
-    for page in (site / "knowledge" / "overview", site / "knowledge" / "reference" / "detail"):
+    for page in (site / "knowledge" / "overview", site / "knowledge" / "detail"):
         html = (page / "index.html").read_text(encoding="utf-8")
         source = html.split('<img alt="Logo" src="', 1)[1].split('"', 1)[0]
         # MkDocs rewrote the link for the page's own depth; following it from

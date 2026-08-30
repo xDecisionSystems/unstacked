@@ -290,6 +290,20 @@ def test_book_page_shows_direct_pages(client, book_with_pages):
     assert 'href="/pages/handbook/overview"' in page.text
 
 
+def test_book_page_renders_an_optional_page_card_image(client, book_with_pages):
+    page_file = book_with_pages.docs / "handbook" / "overview.md"
+    page_file.write_text(
+        page_file.read_text(encoding="utf-8").replace(
+            "draft: false", "draft: false\ncard_image: assets/handbook/cover.png"
+        ),
+        encoding="utf-8",
+    )
+    _login(client, "admin")
+
+    page = client.get("/books/handbook")
+    assert 'class="page-card-image" src="/assets/assets/handbook/cover.png"' in page.text
+
+
 def test_book_page_carries_page_drag_reorder_markup(client, book_with_pages):
     """Page cards are draggable with a stable key and load the shared script."""
 
@@ -516,6 +530,7 @@ def test_editor_saves_through_the_acl_service_and_marks_drafts(app_env, client):
     assert "editor-plugin-color-syntax" in editor.text
     assert "editor-plugin-table-merged-cell" in editor.text
     assert "editor-plugin-uml" in editor.text
+    assert 'name="card_image"' in editor.text
     csrf_token = _csrf_from(editor.text)
     blob_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
 

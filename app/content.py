@@ -57,6 +57,7 @@ from app.paths import (
 # name, so ``assets/<book>/<file>`` can never collide with real content and a
 # path's first segment unambiguously says whether it is an asset.
 ASSETS_ROOT = "assets"
+_CARD_IMAGE_UNSET = object()
 
 HOME_LAYOUT_FILE = ".unstacked-home.json"
 LEGACY_MAIN_BOOK_SPECS = {
@@ -757,6 +758,8 @@ class ContentRepository:
         tags: list[str],
         draft: bool,
         actor: User,
+        *,
+        card_image: str | None = None,
     ) -> CreatedContent:
         parent = self._validate_page_parent(parent)
         slug = make_slug(title, requested_slug)
@@ -765,9 +768,10 @@ class ContentRepository:
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
             raise ContentError("page exceeds configured size limit")
         now = datetime.now(timezone.utc).isoformat()
-        serialized = new_page(
-            markdown,
-            {
+        with self.git.write_lock():
+            if not is_confined_directory(self.docs, parent):
+                raise ContentMissing("parent book or chapter not found")
+            metadata = {
                 "id": str(uuid4()),
                 "title": title,
                 "created_at": now,
@@ -775,11 +779,11 @@ class ContentRepository:
                 "author": actor.email,
                 "tags": tags,
                 "draft": draft,
-            },
-        )
-        with self.git.write_lock():
-            if not is_confined_directory(self.docs, parent):
-                raise ContentMissing("parent book or chapter not found")
+            }
+            normalized_card_image = self._card_image_ref(parent, card_image)
+            if normalized_card_image:
+                metadata["card_image"] = normalized_card_image
+            serialized = new_page(markdown, metadata)
             try:
                 atomic_write_confined(self.docs, page_relative, serialized, overwrite=False)
                 commit = self.git.commit_paths(
@@ -817,6 +821,7 @@ class ContentRepository:
         actor: User,
         *,
         base_blob_sha: str,
+        card_image: str | None | object = _CARD_IMAGE_UNSET,
     ) -> str:
         """Rewrite a page body and its editable metadata as one commit.
 
@@ -854,6 +859,24 @@ class ContentRepository:
                 document = parse_page(original, default_title=Path(page_relative).stem)
                 now = datetime.now(timezone.utc).isoformat()
                 metadata = {"updated_at": now, "tags": list(tags), "draft": draft}
+                if card_image is not _CARD_IMAGE_UNSET:
+                    normalized_card_image = self._card_image_ref(page_relative, card_image)
+                    if normalized_card_image:
+                        metadata["card_image"] = normalized_card_image
+                    else:
+                        document = replace(
+                            document,
+                            metadata={
+                                key: value
+                                for key, value in document.metadata.items()
+                                if key != "card_image"
+                            },
+                            raw_metadata={
+                                key: value
+                                for key, value in document.raw_metadata.items()
+                                if key != "card_image"
+                            },
+                        )
                 # Repair app metadata a hand-authored page never had, rather than
                 # serializing the nulls the tolerant reader substitutes for it.
                 metadata.update(self._repaired_metadata(document, actor, now))
@@ -1657,6 +1680,20 @@ class ContentRepository:
         # Resolve so traversal cannot reach a file outside docs/ even if a
         # future caller passes something normalize_relative_path tolerates.
         safe_join(self.docs, relative)
+        return relative
+
+    def _card_image_ref(self, parent_or_page: str, value: str | None | object) -> str | None:
+        """Validate an optional card image belongs to the page's own book."""
+
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        if not isinstance(value, str):
+            raise ContentError("card image must be an uploaded image path")
+        relative = self._asset_ref(value.strip())
+        book_slug = normalize_relative_path(parent_or_page).split("/", 1)[0]
+        if relative.split("/", 2)[1] != book_slug:
+            raise ContentError("card image must belong to this page's book")
+        self.read_asset(relative)
         return relative
 
     @staticmethod

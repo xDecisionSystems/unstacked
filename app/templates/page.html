@@ -28,6 +28,7 @@
       <label class="tag-entry-label" for="tag-entry"><input id="tag-entry" autocomplete="off" placeholder="Enter a new tag…"><button type="button" id="add-tag">Add</button></label>
       <p class="tag-panel-label">Current tags</p><div id="current-tags" class="tag-bubbles" aria-label="Current tags"></div>
       {% if available_tags %}<p class="tag-panel-label">Click an existing tag</p><div id="known-tags" class="tag-bubbles" aria-label="Previously used tags"></div>{% endif %}<p class="tag-help">Write permission is required. Only tags accessible to this user are shown.</p>
+      <p class="tag-panel-label">Card image</p><label><input name="card_image" value="{{ edit_form.card_image }}" placeholder="assets/{{ current_path.split('/')[0] }}/image.png"></label><p class="tag-help">Optional. Use an uploaded image from this book.</p>
     </aside>
     <div class="form-actions inline-editor-actions"><button type="submit">Save</button><button type="button" id="edit-cancel">Cancel</button></div>
     <label>Markdown<textarea id="markdown-editor" name="markdown">{{ edit_form.markdown }}</textarea></label>

@@ -10,6 +10,7 @@
   <label>Title<input name="title" value="{{ form.title }}" {% if editing_path %}readonly{% endif %}></label>
   {% if not editing_path %}<label>URL slug (optional)<input name="slug" value="{{ form.slug or '' }}"></label>{% endif %}
   <label>Tags (comma-separated)<input name="tags" value="{{ form.tags }}"></label>
+  <label>Card image (optional)<input name="card_image" value="{{ form.card_image or '' }}" placeholder="assets/{{ form.parent.split('/')[0] if form.parent else 'book' }}/image.png"></label>
   <label class="checkbox"><input type="checkbox" name="draft" {% if form.draft %}checked{% endif %}> Draft — exclude from the published site</label>
   <label>Markdown<textarea id="markdown-editor" name="markdown">{{ form.markdown }}</textarea></label>
   <div class="form-actions"><button type="submit">Save</button>{% if editing_path %}<a class="button" href="/pages/{{ editing_path.removesuffix('.md') }}">Cancel</a>{% endif %}</div>
