@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 18:34 UTC — Codex
+Separated the workspace landing page from content libraries: Home now shows
+only featured items, while new Books and permission-filtered Pages views are
+available from the top navigation.
+- Files: `app/static/style.css`, `app/templates/base.html`,
+  `app/templates/books.html`, `app/templates/pages.html`,
+  `app/templates/tree.html`, `app/web.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 18:27 UTC — Codex
 Replaced text-based home-feature actions with visible star toggles that retain
 their selected state and return the user to the current book or library view.
@@ -114,8 +122,3 @@ matrix with read/write levels and per-group select-all controls.
 - Files: `app/admin_api.py`, `app/templates/admin.html`,
   `app/static/style.css`, `tests/test_admin_api.py`, `tests/test_web.py`,
   `LOG.md`
-
-## 2026-08-30 05:34 UTC — Codex
-Redesigned Groups as a user-by-group checkbox matrix with direct membership
-toggle actions and compact group deletion controls.
-- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`

@@ -185,13 +185,13 @@ def test_two_users_with_different_grants_see_different_trees(app_env, client, co
     _grant(app, bob.id, "bob-book", group_name="bob-group")
 
     _login(client, "alice")
-    alice_tree = client.get("/tree")
+    alice_tree = client.get("/books")
     assert "Alice Book" in alice_tree.text
     assert "Bob Book" not in alice_tree.text
     client.cookies.clear()
 
     _login(client, "bob")
-    bob_tree = client.get("/tree")
+    bob_tree = client.get("/books")
     assert "Bob Book" in bob_tree.text
     assert "Alice Book" not in bob_tree.text
 
@@ -203,12 +203,45 @@ def test_two_users_with_different_grants_see_different_trees(app_env, client, co
 
 def test_dashboard_renders_a_card_per_book_linked_to_its_book_page(client, content):
     _login(client, "admin")
-    page = client.get("/tree")
+    page = client.get("/books")
     assert page.status_code == 200
     assert 'data-key="alice-book"' in page.text
     assert 'data-key="bob-book"' in page.text
     assert 'href="/books/alice-book"' in page.text
     assert 'href="/books/bob-book"' in page.text
+
+
+def test_home_only_shows_featured_content_and_navigation_exposes_libraries(client, content):
+    _login(client, "admin")
+
+    home = client.get("/tree")
+    assert 'href="/books"' in home.text
+    assert 'href="/pages"' in home.text
+    assert "Alice Book" not in home.text
+    assert "Secret" not in home.text
+
+    csrf = _csrf_from(home.text)
+    assert client.post(
+        "/home/feature",
+        data={"csrf_token": csrf, "target": "alice-book/secret.md", "return_to": "/tree"},
+        follow_redirects=False,
+    ).status_code == 303
+    home = client.get("/tree")
+    assert "Secret" in home.text
+    assert "Bob Book" not in home.text
+
+
+def test_pages_view_lists_only_pages_the_user_can_read(app_env, client, content):
+    app, _settings, _admin, _token = app_env
+    alice = _make_user(app, "alice")
+    _grant(app, alice.id, "alice-book", group_name="alice-pages")
+
+    _login(client, "alice")
+    pages = client.get("/pages")
+    assert pages.status_code == 200
+    assert "Secret" in pages.text
+    assert "Other" not in pages.text
+    assert 'href="/pages/alice-book/secret"' in pages.text
 
 
 def test_admin_can_feature_a_page_or_book_on_home(client, content):
@@ -271,12 +304,12 @@ def test_the_add_book_button_is_admin_only(app_env, client, content):
     _make_user(app, "reader")
 
     _login(client, "admin")
-    admin_page = client.get("/tree")
+    admin_page = client.get("/books")
     assert "new-book-popover" in admin_page.text
     client.cookies.clear()
 
     _login(client, "reader")
-    reader_page = client.get("/tree")
+    reader_page = client.get("/books")
     assert "new-book-popover" not in reader_page.text
 
 
@@ -285,7 +318,7 @@ def test_dashboard_empty_state_when_no_books_are_visible(app_env, client):
     _make_user(app, "reader")
 
     _login(client, "reader")
-    page = client.get("/tree")
+    page = client.get("/books")
     assert "Nothing here yet" in page.text
     assert 'id="book-cards"' not in page.text
 
@@ -363,7 +396,7 @@ def test_creation_popovers_have_no_slug_field(client, book_with_pages):
     """Slug is always derived from the title now -- see make_slug."""
 
     _login(client, "admin")
-    dashboard = client.get("/tree")
+    dashboard = client.get("/books")
     assert 'name="slug"' not in dashboard.text
     book_page = client.get("/books/handbook")
     assert 'name="slug"' not in book_page.text

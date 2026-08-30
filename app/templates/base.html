@@ -10,6 +10,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/tree">Unstacked</a>
+    {% if current_user %}<nav class="topbar-nav" aria-label="Content"><a href="/books">Books</a><a href="/pages">Pages</a></nav>{% endif %}
     <form class="site-search" method="get" action="/search" role="search">
       <label class="visually-hidden" for="site-search-query">Search content</label>
       <input id="site-search-query" name="q" type="search" placeholder="⌕  Search every page…" value="{{ query|default('') }}">

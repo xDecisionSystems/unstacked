@@ -265,11 +265,15 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
             home_items.append({"kind": "page", "target": target, **pages_by_path[target]})
         elif target in books_by_slug:
             home_items.append({"kind": "book", "target": target, **books_by_slug[target]})
+    pages = sorted(
+        pages_by_path.values(), key=lambda page: (page["label"].casefold(), page["path"])
+    )
     return {
         "request": request,
         "current_user": user,
         "csrf_token": read_session(request, user).csrf_token,
         "tree": [book for book in display_tree if book["can_read_book"]],
+        "pages": pages,
         "home_items": home_items,
         "is_admin": user.is_admin,
     }
@@ -432,6 +436,26 @@ def tree_view(
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     return templates.TemplateResponse(request, "tree.html", context)
+
+
+@router.get("/books", response_class=HTMLResponse, include_in_schema=False)
+def books_view(
+    request: Request,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    with Session(request.app.state.engine) as session:
+        context = _base_context(request, session, user)
+    return templates.TemplateResponse(request, "books.html", context)
+
+
+@router.get("/pages", response_class=HTMLResponse, include_in_schema=False)
+def pages_view(
+    request: Request,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    with Session(request.app.state.engine) as session:
+        context = _base_context(request, session, user)
+    return templates.TemplateResponse(request, "pages.html", context)
 
 
 @router.get("/books/{book_slug}", response_class=HTMLResponse, include_in_schema=False)
