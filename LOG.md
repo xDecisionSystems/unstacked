@@ -10,6 +10,20 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 00:59 UTC — Codex
+Changed the Administration sidebar into section navigation: each link now
+shows only its related settings panel, updates the heading, and preserves a
+direct URL fragment for the selected panel.
+- Files: `app/templates/admin.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
+## 2026-08-30 00:35 UTC — Codex
+Added portable front-matter tags to book and chapter containers, with
+admin-only editing in their respective headers; tags remain valid MkDocs
+metadata rather than database content.
+- Files: `app/nav.py`, `app/content.py`, `app/ai_service.py`, `app/web.py`,
+  `app/templates/book.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-29 23:02 UTC — Codex
 Rebuilt the administration view around the Figma sidebar, access metrics, and
 structured management panels; replaced tiny chapter/page plus controls with
@@ -86,15 +100,3 @@ Restored floating editor actions without a panel, border, or shadow. On wide
 screens they sit immediately right of the editor; narrow screens keep them
 inline below it.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 07:50 UTC — Codex
-Moved the concise Draft toggle next to the page title and returned Save/Cancel
-to the inline editor flow without the fixed floating card.
-- Files: `app/templates/page.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-29 07:45 UTC — Codex
-Moved inline-editor Save and Cancel into a fixed floating group on the left,
-with a bottom horizontal layout on narrow screens.
-- Files: `app/templates/page.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`

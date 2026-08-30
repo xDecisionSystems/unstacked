@@ -692,6 +692,9 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert response.status_code == 200
     assert "/api/admin/users" in response.text
     assert "/api/admin/backup/config" in response.text
+    assert 'data-admin-panel="groups"' in response.text
+    assert 'data-admin-section="groups"' in response.text
+    assert "selectPanel" in response.text
     # Live rows delegate their destructive actions to the established CSRF
     # guarded APIs; confirmation happens before each state-changing request.
     for control in (
