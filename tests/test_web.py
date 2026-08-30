@@ -707,6 +707,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     # guarded APIs; confirmation happens before each state-changing request.
     for control in (
         "data-user-deactivate",
+        "data-user-reactivate",
         "data-user-delete",
         "primary Admin account cannot be deleted",
         "data-group-delete",

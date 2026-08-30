@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 06:25 UTC — Codex
+Added an explicit Reactivate action for inactive accounts, restoring access
+through the guarded user-update flow.
+- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 06:21 UTC — Codex
 Protected the primary Admin account from deletion and styled inactive users'
 disabled account actions in gray.
@@ -88,8 +93,3 @@ pages and the glasses state reflects both book and chapter visibility.
 Replaced book-card eye controls with clear, mixed, and filled glasses states
 that reflect private, mixed-descendant, and fully public visibility.
 - Files: `app/web.py`, `app/templates/tree.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 04:43 UTC — Codex
-Applied the accessible open/closed eye visibility toggle to book cards, matching
-the chapter-card visibility interaction.
-- Files: `app/templates/tree.html`, `app/static/style.css`, `LOG.md`
