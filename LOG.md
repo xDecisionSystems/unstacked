@@ -10,6 +10,34 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 21:37 UTC — Claude Code
+Added `GET /version`, at the user's request, so a deployed container's
+actual commit can be confirmed directly (`curl https://.../version`)
+instead of guessing whether a redeploy picked up a given push -- came up
+while chasing the Toast UI toolbar bug, since the user's live site
+auto-deploys on push and there was no way to confirm what commit it was
+actually running.
+
+`.dockerignore` excludes `.git` from the runtime image entirely, so the
+commit is resolved once at Docker *build* time instead: a new step at the
+very end of the builder stage (after the cacheable dependency-install
+layers, since this one changes on every single commit) copies in `.git`,
+runs `git rev-parse HEAD > /app/GIT_COMMIT`, then deletes `.git` again --
+only the one resolved SHA string crosses into the runtime image, never the
+repository history. `app/main.py` reads that file once at startup
+(`app.state.commit`); outside Docker (local dev, where the baked file never
+exists) it falls back to asking the actual checkout via `git rev-parse
+HEAD` directly, and reports `"unknown"` if neither source is available.
+
+Verified with a real `docker compose up --build`: correctly reported
+`93894b1` (the last real commit; uncommitted working-tree changes don't
+move `.git`'s HEAD, as expected). New `tests/test_main.py` covers the
+endpoint plus all three `_resolve_commit()` branches (baked file present,
+blank baked file falling back rather than reporting empty, and the
+git-unavailable "unknown" case). Full suite green, ruff clean.
+- Files: `app/main.py`, `Dockerfile`, `.dockerignore`, `tests/test_main.py`,
+  `LOG.md`
+
 ## 2026-08-30 21:18 UTC — Claude Code
 Fixed the Toast UI markdown editor's "H" toolbar button getting stuck
 "active" regardless of actual cursor position (reported by the user with a
@@ -257,10 +285,3 @@ by a more-specific permission rule.
 Added an explicit Reactivate action for inactive accounts, restoring access
 through the guarded user-update flow.
 - Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 06:21 UTC — Codex
-Protected the primary Admin account from deletion and styled inactive users'
-disabled account actions in gray.
-- Files: `app/admin_api.py`, `app/templates/admin.html`,
-  `app/static/style.css`, `tests/test_admin_api.py`, `tests/test_web.py`,
-  `LOG.md`

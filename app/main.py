@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,6 +20,37 @@ from app.web import router as web_router
 from app.web_auth import router as web_auth_router
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Baked into the image at build time (see Dockerfile) since `.dockerignore`
+# deliberately excludes `.git` from the runtime image entirely -- only this
+# one resolved string crosses that boundary, not the repository history.
+_BAKED_COMMIT_FILE = Path("/app/GIT_COMMIT")
+
+
+def _resolve_commit() -> str:
+    """The exact git commit this running instance was built from.
+
+    Lets an operator confirm a deployed container actually matches a given
+    push (``GET /version``) rather than assuming a rebuild picked it up.
+    Falls back to asking a local checkout directly outside Docker, where the
+    baked file never exists; "unknown" if neither source is available.
+    """
+
+    if _BAKED_COMMIT_FILE.is_file():
+        baked = _BAKED_COMMIT_FILE.read_text(encoding="utf-8").strip()
+        if baked:
+            return baked
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parent.parent,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -49,6 +81,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.login_attempts_per_minute,
         max_keys=settings.max_rate_limit_keys,
     )
+    # Resolved once at startup, not per request: it never changes for the
+    # life of the process, and the local-checkout fallback path shells out.
+    app.state.commit = _resolve_commit()
     # A backup target is optional, and now also runtime-editable: it may be
     # configured here from an already-persisted record (or the environment), or
     # later by an administrator through `PUT /api/admin/backup/config`.  No
@@ -65,6 +100,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/healthz", tags=["System"])
     def healthcheck():
         return {"status": "ok"}
+
+    @app.get("/version", tags=["System"])
+    def version():
+        return {"commit": app.state.commit}
 
     @app.get("/llm.md", include_in_schema=False)
     def llm_md():

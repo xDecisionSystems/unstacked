@@ -1,4 +1,6 @@
-.git
+# .git is NOT excluded: the Dockerfile's builder stage reads it to resolve
+# the exact commit an image was built from (see GET /version), then discards
+# it before the runtime stage -- .git itself never reaches the final image.
 .github
 .venv
 .pytest_cache
