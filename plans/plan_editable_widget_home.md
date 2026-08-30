@@ -1,5 +1,19 @@
 # Plan: Editable, widget-based home page
 
+## Implementation checkpoint (2026-08-30)
+
+All six phases are implemented, merged to `main`, and verified: full test
+suite and `ruff` clean, a real Docker Compose deployment healthy with
+`index.md`'s widget front matter confirmed correct in the actual content
+volume (not just under test fixtures). Phases 1-2 (content/ACL/widget
+foundation) landed in `1871a09`; phases 3-5 (home editing UI, settings
+separation, featured-star verification) landed via two parallel
+worktree-isolated agents merged in `f26c10e`/`75af1c5`. Deferred, by
+design rather than time pressure: inline widget-placeholder tokens (the
+plan's own fixed-slot v1 decision) and every candidate widget beyond
+`featured` (recently-updated, by-tag, pinned, your-drafts) -- the schema
+supports adding them later without migration, but none were requested yet.
+
 ## Goal
 
 Replace the current fixed Home screen with a Git-versioned Markdown home page.
