@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 05:11 UTC — Codex
+Made Settings form validation errors readable so failed user creation explains
+the invalid field instead of displaying `object Object`.
+- Files: `app/templates/admin.html`, `LOG.md`
+
 ## 2026-08-30 04:56 UTC — Codex
 Fixed mixed book visibility so chapter settings take precedence for nested
 pages and the glasses state reflects both book and chapter visibility.

@@ -25,7 +25,8 @@
 </div>
 <script>
 const csrf={{ csrf_token|tojson }}, message=document.querySelector('#admin-message');
-const api=async(path,method='GET',body)=>{const r=await fetch(path,{method,headers:{'X-CSRF-Token':csrf,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.detail||'Request failed');return d};
+const errorDetail=detail=>Array.isArray(detail)?detail.map(item=>`${item.loc?.at(-1)||'Form'}: ${item.msg||'Invalid value'}`).join(' · '):typeof detail==='string'?detail:'Request failed';
+const api=async(path,method='GET',body)=>{const r=await fetch(path,{method,headers:{'X-CSRF-Token':csrf,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(errorDetail(d.detail));return d};
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usersEl=document.querySelector('#users'),groupsEl=document.querySelector('#groups'),permissionsEl=document.querySelector('#permissions'),backupEl=document.querySelector('#backup');
 const themeOptionsEl=document.querySelector('#theme-options'),themeCustomEl=document.querySelector('#theme-custom'),themeForm=document.querySelector('[data-theme]');
