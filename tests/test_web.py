@@ -768,6 +768,34 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert client.get("/admin").status_code == 404
 
 
+def test_settings_nav_has_a_dedicated_home_page_entry_pointing_to_home(app_env, client):
+    """Home's copy/layout editing moved to the Home page itself (index.md).
+
+    Settings keeps only administrator actions appropriate to the home page
+    -- a pointer to where editing now happens, plus (optionally) a
+    reset-to-starter action -- never the old copy-editing form fields.
+    """
+
+    _app, _settings, _admin, _token = app_env
+    _login(client, "admin")
+    response = client.get("/settings")
+    assert response.status_code == 200
+    assert 'data-admin-panel="home"' in response.text
+    assert 'data-admin-section="home"' in response.text
+    assert "Home page" in response.text
+    assert 'href="/"' in response.text
+
+    # The Branding form no longer carries Home's retired copy fields.
+    assert 'name="home_eyebrow"' not in response.text
+    assert 'name="home_title"' not in response.text
+    assert 'name="home_description"' not in response.text
+    assert 'name="featured_label"' not in response.text
+    assert "home_eyebrow" not in response.text
+    assert "home_title" not in response.text
+    assert "home_description" not in response.text
+    assert "featured_label" not in response.text
+
+
 def test_public_page_and_book_are_available_without_a_session(app_env, client):
     app, _settings, admin, _token = app_env
     repository = app.state.content

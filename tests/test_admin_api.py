@@ -829,3 +829,74 @@ def test_audit_helper_refuses_a_field_that_could_carry_a_secret(app_env, field):
     _app, _settings, admin, _token = app_env
     with pytest.raises(ValueError):
         _audit("admin.test", admin, **{field: "value"})
+
+
+# --------------------------------------------------------------------------
+# Branding: trimmed to name + logo only (Home's copy now lives in index.md)
+# --------------------------------------------------------------------------
+
+
+def test_branding_response_no_longer_carries_home_copy_fields(app_env, client):
+    """Branding is name + logo only; Home's copy moved to ``index.md``."""
+
+    _app, _settings, _admin, token = app_env
+    body = client.get("/api/admin/branding", headers=bearer(token)).json()
+    assert set(body) == {"name", "logo_url", "updated_at"}
+
+
+def test_branding_update_ignores_home_copy_fields_if_supplied(app_env, client):
+    """Extra legacy fields in the request body are simply ignored, not stored."""
+
+    _app, _settings, _admin, token = app_env
+    response = client.put(
+        "/api/admin/branding",
+        json={
+            "name": "Renamed Workspace",
+            "home_eyebrow": "SHOULD BE IGNORED",
+            "home_title": "SHOULD BE IGNORED",
+            "home_description": "SHOULD BE IGNORED",
+            "featured_label": "SHOULD BE IGNORED",
+        },
+        headers=bearer(token),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Renamed Workspace"
+    assert set(body) == {"name", "logo_url", "updated_at"}
+
+
+# --------------------------------------------------------------------------
+# Home page reset (Settings' one admin action for the home page)
+# --------------------------------------------------------------------------
+
+
+def test_reset_home_page_restores_starter_content_via_update_home_page(app_env, client):
+    """The reset action is one ordinary ``update_home_page`` commit, not a raw overwrite."""
+
+    app, _settings, admin, token = app_env
+    content = app.state.content
+    base_blob_sha = content.home_page_blob_sha()
+    content.update_home_page(
+        "Hand-authored home copy that must be discarded by reset.",
+        [],
+        admin,
+        base_blob_sha=base_blob_sha,
+        title="Custom Home Title",
+    )
+    metadata, body, _raw = content.read_home_page()
+    assert "Hand-authored" in body
+
+    response = client.post("/api/admin/home/reset", json={}, headers=bearer(token))
+    assert response.status_code == 200
+
+    metadata, body, _raw = content.read_home_page()
+    assert "Hand-authored" not in body
+    assert metadata["title"] == "Home"
+    assert metadata["widgets"] == [{"id": "featured", "type": "featured", "config": {}}]
+
+
+def test_reset_home_page_requires_admin(app_env, client):
+    app, settings, _admin, _token = app_env
+    reader = _make_user(app, "reset-reader@example.com")
+    token = create_api_token(reader, settings)
+    assert client.post("/api/admin/home/reset", json={}, headers=bearer(token)).status_code == 403
