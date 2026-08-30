@@ -712,6 +712,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
         "data-group-membership",
         "data-chapter-permission",
         "data-chapter-select-all",
+        "data-chapter-default",
         "data-chapter-level",
         "data-permission-delete",
     ):

@@ -42,7 +42,12 @@ from app.acl import AccessPolicy, Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
 from app.content import ContentRepository
-from app.default_groups import ADMIN_GROUP_NAME, PUBLIC_GROUP_NAME, sync_admin_membership
+from app.default_groups import (
+    ADMIN_GROUP_NAME,
+    PUBLIC_GROUP_NAME,
+    copy_public_chapter_defaults,
+    sync_admin_membership,
+)
 from app.git_backend import GitSyncError, scrub_git_output
 from app.models import Group, Permission, User, UserGroup, normalize_path_prefix
 from app.paths import (
@@ -639,6 +644,8 @@ def create_group(payload: GroupCreate, request: Request, actor: AdminActor) -> G
         group = Group(name=name, description=payload.description)
         session.add(group)
         try:
+            session.flush()
+            copy_public_chapter_defaults(session, group)
             session.commit()
         except IntegrityError as exc:
             session.rollback()

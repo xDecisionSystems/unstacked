@@ -2,6 +2,7 @@ from sqlmodel import Session, select
 
 from app.default_groups import ADMIN_GROUP_NAME, PUBLIC_GROUP_NAME
 from app.models import Group, Permission
+from tests.conftest import bearer
 
 
 def test_default_groups_keep_public_denied_and_admin_writable_for_new_chapters(app_env):
@@ -22,6 +23,33 @@ def test_default_groups_keep_public_denied_and_admin_writable_for_new_chapters(a
         grant = session.exec(
             select(Permission)
             .where(Permission.group_id == admin_group.id)
+            .where(Permission.path_prefix == "handbook/policies")
+        ).one()
+        assert grant.can_read and grant.can_write
+
+
+def test_new_group_inherits_public_chapter_defaults(app_env, client):
+    app, _settings, admin, token = app_env
+    app.state.content.create_book("Handbook", "handbook", admin)
+    app.state.content.create_chapter("handbook", "Policies", "policies", admin)
+    with Session(app.state.engine) as session:
+        public = session.exec(select(Group).where(Group.name == PUBLIC_GROUP_NAME)).one()
+        session.add(
+            Permission(
+                group_id=public.id,
+                path_prefix="handbook/policies",
+                can_read=True,
+                can_write=True,
+            )
+        )
+        session.commit()
+
+    response = client.post("/api/admin/groups", json={"name": "Editors"}, headers=bearer(token))
+    assert response.status_code == 201
+    with Session(app.state.engine) as session:
+        grant = session.exec(
+            select(Permission)
+            .where(Permission.group_id == response.json()["id"])
             .where(Permission.path_prefix == "handbook/policies")
         ).one()
         assert grant.can_read and grant.can_write

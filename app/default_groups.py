@@ -10,6 +10,7 @@ from pathlib import Path
 from sqlmodel import Session, select
 
 from app.models import Group, Permission, User, UserGroup
+from app.paths import path_depth
 
 PUBLIC_GROUP_NAME = "Public"
 ADMIN_GROUP_NAME = "Admin"
@@ -90,6 +91,32 @@ def ensure_default_groups(engine, docs: Path) -> None:
                     )
                 )
         session.commit()
+
+
+def copy_public_chapter_defaults(session: Session, group: Group) -> None:
+    """Copy the Public template's chapter grants to a newly created group."""
+
+    if group.id is None or group.name in {PUBLIC_GROUP_NAME, ADMIN_GROUP_NAME}:
+        return
+    public = session.exec(
+        select(Group).where(Group.name == PUBLIC_GROUP_NAME)
+    ).one_or_none()
+    if public is None or public.id is None:
+        return
+    defaults = session.exec(
+        select(Permission).where(Permission.group_id == public.id)
+    ).all()
+    for default in defaults:
+        if path_depth(default.path_prefix) != 2:
+            continue
+        session.add(
+            Permission(
+                group_id=group.id,
+                path_prefix=default.path_prefix,
+                can_read=default.can_read,
+                can_write=default.can_write,
+            )
+        )
 
 
 def grant_admin_group_write(engine, chapter_path: str) -> None:

@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 06:17 UTC — Codex
+Added chapter-level default permission icons and made new custom groups inherit
+the Public template’s per-chapter read/write defaults.
+- Files: `app/default_groups.py`, `app/admin_api.py`,
+  `app/templates/admin.html`, `app/static/style.css`,
+  `tests/test_default_groups.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-30 06:11 UTC — Codex
 Added built-in Public and Admin groups: Public begins with no chapter grants,
 while Admin receives read/write grants for every current and new chapter.
@@ -84,12 +91,3 @@ the chapter-card visibility interaction.
 Replaced chapter visibility action buttons with a single accessible eye toggle
 that reflects and switches the chapter’s recursive public state.
 - Files: `app/templates/book.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-08-30 04:15 UTC — Codex
-Moved book privacy controls into the library cards and made pages inherit both
-visibility and permissions from their parent chapter or book.
-- Files: `app/acl.py`, `app/admin_api.py`, `app/ai_service.py`,
-  `app/content.py`, `app/web.py`, `app/templates/book.html`,
-  `app/templates/page.html`, `app/templates/tree.html`,
-  `app/static/style.css`, `tests/test_acl.py`, `tests/test_admin_api.py`,
-  `tests/test_web.py`, `LOG.md`
