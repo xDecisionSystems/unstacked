@@ -214,6 +214,24 @@ def test_featured_page_can_receive_an_exact_permission(app_env, client, content)
     assert created.status_code == 201
 
 
+def test_home_page_can_receive_an_explicit_write_grant(app_env, client, content):
+    """``index.md`` classifies as a valid grant target, the same as a book.
+
+    An administrator must be able to hand another group write access to
+    Home explicitly -- Admin's own blanket grant already covers it, but any
+    other group starts with no access to the reserved home path.
+    """
+
+    app, _settings, admin, token = app_env
+    group_id = _group_with_member(client, token, admin.id)
+    created = client.post(
+        "/api/admin/permissions",
+        json={"group_id": group_id, "path_prefix": "index.md", "can_read": True, "can_write": True},
+        headers=bearer(token),
+    )
+    assert created.status_code == 201
+
+
 @pytest.mark.parametrize(
     "prefix",
     ["", "   ", "..", "book/../secret", "book//page", "book/./page", "book\\page"],

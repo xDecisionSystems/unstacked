@@ -10,6 +10,55 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 19:48 UTC — Claude Code
+Implemented Phase 1+2 of `plan_editable_widget_home.md`: the backend
+foundation for the editable, widget-based home page, deliberately stopping
+short of `app/web.py`, templates, and Branding routes so two parallel
+agents can build the editing UI and settings separation on top.
+
+- `ContentRepository` gained `read_home_page()`, `home_page_blob_sha()`, and
+  `update_home_page(markdown, widgets, actor, *, base_blob_sha, title=None)`,
+  mirroring `update_page`'s optimistic blob-SHA/locked-commit workflow but
+  fixed to the literal depth-1 `index.md` path rather than any depth-2 page.
+- Bootstrap now writes a widget-aware `index.md` starter (front matter with
+  `title` and one `featured` widget entry, body copy folded in once from
+  `app.branding`'s soon-to-be-retired `DEFAULT_HOME_*` constants as literal
+  text, not a live import). A new `_migrate_home_page()` upgrades an
+  existing repo's still-untouched bare placeholder to the same starter --
+  exact-byte comparison only, mirroring `_remove_legacy_main_books` -- and
+  leaves any hand-edited Home page alone.
+- `app/acl.py`'s `AccessPolicy.explain()` gained a narrow, read-only bypass:
+  `index.md` is readable by every active user regardless of group grants
+  (a brand-new user in no group must still see Home), while write stays
+  fully grant-gated like a book; scoped to that one literal path only.
+- `app/default_groups.py`'s `ensure_default_groups()` now folds `index.md`
+  into the same set it mirrors into the Admin group's grants, unconditionally
+  (never pruned the way a book's grant is when its directory disappears).
+- `app/admin_api.py`'s `_target_kind()` gained one branch classifying
+  `index.md` as `"home"`, so an administrator can grant another group
+  explicit write access to it from the existing permissions UI.
+- New `app/home_widgets.py`: a small explicit widget-type registry (not an
+  arbitrary-code executor). `parse_widget_entries`/`render_widgets`/
+  `build_home_widgets` never raise on malformed front matter or an unknown
+  widget `type` -- that entry renders nothing but produces a `WidgetError`
+  instead, and is never dropped (round-trip preservation is `update_home_page`
+  not gatekeeping on the registry). The one supported widget, `featured`,
+  reads `content.home_items()`, resolves each target's title the same way
+  `app/web.py`'s `_container_title`/`_page_view` do (without importing from
+  the web layer), and filters to what the given `AuthorizationContext` can
+  read, preserving stored order.
+- Added `tests/test_home_page.py`, `tests/test_home_widgets.py`, and ACL/
+  admin-API cases in `tests/test_acl.py`/`tests/test_admin_api.py` covering
+  the round trip, blob-SHA conflicts, bootstrap/migrate/leave-alone, the
+  registry's malformed/unknown-type handling, featured-widget ACL filtering,
+  and a real `mkdocs build --strict` against the new starter content.
+- Ruff and the full test suite (`uv run ruff check .`, `uv run pytest`) are
+  clean. `git fetch origin` showed no new commits since this work started.
+- Files: `app/acl.py`, `app/admin_api.py`, `app/content.py`,
+  `app/default_groups.py`, `app/home_widgets.py`, `tests/test_acl.py`,
+  `tests/test_admin_api.py`, `tests/test_home_page.py`,
+  `tests/test_home_widgets.py`, `LOG.md`
+
 ## 2026-08-30 19:23 UTC — Claude Code
 Reviewed Codex's `plan_editable_widget_home.md` at the user's request and
 folded in five concrete revisions before any implementation starts:
@@ -146,8 +195,3 @@ while Admin receives read/write grants for every current and new chapter.
 - Files: `app/default_groups.py`, `app/main.py`, `app/bootstrap.py`,
   `app/content.py`, `app/admin_api.py`, `tests/test_default_groups.py`,
   `LOG.md`
-
-## 2026-08-30 06:04 UTC — Codex
-Made inactive chapter-permission buttons white and outlined, with an orange
-filled selected state and white icon for clear status contrast.
-- Files: `app/static/style.css`, `LOG.md`

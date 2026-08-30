@@ -408,6 +408,8 @@ def _target_kind(content: ContentRepository, prefix: str) -> str | None:
         return None
     if depth == 1 and target.is_dir() and not prefix.endswith(".md"):
         return "book"
+    if prefix == "index.md" and target.is_file():
+        return "home"
     if (
         depth == 2
         and prefix.endswith(".md")

@@ -15,6 +15,13 @@ from app.models import Group, Permission, User, UserGroup
 PUBLIC_GROUP_NAME = "Public"
 ADMIN_GROUP_NAME = "Admin"
 
+# The reserved Home page, mirrored into the Admin group's grants alongside
+# every book. Unlike a book it is never pruned below for being "missing":
+# it is a fixed, permanent content path rather than a transient book
+# directory that can be deleted, so it always belongs in Admin's blanket
+# grant once bootstrap has created it.
+HOME_PAGE_PATH = "index.md"
+
 
 def _book_paths(docs: Path) -> list[str]:
     """Return real book directories, never the asset folder or dot directories."""
@@ -71,7 +78,14 @@ def ensure_default_groups(engine, docs: Path) -> None:
         assert public.id is not None and admin.id is not None
         for user in session.exec(select(User)).all():
             sync_admin_membership(session, user)
-        book_paths = set(_book_paths(docs))
+        # ``index.md`` (Home) is folded into the same mirrored set as every
+        # book, so Admin's blanket grant covers it with no special-casing
+        # elsewhere -- but unlike a book path, it is not derived from what
+        # currently exists under ``docs/``: it is a fixed, permanent content
+        # path, so it belongs in this set unconditionally rather than only
+        # when a directory listing happens to include it (e.g. before
+        # bootstrap has run).
+        book_paths = set(_book_paths(docs)) | {HOME_PAGE_PATH}
         existing = session.exec(
             select(Permission).where(Permission.group_id == admin.id)
         ).all()
@@ -79,7 +93,8 @@ def ensure_default_groups(engine, docs: Path) -> None:
         # Admin is a filesystem-derived default rather than an administrator's
         # hand-authored grant. Drop a stale default when its book disappears;
         # it otherwise shows up as a misleading orphan despite Admin already
-        # having the separate is_admin bypass.
+        # having the separate is_admin bypass. ``index.md`` is always in
+        # ``book_paths`` above, so it is never pruned here.
         for permission in existing:
             if permission.path_prefix not in book_paths:
                 session.delete(permission)

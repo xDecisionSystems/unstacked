@@ -130,6 +130,61 @@ def test_write_never_outlives_read():
     assert not decision.can_write
 
 
+def test_home_page_is_readable_by_a_user_with_no_group_memberships(app_env):
+    """Home is the shared landing screen -- readable with zero grants at all.
+
+    Group membership alone would never reach a brand-new user in no group,
+    which is exactly why this is a dedicated bypass rather than a grant.
+    """
+
+    app, *_ = app_env
+    with Session(app.state.engine) as session:
+        user = _make_user(session, "no-groups@example.com")
+        decision = resolve_access(session, user, "index.md")
+    assert decision.can_read
+    assert not decision.can_write
+
+
+def test_home_page_write_still_requires_an_explicit_grant(app_env):
+    app, *_ = app_env
+    with Session(app.state.engine) as session:
+        user = _make_user(session, "home-writer@example.com")
+        # Read still works with nothing granted at all...
+        assert resolve_access(session, user, "index.md").can_read
+        assert not resolve_access(session, user, "index.md").can_write
+        # ...and only an explicit write grant turns write on, exactly like a
+        # book; the default-open read never leaks into write.
+        _grant(session, user, "index.md", read=True, write=True, group="home-writers")
+        decision = resolve_access(session, user, "index.md")
+    assert decision.can_read
+    assert decision.can_write
+
+
+def test_home_page_explicit_read_deny_does_not_take_away_the_default_read(app_env):
+    """An explicit deny rule on ``index.md`` cannot remove the default read.
+
+    It still blocks write, matching the ordinary write-follows-read formula.
+    """
+
+    app, *_ = app_env
+    with Session(app.state.engine) as session:
+        user = _make_user(session, "home-denied@example.com")
+        _grant(session, user, "index.md", read=False, write=False, group="home-denied")
+        decision = resolve_access(session, user, "index.md")
+    assert decision.can_read
+    assert not decision.can_write
+
+
+def test_home_default_read_bypass_is_scoped_to_the_exact_literal_path(app_env):
+    """The bypass must never leak into a look-alike or nested path."""
+
+    app, *_ = app_env
+    with Session(app.state.engine) as session:
+        user = _make_user(session, "home-scope@example.com")
+        assert not resolve_access(session, user, "index2.md").can_read
+        assert not resolve_access(session, user, "somebook/index.md").can_read
+
+
 def test_ancestor_grant_does_not_leak_to_a_sibling_book(app_env):
     app, *_ = app_env
     with Session(app.state.engine) as session:

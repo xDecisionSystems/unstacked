@@ -66,6 +66,32 @@ LEGACY_MAIN_BOOK_SPECS = {
     "main-write": "Write",
 }
 
+# ``index.md`` is a reserved, fixed, depth-1 path at the docs root -- the
+# Home page.  It is never a generic book page, so it gets its own dedicated
+# read/write methods below rather than reusing the depth-2 page ones.
+HOME_PAGE_RELATIVE = "index.md"
+
+# The exact bytes every bootstrap wrote for ``docs/index.md`` before the
+# widget-aware starter existed.  ``_migrate_home_page`` compares against this
+# precise, literal string -- never a fuzzy heuristic -- so a hand-edited Home
+# page (even a trivial edit) is always left alone, mirroring
+# ``_remove_legacy_main_books``'s own exact-match migration rule.
+LEGACY_HOME_PAGE_PLACEHOLDER = "# Unstacked\n"
+
+# Literal copies of the pre-widget Home defaults that used to live in
+# ``app.branding`` (``DEFAULT_HOME_EYEBROW``/``DEFAULT_HOME_TITLE``/
+# ``DEFAULT_HOME_DESCRIPTION``/``DEFAULT_FEATURED_LABEL``).  These are folded
+# in, once, as the starter/migrated ``index.md`` copy below -- deliberately
+# not imported from ``app.branding``, whose page-copy fields are being
+# retired in a parallel change; this migration must keep working unchanged
+# after that happens.
+_LEGACY_HOME_EYEBROW = "KNOWLEDGE WORKSPACE"
+_LEGACY_HOME_TITLE = "Home"
+_LEGACY_HOME_DESCRIPTION = "Your featured books and pages."
+
+# The only widget entry a fresh or migrated Home page starts with.
+HOME_STARTER_WIDGETS = [{"id": "featured", "type": "featured", "config": {}}]
+
 
 class ContentError(RuntimeError):
     pass
@@ -397,6 +423,63 @@ created path and Git commit returned by the API.
 """
 
 
+def _home_page_starter_content(*, now: str) -> str:
+    """Serialize the widget-aware Home starter used by bootstrap and migration.
+
+    Mirrors how :meth:`ContentRepository.create_page` builds a full,
+    null-free metadata dict itself rather than letting the tolerant
+    defaults fill in ``None`` -- this is system-authored content, not a
+    hand-authored page with gaps to repair.
+    """
+
+    metadata = {
+        "id": str(uuid4()),
+        "title": _LEGACY_HOME_TITLE,
+        "created_at": now,
+        "updated_at": now,
+        "author": "system@unstacked.local",
+        "tags": [],
+        "draft": False,
+        "widgets": [dict(entry) for entry in HOME_STARTER_WIDGETS],
+    }
+    body = (
+        f"*{_LEGACY_HOME_EYEBROW.title()}*\n"
+        "\n"
+        f"# {_LEGACY_HOME_TITLE}\n"
+        "\n"
+        f"{_LEGACY_HOME_DESCRIPTION}\n"
+    )
+    return new_page(body, metadata)
+
+
+def _validate_widget_entries(widgets: list) -> list[dict]:
+    """Shape-check a caller-supplied ``widgets`` list before it is committed.
+
+    This deliberately does not check ``type`` against the known widget
+    registry in :mod:`app.home_widgets` -- an unrecognized type must still be
+    saved byte-for-byte (it renders as nothing plus an editor-visible error,
+    per :mod:`app.home_widgets`, rather than being rejected here or silently
+    dropped).
+    """
+
+    if not isinstance(widgets, list):
+        raise ContentError("widgets must be a list")
+    validated: list[dict] = []
+    for entry in widgets:
+        if not isinstance(entry, dict):
+            raise ContentError("each widget entry must be a mapping")
+        entry_id, entry_type = entry.get("id"), entry.get("type")
+        config = entry.get("config", {})
+        if not isinstance(entry_id, str) or not entry_id.strip():
+            raise ContentError("each widget entry needs a non-empty string id")
+        if not isinstance(entry_type, str) or not entry_type.strip():
+            raise ContentError("each widget entry needs a non-empty string type")
+        if not isinstance(config, dict):
+            raise ContentError("widget config must be a mapping")
+        validated.append({"id": entry_id, "type": entry_type, "config": config})
+    return validated
+
+
 class ContentRepository:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -430,6 +513,7 @@ class ContentRepository:
             else:
                 self._bootstrap_repository()
             self._remove_legacy_main_books()
+            self._migrate_home_page()
             # Configure the backup remote once, at startup, so every later
             # push/fetch finds `origin` already pointed at the right place and
             # already authenticated.  Failing here rather than at the first
@@ -509,6 +593,34 @@ class ContentRepository:
                 email="system@unstacked.local",
                 message="Remove obsolete default home books",
             )
+
+    def _migrate_home_page(self) -> None:
+        """Replace the old bare Home placeholder with the widget-aware starter.
+
+        Runs once per still-untouched repository, on every startup. If an
+        administrator already edited ``docs/index.md`` -- even trivially --
+        its bytes no longer match ``LEGACY_HOME_PAGE_PLACEHOLDER`` exactly,
+        so this leaves it alone, mirroring ``_remove_legacy_main_books``'s
+        precise, non-destructive migration rule rather than a fuzzier guess.
+        """
+
+        page = self.docs / "index.md"
+        if not page.is_file():
+            return
+        try:
+            current = page.read_text(encoding="utf-8")
+        except OSError:
+            return
+        if current != LEGACY_HOME_PAGE_PLACEHOLDER:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        self._atomic_write(page, _home_page_starter_content(now=now))
+        self.git.commit_paths(
+            [page],
+            name="Unstacked migration",
+            email="system@unstacked.local",
+            message="Migrate default home page to the widget-aware starter",
+        )
 
     def feature_on_home(self, target: str, actor: User) -> str:
         """Add a book or page to the Git-versioned home layout."""
@@ -665,7 +777,8 @@ class ContentRepository:
         self._atomic_write(self.root / "hooks" / "drafts.py", DRAFT_HOOK)
         self._atomic_write(self.root / ".gitignore", "site/\n")
         self._atomic_write(self.docs / ".pages", 'nav:\n  - index.md\n  - "*"\n')
-        self._atomic_write(self.docs / "index.md", "# Unstacked\n")
+        now = datetime.now(timezone.utc).isoformat()
+        self._atomic_write(self.docs / "index.md", _home_page_starter_content(now=now))
         self._atomic_write(self.docs / "llm.md", LLM_MD_WORKFLOW)
         repo = Repo.init(self.root, initial_branch="main")
         repo.index.add(
@@ -891,6 +1004,98 @@ class ContentRepository:
                     )
                 except Exception:
                     tree.write_text(page_relative, original, overwrite=True)
+                    raise
+        except GitWriteLockTimeout as exc:
+            raise ContentLockTimeout(str(exc)) from exc
+
+    def read_home_page(self) -> tuple[dict, str, str]:
+        """Read the reserved Home page's metadata, Markdown body, and raw source.
+
+        Mirrors :meth:`read_page`, but is confined to the single, fixed
+        ``index.md`` path at the docs root (depth 1) rather than any generic
+        depth-2 book page.  Its ``widgets`` front-matter list, if present,
+        survives untouched in ``metadata`` -- this method does no widget
+        validation; that is :mod:`app.home_widgets`'s job.
+        """
+
+        try:
+            raw = read_confined_text(
+                self.docs, HOME_PAGE_RELATIVE, max_bytes=self.settings.max_page_bytes
+            )
+        except ConfinedFileTooLarge as exc:
+            raise ContentError("home page exceeds configured size limit") from exc
+        except UnsafePath as exc:
+            raise ContentMissing("home page not found") from exc
+        document = parse_page(raw, default_title=_LEGACY_HOME_TITLE)
+        return document.metadata, document.content, raw
+
+    def home_page_blob_sha(self) -> str:
+        """Return the opaque version callers must send back with an update."""
+
+        try:
+            return self.git.blob_sha(f"docs/{HOME_PAGE_RELATIVE}")
+        except RevisionNotFound as exc:
+            raise ContentMissing("home page not found") from exc
+
+    def update_home_page(
+        self,
+        markdown: str,
+        widgets: list[dict],
+        actor: User,
+        *,
+        base_blob_sha: str,
+        title: str | None = None,
+    ) -> str:
+        """Rewrite the Home page's body, title, and widget layout as one commit.
+
+        ``index.md`` is a fixed, single reserved path at the docs root, so
+        this mirrors :meth:`update_page`'s optimistic blob-SHA workflow
+        without reusing its depth-2 (``book/page.md``) path validation.
+
+        Front matter and body are one file and therefore one conflict
+        domain: a widget-only reorder must carry the same ``base_blob_sha``
+        a text edit would, so a concurrent edit of either half is never
+        silently clobbered by the other.  ``title`` of ``None`` keeps the
+        current title unchanged.
+        """
+
+        if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
+            raise ContentError("page exceeds configured size limit")
+        validated_widgets = _validate_widget_entries(widgets)
+        try:
+            with self.git.write_lock():
+                tree = ConfinedTree(self.docs)
+                try:
+                    original = tree.read_text(
+                        HOME_PAGE_RELATIVE, max_bytes=self.settings.max_page_bytes
+                    )
+                except ConfinedFileTooLarge as exc:
+                    raise ContentError("page exceeds configured size limit") from exc
+                except UnsafePath as exc:
+                    raise ContentMissing("home page not found") from exc
+                try:
+                    current_blob_sha = self.git.blob_sha(f"docs/{HOME_PAGE_RELATIVE}")
+                except RevisionNotFound as exc:
+                    raise ContentMissing("home page not found") from exc
+                if current_blob_sha != base_blob_sha:
+                    raise ContentConflict("home page changed; reload it before saving")
+                document = parse_page(original, default_title=_LEGACY_HOME_TITLE)
+                now = datetime.now(timezone.utc).isoformat()
+                metadata = {"updated_at": now, "widgets": validated_widgets}
+                if title is not None:
+                    metadata["title"] = self._validate_title(title)
+                metadata.update(self._repaired_metadata(document, actor, now))
+                serialized = serialize_page(replace(document, content=markdown), metadata=metadata)
+                try:
+                    tree.write_text(HOME_PAGE_RELATIVE, serialized, overwrite=True)
+                    return self.git.commit_paths(
+                        [f"docs/{HOME_PAGE_RELATIVE}"],
+                        name=actor.display_name,
+                        email=actor.email,
+                        message="Update home page",
+                    )
+                except Exception:
+                    tree.write_text(HOME_PAGE_RELATIVE, original, overwrite=True)
                     raise
         except GitWriteLockTimeout as exc:
             raise ContentLockTimeout(str(exc)) from exc

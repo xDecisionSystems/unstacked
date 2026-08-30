@@ -98,7 +98,24 @@ class AccessPolicy:
             for rule in self.rules
             if permission_path == rule.prefix or permission_path.startswith(f"{rule.prefix}/")
         )
+        # ``index.md`` is the reserved Home page: read defaults open to every
+        # active, authenticated user, group membership or not, because Home
+        # is the shared landing screen rather than grant-gated content. This
+        # is scoped to that one literal path -- it never applies to any
+        # other path, including a look-alike like ``index2.md`` or a page
+        # that merely happens to be named ``index.md`` inside a book (that
+        # path would be ``somebook/index.md``, which fails this equality
+        # check). Write still follows the ordinary path-prefix grant table
+        # below, exactly like a book -- there is no bypass for it.
         if not matching:
+            if path == "index.md":
+                return AccessExplanation(
+                    path=path,
+                    decision=AccessDecision(True, False),
+                    reason="home_default_read",
+                    matching_rules=(),
+                    decisive_rules=(),
+                )
             return AccessExplanation(
                 path=path,
                 decision=AccessDecision.denied(),
@@ -112,6 +129,18 @@ class AccessPolicy:
         # outlives read.
         can_read = all(rule.can_read for rule in specific)
         can_write = can_read and all(rule.can_write for rule in specific)
+        if path == "index.md" and not can_read:
+            # A group's rules deny Home explicitly (or only cover write), but
+            # the default-open read bypass still applies; write remains
+            # exactly what the ordinary formula above computed (false here,
+            # since it already requires can_read).
+            return AccessExplanation(
+                path=path,
+                decision=AccessDecision(True, can_write),
+                reason="home_default_read",
+                matching_rules=matching,
+                decisive_rules=specific,
+            )
         if not can_read:
             reason = "read_denied_at_greatest_specificity"
         elif not can_write:
