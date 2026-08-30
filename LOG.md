@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 06:11 UTC — Codex
+Added built-in Public and Admin groups: Public begins with no chapter grants,
+while Admin receives read/write grants for every current and new chapter.
+- Files: `app/default_groups.py`, `app/main.py`, `app/bootstrap.py`,
+  `app/content.py`, `app/admin_api.py`, `tests/test_default_groups.py`,
+  `LOG.md`
+
 ## 2026-08-30 06:04 UTC — Codex
 Made inactive chapter-permission buttons white and outlined, with an orange
 filled selected state and white icon for clear status contrast.
@@ -86,9 +93,3 @@ visibility and permissions from their parent chapter or book.
   `app/templates/page.html`, `app/templates/tree.html`,
   `app/static/style.css`, `tests/test_acl.py`, `tests/test_admin_api.py`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 03:09 UTC — Codex
-Replaced visibility checkboxes with recursive Make Public and Make Private
-actions, and re-anchored tag and new-page popovers beneath their controls.
-- Files: `app/content.py`, `app/ai_service.py`, `app/web.py`,
-  `app/templates/book.html`, `app/static/style.css`, `LOG.md`

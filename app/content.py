@@ -405,6 +405,15 @@ class ContentRepository:
         # it could not.  Sanitized, and surfaced by the admin API rather than
         # raised: see initialize().
         self.backup_config_error: str | None = None
+        # The database is deliberately not a content dependency.  The app
+        # injects its engine after both stores are initialized so only the
+        # built-in Admin group's chapter ACL mirrors structural mutations.
+        self._default_groups_engine = None
+
+    def set_default_groups_engine(self, engine) -> None:
+        """Enable Admin-group chapter grants for subsequent chapter creation."""
+
+        self._default_groups_engine = engine
 
     def initialize(self) -> None:
         with self.git.write_lock():
@@ -535,6 +544,10 @@ class ContentRepository:
                 shutil.rmtree(chapter, ignore_errors=True)
                 raise
         path = f"{book_slug}/{slug}"
+        if self._default_groups_engine is not None:
+            from app.default_groups import grant_admin_group_write
+
+            grant_admin_group_write(self._default_groups_engine, path)
         return CreatedContent("chapter", path, slug, commit)
 
     def create_page(

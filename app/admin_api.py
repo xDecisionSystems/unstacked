@@ -42,6 +42,7 @@ from app.acl import AccessPolicy, Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
 from app.content import ContentRepository
+from app.default_groups import ADMIN_GROUP_NAME, PUBLIC_GROUP_NAME, sync_admin_membership
 from app.git_backend import GitSyncError, scrub_git_output
 from app.models import Group, Permission, User, UserGroup, normalize_path_prefix
 from app.paths import (
@@ -512,6 +513,8 @@ def create_user(payload: UserCreate, request: Request, actor: AdminActor) -> Use
         )
         session.add(user)
         try:
+            session.flush()
+            sync_admin_membership(session, user)
             session.commit()
         except IntegrityError as exc:
             session.rollback()
@@ -560,9 +563,11 @@ def update_user(
         if session.execute(statement.values(**values)).rowcount == 0:
             session.rollback()
             raise _last_admin_conflict()
+        user = _require_user(session, user_id)
+        sync_admin_membership(session, user)
         session.commit()
         _audit("admin.user.update", actor, user_id=user_id, **values)
-        return _user_response(_require_user(session, user_id))
+        return _user_response(user)
 
 
 @router.post("/users/{user_id}/password", response_model=DetailResponse, dependencies=CsrfGuard)
@@ -1000,6 +1005,11 @@ def _groups_restrict_read_access(session: Session, content: ContentRepository) -
         ):
             targets.append(relative)
     for group in session.exec(select(Group)).all():
+        # These are built-in roles, not restricted audiences: Public begins
+        # empty by design, and Admin is already covered by the administrator
+        # bypass. Their default state must not make every backup private.
+        if group.name in {PUBLIC_GROUP_NAME, ADMIN_GROUP_NAME}:
+            continue
         rows = session.exec(select(Permission).where(Permission.group_id == group.id)).all()
         if not any(row.can_read for row in rows):
             return True
