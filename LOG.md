@@ -10,6 +10,11 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 04:43 UTC — Codex
+Applied the accessible open/closed eye visibility toggle to book cards, matching
+the chapter-card visibility interaction.
+- Files: `app/templates/tree.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 04:37 UTC — Codex
 Replaced chapter visibility action buttons with a single accessible eye toggle
 that reflects and switches the chapter’s recursive public state.
@@ -100,8 +105,3 @@ the existing Markdown form submission intact.
 Forced EasyMDE toolbar glyphs and their text fallbacks to a high-contrast
 black so they remain visible against the pale Markdown toolbar.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 22:22 UTC — Codex
-Kept the Page View’s accessible Back-to-book title metadata while applying its
-new Figma-style action treatment.
-- Files: `app/templates/page.html`, `LOG.md`
