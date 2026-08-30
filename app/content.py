@@ -805,6 +805,40 @@ class ContentRepository:
                 tree.write_internal_text(relative, original, overwrite=True)
                 raise
 
+    def set_subtree_public(self, relative: str, public: bool, actor: User) -> str:
+        """Set portable visibility metadata for a container and every descendant."""
+
+        with self.git.write_lock():
+            relative = normalize_relative_path(relative)
+            root = safe_join(self.docs, relative)
+            if path_depth(relative) not in {1, 2} or not root.is_dir():
+                raise ContentMissing("container not found")
+            changed: list[Path] = []
+            for navigation_path in [root / ".pages", *root.rglob(".pages")]:
+                navigation = parse_navigation(
+                    navigation_path.read_text(encoding="utf-8"), source=".pages"
+                )
+                values = dict(navigation.values)
+                values["public"] = public
+                navigation_path.write_text(
+                    serialize_navigation(Navigation(values), source=".pages"), encoding="utf-8"
+                )
+                changed.append(navigation_path)
+            for page in root.rglob("*.md"):
+                document = parse_page(page.read_text(encoding="utf-8"), default_title=page.stem)
+                metadata = dict(document.metadata)
+                metadata["public"] = public
+                page.write_text(serialize_page(document, metadata=metadata), encoding="utf-8")
+                changed.append(page)
+            return self.git.commit_paths(
+                changed,
+                name=actor.display_name,
+                email=actor.email,
+                message=(
+                    f"Make {self._kind(relative)} {'public' if public else 'private'}: {relative}"
+                ),
+            )
+
     def set_page_public(self, relative: str, public: bool, actor: User) -> str:
         """Persist anonymous-read visibility in page front matter."""
 

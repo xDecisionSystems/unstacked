@@ -136,6 +136,13 @@ class AIContentService:
             authorization.require_write(path), public, authorization.user
         )
 
+    def set_subtree_public(
+        self, authorization: AuthorizationContext, *, path: str, public: bool
+    ) -> str:
+        return self.content.set_subtree_public(
+            authorization.require_write(path), public, authorization.user
+        )
+
     def upload_asset(
         self,
         authorization: AuthorizationContext,

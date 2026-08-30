@@ -1043,7 +1043,7 @@ async def set_container_public_submit(
 ) -> Response:
     form = await _read_form(request)
     with Session(request.app.state.engine) as session:
-        request.app.state.ai_service.set_container_public(
+        request.app.state.ai_service.set_subtree_public(
             _authorization(session, user), path=container_path, public=form.get("public") == "on"
         )
     return RedirectResponse(f"/books/{container_path.split('/')[0]}", status_code=303)

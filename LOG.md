@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-08-30 03:09 UTC — Codex
+Replaced visibility checkboxes with recursive Make Public and Make Private
+actions, and re-anchored tag and new-page popovers beneath their controls.
+- Files: `app/content.py`, `app/ai_service.py`, `app/web.py`,
+  `app/templates/book.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-08-30 03:01 UTC — Codex
 Added portable public visibility controls for books, chapters, and pages, and
 made anonymously reachable public content render without a web session.
@@ -98,9 +104,3 @@ Git, and ACL-backed behavior. Book filtering uses tags from readable pages.
   `app/templates/tree.html`, `app/templates/book.html`,
   `app/templates/page.html`, `app/templates/login.html`,
   `app/static/style.css`, `LOG.md`
-
-## 2026-08-29 19:45 UTC — Codex
-Reworked inline editing tags into a right-side one-at-a-time entry panel with
-removable current-tag bubbles and ACL-filtered previously-used tag bubbles.
-- Files: `app/web.py`, `app/templates/page.html`, `app/static/style.css`,
-  `LOG.md`
