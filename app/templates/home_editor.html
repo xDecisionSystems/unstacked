@@ -24,13 +24,21 @@
         <span class="widget-grip" aria-hidden="true">⠿</span>
         <span class="widget-label">{{ widget.type | capitalize }}</span>
         <span class="widget-id">{{ widget.id }}</span>
+        <label class="widget-title-label">Title<input type="text" class="widget-title-input" value="{{ widget.get('config', {}).get('title', '') }}" aria-label="Title for the {{ widget.id }} widget"></label>
         <div class="widget-move-controls">
           <button type="button" class="widget-move-up" aria-label="Move the {{ widget.type }} widget up">↑</button>
           <button type="button" class="widget-move-down" aria-label="Move the {{ widget.type }} widget down">↓</button>
         </div>
+        <button type="button" class="widget-remove danger" aria-label="Delete the {{ widget.id }} widget">✕</button>
       </li>
       {% endfor %}
     </ul>
+    <form id="add-widget-form" class="widget-add-form">
+      <label>Grid id<input type="text" id="add-widget-id" placeholder="e.g. research"></label>
+      <label>Title (optional)<input type="text" id="add-widget-title" placeholder="e.g. Research"></label>
+      <button type="submit">Add featured grid</button>
+    </form>
+    <p class="error-message" id="add-widget-error" hidden></p>
   </fieldset>
   <div class="form-actions"><button type="submit">Save</button><a class="button" href="/tree">Cancel</a></div>
 </form>
@@ -97,8 +105,131 @@
     });
   }
 
+  // Add/edit/remove a featured grid. This UI only ever manages the
+  // "featured" widget type -- app.home_widgets.WIDGET_REGISTRY has just the
+  // one entry today, so there is no generic widget-type picker here.
+  function slugify(raw) {
+    return String(raw || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  function buildWidgetRow(id, type, title) {
+    const row = document.createElement('li');
+    row.className = 'widget-row';
+    row.draggable = true;
+    row.dataset.id = id;
+    row.dataset.type = type;
+    row.dataset.config = JSON.stringify({ title: title || '' });
+
+    const grip = document.createElement('span');
+    grip.className = 'widget-grip';
+    grip.setAttribute('aria-hidden', 'true');
+    grip.textContent = '⠿';
+
+    const label = document.createElement('span');
+    label.className = 'widget-label';
+    label.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+
+    const idSpan = document.createElement('span');
+    idSpan.className = 'widget-id';
+    idSpan.textContent = id;
+
+    const titleLabel = document.createElement('label');
+    titleLabel.className = 'widget-title-label';
+    titleLabel.append('Title');
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'widget-title-input';
+    titleInput.value = title || '';
+    titleInput.setAttribute('aria-label', `Title for the ${id} widget`);
+    titleLabel.append(titleInput);
+
+    const moveControls = document.createElement('div');
+    moveControls.className = 'widget-move-controls';
+    const upButton = document.createElement('button');
+    upButton.type = 'button';
+    upButton.className = 'widget-move-up';
+    upButton.setAttribute('aria-label', `Move the ${type} widget up`);
+    upButton.textContent = '↑';
+    const downButton = document.createElement('button');
+    downButton.type = 'button';
+    downButton.className = 'widget-move-down';
+    downButton.setAttribute('aria-label', `Move the ${type} widget down`);
+    downButton.textContent = '↓';
+    moveControls.append(upButton, downButton);
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'widget-remove danger';
+    removeButton.setAttribute('aria-label', `Delete the ${id} widget`);
+    removeButton.textContent = '✕';
+
+    row.append(grip, label, idSpan, titleLabel, moveControls, removeButton);
+    return row;
+  }
+
+  const addForm = document.getElementById('add-widget-form');
+  const addIdInput = document.getElementById('add-widget-id');
+  const addTitleInput = document.getElementById('add-widget-title');
+  const addError = document.getElementById('add-widget-error');
+
+  function showAddError(message) {
+    if (!addError) return;
+    addError.textContent = message;
+    addError.hidden = false;
+  }
+
+  function clearAddError() {
+    if (!addError) return;
+    addError.hidden = true;
+    addError.textContent = '';
+  }
+
+  if (addForm && list) {
+    addForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      clearAddError();
+      const slug = slugify(addIdInput ? addIdInput.value : '');
+      if (!slug) {
+        showAddError('Enter a grid id made of letters, numbers, or dashes.');
+        return;
+      }
+      if (rows().some((row) => row.dataset.id === slug)) {
+        showAddError(`A widget with id "${slug}" already exists.`);
+        return;
+      }
+      const title = addTitleInput ? addTitleInput.value.trim() : '';
+      list.append(buildWidgetRow(slug, 'featured', title));
+      if (addIdInput) addIdInput.value = '';
+      if (addTitleInput) addTitleInput.value = '';
+    });
+  }
+
   if (list) {
+    list.addEventListener('input', (event) => {
+      const input = event.target.closest('.widget-title-input');
+      if (!input) return;
+      const row = input.closest('.widget-row');
+      if (!row) return;
+      let config = {};
+      try { config = JSON.parse(row.dataset.config || '{}'); } catch (e) { config = {}; }
+      config.title = input.value.trim();
+      row.dataset.config = JSON.stringify(config);
+    });
+
     list.addEventListener('click', (event) => {
+      const removeButton = event.target.closest('.widget-remove');
+      if (removeButton) {
+        const row = removeButton.closest('.widget-row');
+        if (!row) return;
+        const id = row.dataset.id;
+        if (confirm(`Delete the "${id}" widget? Its curated grid will be permanently deleted; recreating a widget with this id later will start empty.`)) {
+          row.remove();
+        }
+        return;
+      }
       const upButton = event.target.closest('.widget-move-up');
       const downButton = event.target.closest('.widget-move-down');
       if (!upButton && !downButton) return;

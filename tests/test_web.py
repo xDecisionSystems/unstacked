@@ -467,6 +467,58 @@ def test_home_edit_reorders_widgets_and_persists_the_new_order(app_env, client):
     assert [entry["id"] for entry in metadata["widgets"]] == ["extra", "featured"]
 
 
+def test_home_edit_renders_multiple_featured_grids_with_their_titles(app_env, client):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.update_home_page(
+        "Body",
+        [
+            {"id": "research", "type": "featured", "config": {"title": "Research"}},
+            {"id": "it", "type": "featured", "config": {}},
+            {"id": "news", "type": "featured", "config": {"title": "News Desk"}},
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+    _login(client, "admin")
+
+    editor = client.get("/home/edit")
+    assert editor.status_code == 200
+    text = editor.text
+    assert 'data-id="research"' in text
+    assert 'data-id="it"' in text
+    assert 'data-id="news"' in text
+    # Each row's title input is pre-filled from that widget's own config.
+    assert 'value="Research" aria-label="Title for the research widget"' in text
+    assert 'value="News Desk" aria-label="Title for the news widget"' in text
+    # The "it" grid has no title configured -> its input starts empty.
+    assert 'value="" aria-label="Title for the it widget"' in text
+
+
+def test_home_editor_widget_tray_includes_add_edit_remove_markup(app_env, client):
+    # This UI is pure client-side JS wired to the widget tray's DOM -- this
+    # test guards the server-rendered markup/attributes that JS depends on
+    # (see app/templates/home_editor.html), since browser interaction itself
+    # is out of scope for the FastAPI TestClient.
+    app, _settings, _admin, _token = app_env
+    _login(client, "admin")
+
+    editor = client.get("/home/edit")
+    assert editor.status_code == 200
+    text = editor.text
+
+    # Add-a-grid form.
+    assert '<form id="add-widget-form" class="widget-add-form">' in text
+    assert 'id="add-widget-id"' in text
+    assert 'id="add-widget-title"' in text
+    assert '<p class="error-message" id="add-widget-error" hidden></p>' in text
+
+    # Every rendered row carries a title input and a remove button.
+    assert 'class="widget-title-input"' in text
+    assert 'class="widget-remove danger"' in text
+    assert 'aria-label="Delete the featured widget"' in text
+
+
 def test_feature_star_toggles_in_place_on_a_book_page(client, content):
     _login(client, "admin")
     book = client.get("/books/alice-book")

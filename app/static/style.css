@@ -148,3 +148,10 @@
 .widget-id { flex: 1; color: var(--muted); font-size: 13px; }
 .widget-move-controls { display: flex; gap: 4px; }
 .widget-move-controls button { width: 28px; height: 28px; padding: 0; font-size: 14px; }
+.widget-title-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.widget-title-input { width: 160px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
+.widget-remove { width: 28px; height: 28px; padding: 0; font-size: 13px; }
+.widget-add-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.widget-add-form label { display: block; font-size: 13px; font-weight: 600; }
+.widget-add-form input { display: block; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+.widget-tray #add-widget-error { margin-top: 10px; }

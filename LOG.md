@@ -10,6 +10,43 @@ how long any entry is.
 
 ---
 
+## 2026-08-31 06:40 UTC — Claude Code
+Implemented Phase 4 ("Editor UI") of `plans/plan_multiple_featured_grids.md`,
+the fourth of five sequential phases for multiple independently-curated
+named featured grids on Home. Entirely a client-side/template change --
+`POST /home/edit` already accepted an arbitrary `widgets` list before this
+phase, so no new backend route was needed.
+
+- `app/templates/home_editor.html`'s widget tray gained an "Add featured
+  grid" form (`#add-widget-form`): an id input, client-side slugified and
+  checked against existing rows' `data-id` for uniqueness, plus an
+  optional title input. On success it appends a new `.widget-row` built
+  the same shape as the server-rendered ones.
+- Every row (server-rendered or newly added) now has an editable
+  `.widget-title-input`; an `input`-event listener rewrites that row's
+  `data-config` JSON in place, so the existing `serializeWidgets()` needed
+  no changes at all.
+- Every row also has a `.widget-remove` delete button. Its `confirm()`
+  names the permanent-deletion behavior explicitly (the user's earlier
+  decision: deleting a grid discards its curated list, not just hides it).
+  Deletion itself is just `row.remove()` -- the actual
+  `.unstacked-home.json` purge already happens automatically, server-side,
+  via Phase 1's diff-and-purge logic in `update_home_page` once the row is
+  simply absent from the submitted `widgets_json`.
+- `app/static/style.css` gained matching styles for the new form/inputs/
+  button, following the existing `.widget-*` conventions.
+- Added `tests/test_web.py::test_home_edit_renders_multiple_featured_grids_with_their_titles`
+  (three grids, each with independent id/title, all correctly pre-filled
+  in `GET /home/edit`) and
+  `::test_home_editor_widget_tray_includes_add_edit_remove_markup`
+  (guards the exact ids/classes/attributes the new client-side JS depends
+  on, since real browser interaction is out of scope for the FastAPI
+  `TestClient`).
+
+Full suite and ruff clean. `git fetch origin` showed no new Codex commits.
+- Files: `app/templates/home_editor.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-31 06:25 UTC — Claude Code
 Implemented Phase 3 ("API") of `plans/plan_multiple_featured_grids.md`, the
 third of five sequential phases for multiple independently-curated named
@@ -397,32 +434,4 @@ Verified directly with `docker build`: passing `--build-arg
 SOURCE_COMMIT=<sha>` reports that exact commit; omitting it falls back to
 `"unknown"` rather than failing the build. Full suite green, ruff clean.
 - Files: `Dockerfile`, `.dockerignore`, `app/main.py`, `LOG.md`
-
-## 2026-08-30 21:37 UTC — Claude Code
-Added `GET /version`, at the user's request, so a deployed container's
-actual commit can be confirmed directly (`curl https://.../version`)
-instead of guessing whether a redeploy picked up a given push -- came up
-while chasing the Toast UI toolbar bug, since the user's live site
-auto-deploys on push and there was no way to confirm what commit it was
-actually running.
-
-`.dockerignore` excludes `.git` from the runtime image entirely, so the
-commit is resolved once at Docker *build* time instead: a new step at the
-very end of the builder stage (after the cacheable dependency-install
-layers, since this one changes on every single commit) copies in `.git`,
-runs `git rev-parse HEAD > /app/GIT_COMMIT`, then deletes `.git` again --
-only the one resolved SHA string crosses into the runtime image, never the
-repository history. `app/main.py` reads that file once at startup
-(`app.state.commit`); outside Docker (local dev, where the baked file never
-exists) it falls back to asking the actual checkout via `git rev-parse
-HEAD` directly, and reports `"unknown"` if neither source is available.
-
-Verified with a real `docker compose up --build`: correctly reported
-`93894b1` (the last real commit; uncommitted working-tree changes don't
-move `.git`'s HEAD, as expected). New `tests/test_main.py` covers the
-endpoint plus all three `_resolve_commit()` branches (baked file present,
-blank baked file falling back rather than reporting empty, and the
-git-unavailable "unknown" case). Full suite green, ruff clean.
-- Files: `app/main.py`, `Dockerfile`, `.dockerignore`, `tests/test_main.py`,
-  `LOG.md`
 
