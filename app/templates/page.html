@@ -5,7 +5,7 @@
   <a class="page-back" href="/books/{{ current_path.split('/')[0] }}" title="Back to book">← Back to book</a>
   {% if can_write %}<span class="permission-badge">Can edit</span>{% endif %}<span class="actions-spacer"></span>
   {% if can_write %}<button type="button" id="edit-toggle" aria-expanded="false" aria-controls="inline-editor">Edit</button>{% endif %}
-  <a class="button" href="/pages/{{ current_path }}/history">History</a>
+  {% if current_user %}<a class="button" href="/pages/{{ current_path }}/history">History</a>{% endif %}
   {% if can_write %}<form method="post" action="/pages/{{ current_path }}/delete" onsubmit="return confirm('Delete this page? Git history will retain it.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button class="danger" type="submit">Delete</button>

@@ -989,6 +989,29 @@ def test_public_page_and_book_are_available_without_a_session(app_env, client):
     assert client.get("/books/public-handbook").status_code == 200
 
 
+def test_public_page_hides_the_history_link_for_an_anonymous_visitor(app_env, client):
+    """The history route requires a session; an anonymous visitor must never
+    be offered a link that only leads to a dead end."""
+
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Public handbook", "public-handbook", admin)
+    repository.create_page(
+        "public-handbook", "Welcome", "welcome", "# Welcome", [], False, admin
+    )
+    repository.set_subtree_public("public-handbook", True, admin)
+
+    _login(client, "admin")
+    signed_in = client.get("/pages/public-handbook/welcome")
+    assert "/pages/public-handbook/welcome/history" in signed_in.text
+
+    client.cookies.clear()
+    anonymous = client.get("/pages/public-handbook/welcome")
+    assert anonymous.status_code == 200
+    assert "/pages/public-handbook/welcome/history" not in anonymous.text
+    assert ">History<" not in anonymous.text
+
+
 def test_public_home_page_renders_read_only_for_an_anonymous_visitor(app_env, client):
     app, _settings, admin, _token = app_env
     content = app.state.content
