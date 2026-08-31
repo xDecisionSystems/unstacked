@@ -376,17 +376,49 @@ def _breadcrumbs(docs: Path, path: str, metadata: dict) -> list[str]:
     return crumbs
 
 
+def _featured_grid_entries(content) -> list:
+    """The configured ``featured``-type widgets on Home, in authored order.
+
+    Shared by the card-popover context builder below and
+    :func:`_require_featured_grid_id`, which both need the same "what grid
+    ids currently exist" answer -- reading ``index.md``'s ``widgets`` front
+    matter through :func:`parse_widget_entries`, the same source of truth
+    the widget tray itself edits.
+    """
+
+    metadata, _markdown, _raw = content.read_home_page()
+    entries, _errors = parse_widget_entries(metadata.get("widgets"))
+    return [entry for entry in entries if entry.type == "featured"]
+
+
 def _base_context(request: Request, session: Session, user: User) -> dict:
     content = request.app.state.content
     authorization = _authorization(session, user)
     raw_tree = request.app.state.ai_service.tree(authorization)
     display_tree = _tree_view_model(content, authorization, raw_tree)
-    home_targets = content.home_items("featured")
-    featured_targets = set(home_targets)
+    featured_entries = _featured_grid_entries(content)
+    featured_grids = [
+        {
+            "id": entry.id,
+            "title": entry.config.get("title").strip()
+            if isinstance(entry.config.get("title"), str)
+            else "",
+        }
+        for entry in featured_entries
+    ]
+    grid_targets = {entry.id: set(content.home_items(entry.id)) for entry in featured_entries}
+    home_targets = content.home_items()
     for book in display_tree:
-        book["featured"] = book["slug"] in featured_targets
+        book["featured_grid_ids"] = {
+            grid_id for grid_id, targets in grid_targets.items() if book["slug"] in targets
+        }
+        book["featured"] = bool(book["featured_grid_ids"])
         for page in book["pages"]:
-            page["featured"] = f"{page['path']}.md" in featured_targets
+            page_target = f"{page['path']}.md"
+            page["featured_grid_ids"] = {
+                grid_id for grid_id, targets in grid_targets.items() if page_target in targets
+            }
+            page["featured"] = bool(page["featured_grid_ids"])
     books_by_slug = {book["slug"]: book for book in display_tree}
     pages_by_path = {
         page["path"] + ".md": {**page, "book_title": book["title"]}
@@ -409,6 +441,7 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
         "tree": [book for book in display_tree if book["can_read_book"]],
         "pages": pages,
         "home_items": home_items,
+        "featured_grids": featured_grids,
         "is_admin": user.is_admin,
     }
 
@@ -1335,9 +1368,7 @@ def _require_featured_grid_id(content, grid_id: str) -> None:
     ``.unstacked-home.json`` with no widget left to ever render it.
     """
 
-    metadata, _markdown, _raw = content.read_home_page()
-    entries, _errors = parse_widget_entries(metadata.get("widgets"))
-    known_ids = {entry.id for entry in entries if entry.type == "featured"}
+    known_ids = {entry.id for entry in _featured_grid_entries(content)}
     if grid_id not in known_ids:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,

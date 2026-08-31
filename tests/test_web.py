@@ -671,6 +671,121 @@ def test_feature_home_toggles_the_same_target_into_two_grids_independently(
     assert content.home_items("research") == ["alice-book/secret.md"]
 
 
+# --------------------------------------------------------------------------
+# Card popover (Phase 5 of plan_multiple_featured_grids.md)
+# --------------------------------------------------------------------------
+
+
+def test_card_popover_lists_every_configured_grid_with_correct_checked_state(
+    app_env, client, content
+):
+    """The card popover's checkboxes reflect real per-grid membership.
+
+    Configures three grids (two with titles, one without) and features one
+    page into two of them but not the third, then confirms
+    ``/books/<slug>``'s rendered popover shows exactly the right
+    checked/unchecked state per grid, labeled by title where set and by id
+    otherwise.
+    """
+
+    app, _settings, admin, _token = app_env
+    content.update_home_page(
+        "Multiple grids.",
+        [
+            {"id": "featured", "type": "featured", "config": {}},
+            {"id": "research", "type": "featured", "config": {"title": "Research"}},
+            {"id": "news", "type": "featured", "config": {"title": "News"}},
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+    content.feature_on_home("alice-book/secret.md", "featured", admin)
+    content.feature_on_home("alice-book/secret.md", "research", admin)
+
+    _login(client, "admin")
+    page = client.get("/books/alice-book")
+    assert page.status_code == 200
+    popover = re.search(r'<details class="feature-popover"[^>]*>.*?</details>', page.text, re.S)
+    assert popover, "expected the page card's feature popover to render"
+    panel = popover.group(0)
+
+    def checked(grid_id: str) -> bool:
+        match = re.search(rf'data-grid-id="{grid_id}"([^>]*)>', panel)
+        assert match, f"expected a checkbox for grid '{grid_id}'"
+        return "checked" in match.group(1)
+
+    assert checked("featured")
+    assert checked("research")
+    assert not checked("news")
+    assert "Research" in panel
+    assert "News" in panel
+
+
+def test_card_popover_shows_empty_state_with_zero_grids_configured(app_env, client, content):
+    """A fresh repo with every ``featured`` grid removed must not show an empty checkbox list."""
+
+    app, _settings, admin, _token = app_env
+    content.update_home_page(
+        "No grids.", [], admin, base_blob_sha=content.home_page_blob_sha()
+    )
+
+    _login(client, "admin")
+    page = client.get("/books/alice-book")
+    assert page.status_code == 200
+    assert "No featured grids yet" in page.text
+    assert 'href="/home/edit"' in page.text
+    assert "feature-grid-checkbox" not in page.text
+    # The closed-state star still renders sensibly with nothing to feature.
+    assert 'class="feature-star"' in page.text
+
+
+def test_card_feature_popover_is_admin_only_across_book_books_and_pages(app_env, client, content):
+    app, _settings, _admin, _token = app_env
+    reader = _make_user(app, "reader")
+    _grant(app, reader.id, "alice-book", group_name="reader-group")
+
+    _login(client, "admin")
+    assert 'class="feature-popover"' in client.get("/books/alice-book").text
+    assert 'class="feature-popover"' in client.get("/books").text
+    assert 'class="feature-popover"' in client.get("/pages").text
+    client.cookies.clear()
+
+    _login(client, "reader")
+    assert 'class="feature-popover"' not in client.get("/books/alice-book").text
+    assert 'class="feature-popover"' not in client.get("/books").text
+    assert 'class="feature-popover"' not in client.get("/pages").text
+
+
+def test_tree_widget_remove_control_targets_its_own_grid_id_not_a_hardcoded_default(
+    app_env, client, content
+):
+    """``tree.html``'s own remove form must target the widget it is actually rendering.
+
+    Before this fix, every widget's remove form hardcoded ``grid_id=featured``
+    regardless of which grid the card belonged to -- a real bug once more
+    than one grid can exist.
+    """
+
+    app, _settings, admin, _token = app_env
+    content.update_home_page(
+        "Multiple grids.",
+        [
+            {"id": "featured", "type": "featured", "config": {}},
+            {"id": "research", "type": "featured", "config": {"title": "Research"}},
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+    content.feature_on_home("alice-book/secret.md", "research", admin)
+
+    _login(client, "admin")
+    home = client.get("/tree")
+    assert home.status_code == 200
+    match = re.search(r'<input type="hidden" name="grid_id" value="([^"]+)">', home.text)
+    assert match, "expected the widget card's remove form to carry a grid_id"
+    assert match.group(1) == "research"
+
+
 def test_the_add_book_button_is_admin_only(app_env, client, content):
     app, _settings, _admin, _token = app_env
     _make_user(app, "reader")

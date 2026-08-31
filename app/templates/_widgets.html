@@ -1,0 +1,35 @@
+{# Shared card-popover markup, imported by book.html/books.html/pages.html.
+
+   tree.html deliberately does not import this: every card it renders is
+   already a member of the one grid it is showing, so a plain "remove from
+   this grid" form (see tree.html itself) covers it without the multi-grid
+   checkbox panel below.
+
+   Each checkbox posts its own change to /home/feature or /home/remove via
+   the delegated listener in app/static/feature-popover.js (loaded
+   unconditionally from base.html) -- no inline script needed per call site.
+#}
+{% macro feature_popover(target, return_to, featured_grid_ids, featured_grids, csrf_token) %}
+<details class="feature-popover" data-target="{{ target }}" data-return-to="{{ return_to }}" data-csrf="{{ csrf_token }}">
+  <summary class="feature-star{% if featured_grid_ids %} is-featured{% endif %}" title="Manage featured grids" aria-label="Manage featured grids">
+    <span aria-hidden="true">{{ '★' if featured_grid_ids else '☆' }}</span>
+  </summary>
+  <div class="feature-popover-panel">
+    {% if featured_grids %}
+    <p class="feature-popover-label">Featured in</p>
+    <ul class="feature-popover-list">
+      {% for grid in featured_grids %}
+      <li>
+        <label class="feature-popover-option">
+          <input type="checkbox" class="feature-grid-checkbox" data-grid-id="{{ grid.id }}"{% if grid.id in featured_grid_ids %} checked{% endif %}>
+          <span>{{ grid.title or grid.id }}</span>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No featured grids yet — add one from the <a href="/home/edit">Home editor</a>.</p>
+    {% endif %}
+  </div>
+</details>
+{% endmacro %}
