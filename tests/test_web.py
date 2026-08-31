@@ -15,6 +15,7 @@ import pytest
 from sqlmodel import Session
 
 from app.auth import hash_password
+from app.content import HOME_LAYOUT_FILE
 from app.models import Group, Permission, User, UserGroup
 
 PASSWORD = "correct horse battery staple"
@@ -224,7 +225,12 @@ def test_home_only_shows_featured_content_and_navigation_exposes_libraries(clien
     csrf = _csrf_from(home.text)
     assert client.post(
         "/home/feature",
-        data={"csrf_token": csrf, "target": "alice-book/secret.md", "return_to": "/tree"},
+        data={
+            "csrf_token": csrf,
+            "target": "alice-book/secret.md",
+            "grid_id": "featured",
+            "return_to": "/tree",
+        },
         follow_redirects=False,
     ).status_code == 303
     home = client.get("/tree")
@@ -250,12 +256,12 @@ def test_admin_can_feature_a_page_or_book_on_home(client, content):
     csrf = _csrf_from(client.get("/tree").text)
     assert client.post(
         "/home/feature",
-        data={"csrf_token": csrf, "target": "alice-book"},
+        data={"csrf_token": csrf, "target": "alice-book", "grid_id": "featured"},
         follow_redirects=False,
     ).status_code == 303
     assert client.post(
         "/home/feature",
-        data={"csrf_token": csrf, "target": "alice-book/secret.md"},
+        data={"csrf_token": csrf, "target": "alice-book/secret.md", "grid_id": "featured"},
         follow_redirects=False,
     ).status_code == 303
 
@@ -276,7 +282,7 @@ def test_home_renders_the_index_page_body_and_the_featured_widget(client, conten
     csrf = _csrf_from(client.get("/tree").text)
     client.post(
         "/home/feature",
-        data={"csrf_token": csrf, "target": "alice-book/secret.md"},
+        data={"csrf_token": csrf, "target": "alice-book/secret.md", "grid_id": "featured"},
         follow_redirects=False,
     )
 
@@ -473,6 +479,7 @@ def test_feature_star_toggles_in_place_on_a_book_page(client, content):
         data={
             "csrf_token": csrf,
             "target": "alice-book/secret.md",
+            "grid_id": "featured",
             "return_to": "/books/alice-book",
         },
         follow_redirects=False,
@@ -488,11 +495,128 @@ def test_feature_star_toggles_in_place_on_a_book_page(client, content):
         data={
             "csrf_token": csrf,
             "target": "alice-book/secret.md",
+            "grid_id": "featured",
             "return_to": "/books/alice-book",
         },
         follow_redirects=False,
     )
     assert removed.headers["location"] == "/books/alice-book"
+
+
+def _read_home_layout_text(content) -> str | None:
+    path = content.root / HOME_LAYOUT_FILE
+    return path.read_text(encoding="utf-8") if path.exists() else None
+
+
+def test_feature_and_remove_reject_an_unconfigured_grid_id_without_touching_home_layout(
+    client, content
+):
+    """A ``grid_id`` that isn't a configured ``featured`` widget is rejected outright.
+
+    Mirrors the widget registry's own posture toward an unknown widget
+    ``type``: the request is a 400, not a silent write that would leave an
+    orphaned grid nothing ever renders.
+    """
+
+    _login(client, "admin")
+    csrf = _csrf_from(client.get("/tree").text)
+    before = _read_home_layout_text(content)
+
+    feature_response = client.post(
+        "/home/feature",
+        data={
+            "csrf_token": csrf,
+            "target": "alice-book/secret.md",
+            "grid_id": "not-a-configured-grid",
+            "return_to": "/tree",
+        },
+        follow_redirects=False,
+    )
+    assert feature_response.status_code == 400
+    assert _read_home_layout_text(content) == before
+
+    remove_response = client.post(
+        "/home/remove",
+        data={
+            "csrf_token": csrf,
+            "target": "alice-book/secret.md",
+            "grid_id": "not-a-configured-grid",
+            "return_to": "/tree",
+        },
+        follow_redirects=False,
+    )
+    assert remove_response.status_code == 400
+    assert _read_home_layout_text(content) == before
+
+
+def test_feature_home_targets_exactly_the_submitted_non_default_grid(app_env, client, content):
+    """Toggling into a second, non-default ``featured`` grid only writes that grid.
+
+    Sets up a second ``featured`` widget (``research``) alongside the
+    starter ``featured`` widget the same way the future editor UI will, then
+    confirms ``/home/feature`` with ``grid_id=research`` lands the target in
+    ``research`` and leaves ``featured`` untouched.
+    """
+
+    app, _settings, admin, _token = app_env
+    content.update_home_page(
+        "Multiple grids.",
+        [
+            {"id": "featured", "type": "featured", "config": {}},
+            {"id": "research", "type": "featured", "config": {"title": "Research"}},
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+
+    _login(client, "admin")
+    csrf = _csrf_from(client.get("/tree").text)
+    response = client.post(
+        "/home/feature",
+        data={
+            "csrf_token": csrf,
+            "target": "alice-book/secret.md",
+            "grid_id": "research",
+            "return_to": "/tree",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert content.home_items("research") == ["alice-book/secret.md"]
+    assert content.home_items("featured") == []
+
+
+def test_feature_home_toggles_the_same_target_into_two_grids_independently(
+    app_env, client, content
+):
+    app, _settings, admin, _token = app_env
+    content.update_home_page(
+        "Multiple grids.",
+        [
+            {"id": "featured", "type": "featured", "config": {}},
+            {"id": "research", "type": "featured", "config": {"title": "Research"}},
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+
+    _login(client, "admin")
+    csrf = _csrf_from(client.get("/tree").text)
+    for grid_id in ("featured", "research"):
+        response = client.post(
+            "/home/feature",
+            data={
+                "csrf_token": csrf,
+                "target": "alice-book/secret.md",
+                "grid_id": grid_id,
+                "return_to": "/tree",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+    assert content.home_items("featured") == ["alice-book/secret.md"]
+    assert content.home_items("research") == ["alice-book/secret.md"]
 
 
 def test_the_add_book_button_is_admin_only(app_env, client, content):
@@ -1095,12 +1219,12 @@ def test_public_home_page_featured_widget_only_shows_public_items(app_env, clien
     csrf = _csrf_from(client.get("/tree").text)
     client.post(
         "/home/feature",
-        data={"csrf_token": csrf, "target": "public-handbook/welcome.md"},
+        data={"csrf_token": csrf, "target": "public-handbook/welcome.md", "grid_id": "featured"},
         follow_redirects=False,
     )
     client.post(
         "/home/feature",
-        data={"csrf_token": csrf, "target": "private-handbook/secret.md"},
+        data={"csrf_token": csrf, "target": "private-handbook/secret.md", "grid_id": "featured"},
         follow_redirects=False,
     )
 

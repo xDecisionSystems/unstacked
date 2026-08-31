@@ -10,6 +10,46 @@ how long any entry is.
 
 ---
 
+## 2026-08-31 06:25 UTC — Claude Code
+Implemented Phase 3 ("API") of `plans/plan_multiple_featured_grids.md`, the
+third of five sequential phases for multiple independently-curated named
+featured grids on Home. Before this, Phase 1 (storage) and Phase 2
+(rendering) had already made grids independent end to end *except* the two
+routes a user actually toggles a star through were still hardcoded to the
+one `"featured"` grid id -- this phase makes them genuinely grid-aware.
+
+- `POST /home/feature` and `POST /home/remove` now read a required
+  `grid_id` form field instead of hardcoding `"featured"`. A new
+  `app/web.py::_require_featured_grid_id` helper reads
+  `content.read_home_page()`'s `widgets` front matter through
+  `app.home_widgets.parse_widget_entries` and rejects (`400 Bad Request`)
+  any submitted `grid_id` that isn't the id of a currently-configured
+  `featured`-type widget, before either content-layer call runs -- the same
+  "reject rather than silently create an orphaned grid" posture the widget
+  registry already takes with an unknown widget `type`. A rejected request
+  writes nothing to `.unstacked-home.json`.
+- Temporary stopgap (this task only, not phase 5's popover): added a hidden
+  `<input type="hidden" name="grid_id" value="featured">` to the ★/☆ toggle
+  forms in `app/templates/book.html`, `books.html`, `pages.html`, and
+  `tree.html` (remove-only there), so the existing single-star interaction
+  keeps working against the now-validating API, pointed at the one grid
+  guaranteed to exist in every repo. Phase 4/5 replace this with real
+  add/remove/rename controls and a multi-grid checkbox popover.
+- Updated all ~8 existing `tests/test_web.py` call sites that posted to
+  `/home/feature`/`/home/remove` to include `"grid_id": "featured"`. Added
+  three new tests: an unconfigured `grid_id` is rejected with 400 on both
+  routes and leaves `.unstacked-home.json` byte-for-byte unchanged; a valid
+  non-default grid (`research`, added via `update_home_page` the way the
+  future editor UI will) receives exactly the toggled target while
+  `featured` stays empty; and the same target toggled into two different
+  valid grids ends up in both independently.
+
+Full suite and ruff clean; `git fetch origin` immediately before starting
+and again immediately before committing both showed no new Codex commits.
+- Files: `app/web.py`, `app/templates/book.html`, `app/templates/books.html`,
+  `app/templates/pages.html`, `app/templates/tree.html`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-31 06:15 UTC — Claude Code
 Implemented Phase 2 ("Rendering") of `plans/plan_multiple_featured_grids.md`,
 the second of five sequential phases for multiple independently-curated
@@ -385,32 +425,4 @@ blank baked file falling back rather than reporting empty, and the
 git-unavailable "unknown" case). Full suite green, ruff clean.
 - Files: `app/main.py`, `Dockerfile`, `.dockerignore`, `tests/test_main.py`,
   `LOG.md`
-
-## 2026-08-30 21:18 UTC — Claude Code
-Fixed the Toast UI markdown editor's "H" toolbar button getting stuck
-"active" regardless of actual cursor position (reported by the user with a
-screenshot on the new Edit Home page, confirmed by Safari console errors to
-also affect the regular page editor). Not a CSS or app-code bug -- two real
-problems with the CDN plugin scripts loaded in `page.html`/`editor.html`/
-`home_editor.html`:
-
-- The chart plugin depends on a separate library, `toastui-chart`, that was
-  never loaded. Without it, the plugin throws (`t().barChart` on undefined)
-  *inside* Toast UI Editor's own constructor call, on every page load before
-  any user interaction -- which aborts the rest of the editor's internal
-  setup partway through, including the toolbar's cursor-position tracking.
-  Whatever button was "active" at the moment of the crash just never gets
-  updated again.
-- The color-syntax plugin's script URL 404s outright: unlike the other
-  plugins, it ships no `-all` bundle variant, and the URL used that suffix
-  anyway.
-
-Added the missing `toastui-chart` JS+CSS (loaded before the chart plugin)
-and corrected the color-syntax filename, in all three templates that load
-this script set. Added regression assertions to `tests/test_web.py`: the
-chart library now loads before the plugin that needs it, and the corrected
-color-syntax filename is present while the broken one is not. Full suite
-green, ruff clean.
-- Files: `app/templates/page.html`, `app/templates/editor.html`,
-  `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
 

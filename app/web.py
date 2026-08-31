@@ -1326,15 +1326,36 @@ async def create_book_submit(
     return RedirectResponse(f"/pages/new?parent={created.path}", status_code=303)
 
 
+def _require_featured_grid_id(content, grid_id: str) -> None:
+    """Reject a ``grid_id`` that isn't one of Home's configured ``featured`` widgets.
+
+    Mirrors the widget registry's own "reject rather than silently create an
+    orphaned grid" posture for an unknown widget ``type``: toggling a target
+    into a grid id nobody configured would otherwise write an entry into
+    ``.unstacked-home.json`` with no widget left to ever render it.
+    """
+
+    metadata, _markdown, _raw = content.read_home_page()
+    entries, _errors = parse_widget_entries(metadata.get("widgets"))
+    known_ids = {entry.id for entry in entries if entry.type == "featured"}
+    if grid_id not in known_ids:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"'{grid_id}' is not a configured featured grid",
+        )
+
+
 @router.post("/home/feature", include_in_schema=False, dependencies=[Depends(require_csrf)])
 async def feature_home_submit(
     request: Request, user: Annotated[User, Depends(require_normal_web_user)]
 ) -> Response:
     form = await _read_form(request)
+    grid_id = form.get("grid_id", "")
     with Session(request.app.state.engine) as session:
         try:
             _authorization(session, user).require_admin()
-            request.app.state.content.feature_on_home(form.get("target", ""), "featured", user)
+            _require_featured_grid_id(request.app.state.content, grid_id)
+            request.app.state.content.feature_on_home(form.get("target", ""), grid_id, user)
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
     return RedirectResponse(_home_return_path(form.get("return_to")), status_code=303)
@@ -1345,10 +1366,12 @@ async def remove_home_submit(
     request: Request, user: Annotated[User, Depends(require_normal_web_user)]
 ) -> Response:
     form = await _read_form(request)
+    grid_id = form.get("grid_id", "")
     with Session(request.app.state.engine) as session:
         try:
             _authorization(session, user).require_admin()
-            request.app.state.content.remove_from_home(form.get("target", ""), "featured", user)
+            _require_featured_grid_id(request.app.state.content, grid_id)
+            request.app.state.content.remove_from_home(form.get("target", ""), grid_id, user)
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
     return RedirectResponse(_home_return_path(form.get("return_to")), status_code=303)
