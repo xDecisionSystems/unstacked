@@ -544,20 +544,62 @@ class ContentRepository:
                 # without a remote and let the admin API report why.
                 self.backup_config_error = scrub_git_output(str(exc))
 
-    def home_items(self) -> list[str]:
-        """Return the ordered book/page targets curated for the home screen."""
+    def _load_home_layout(self) -> dict[str, list[str]]:
+        """Return the home layout file's grids as an ordered ``{grid_id: [targets]}`` dict.
+
+        Reads both the current grid-keyed ``{"grids": {...}}`` shape and the
+        legacy flat ``{"items": [...]}`` shape written before multiple named
+        grids existed -- the legacy shape is treated as exactly one implicit
+        ``"featured"`` grid.  No on-disk migration or forced rewrite-on-read
+        is needed: both shapes simply parse whenever encountered, and the
+        file naturally moves to the new shape the next time a grid is
+        written.
+        """
 
         path = self.root / HOME_LAYOUT_FILE
         if not path.exists():
-            return []
+            return {}
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContentError("home layout is malformed") from exc
-        targets = payload.get("items") if isinstance(payload, dict) else None
+        if not isinstance(payload, dict):
+            raise ContentError("home layout is malformed")
+        if "grids" in payload:
+            grids = payload["grids"]
+            if not isinstance(grids, dict) or not all(
+                isinstance(grid_id, str)
+                and isinstance(targets, list)
+                and all(isinstance(item, str) for item in targets)
+                for grid_id, targets in grids.items()
+            ):
+                raise ContentError("home layout is malformed")
+            return grids
+        targets = payload.get("items")
         if not isinstance(targets, list) or not all(isinstance(item, str) for item in targets):
             raise ContentError("home layout is malformed")
-        return [self._home_target(item) for item in targets]
+        return {"featured": targets}
+
+    def home_items(self, grid_id: str | None = None) -> list[str]:
+        """Return the ordered book/page targets curated for the home screen.
+
+        With ``grid_id`` given, returns just that one grid's ordered targets
+        (an empty list if that grid has no curated list yet -- not an
+        error). With ``grid_id`` left as ``None``, returns the
+        de-duplicated union of every grid's targets, in first-seen order
+        across grids in the file's own key order -- the shape callers that
+        only need "is this featured *anywhere*" (e.g. the admin "Featured
+        page overrides" permission matrix) still need.
+        """
+
+        grids = self._load_home_layout()
+        if grid_id is not None:
+            return [self._home_target(item) for item in grids.get(grid_id, [])]
+        seen: dict[str, None] = {}
+        for targets in grids.values():
+            for item in targets:
+                seen.setdefault(self._home_target(item), None)
+        return list(seen)
 
     def _remove_legacy_main_books(self) -> None:
         """Remove only untouched placeholder books from the superseded design.
@@ -625,44 +667,53 @@ class ContentRepository:
             message="Migrate default home page to the widget-aware starter",
         )
 
-    def feature_on_home(self, target: str, actor: User) -> str:
-        """Add a book or page to the Git-versioned home layout."""
+    def feature_on_home(self, target: str, grid_id: str, actor: User) -> str:
+        """Add a book or page to one named grid in the Git-versioned home layout.
+
+        Reads and rewrites only ``grid_id``'s own list inside the shared
+        ``{"grids": {...}}`` file -- every other grid's list is carried
+        through untouched, since multiple grids' curated lists now live in
+        this one file under the same write lock.
+        """
 
         target = self._home_target(target)
         with self.git.write_lock():
-            items = self.home_items()
+            grids = self._load_home_layout()
+            items = [self._home_target(item) for item in grids.get(grid_id, [])]
             if target in items:
                 return target
-            items.append(target)
+            grids[grid_id] = [*items, target]
             self._atomic_write(
                 self.root / HOME_LAYOUT_FILE,
-                json.dumps({"items": items}, indent=2) + "\n",
+                json.dumps({"grids": grids}, indent=2) + "\n",
             )
             self.git.commit_paths(
                 [self.root / HOME_LAYOUT_FILE],
                 name=actor.display_name,
                 email=actor.email,
-                message=f"Feature on home: {target}",
+                message=f"Feature on home ({grid_id}): {target}",
             )
         return target
 
-    def remove_from_home(self, target: str, actor: User) -> None:
-        """Remove one existing home-screen target without affecting its content."""
+    def remove_from_home(self, target: str, grid_id: str, actor: User) -> None:
+        """Remove one existing target from one named grid, leaving other grids untouched."""
 
         target = self._home_target(target)
         with self.git.write_lock():
-            items = self.home_items()
+            grids = self._load_home_layout()
+            items = [self._home_target(item) for item in grids.get(grid_id, [])]
             if target not in items:
                 return
+            grids[grid_id] = [item for item in items if item != target]
             self._atomic_write(
                 self.root / HOME_LAYOUT_FILE,
-                json.dumps({"items": [item for item in items if item != target]}, indent=2) + "\n",
+                json.dumps({"grids": grids}, indent=2) + "\n",
             )
             self.git.commit_paths(
                 [self.root / HOME_LAYOUT_FILE],
                 name=actor.display_name,
                 email=actor.email,
-                message=f"Remove from home: {target}",
+                message=f"Remove from home ({grid_id}): {target}",
             )
 
     def _home_target(self, raw: str) -> str:
@@ -1060,6 +1111,14 @@ class ContentRepository:
         a text edit would, so a concurrent edit of either half is never
         silently clobbered by the other.  ``title`` of ``None`` keeps the
         current title unchanged.
+
+        A ``featured``-type widget id present in the current page's widgets
+        but absent from the incoming ``widgets`` (i.e. deleted from the
+        tray) also has that grid's curated list deleted from
+        ``.unstacked-home.json`` -- recreating a widget with the same id
+        later starts empty rather than recovering the old members. That
+        purge lands in the same commit as the page write, inside the same
+        write lock, so the two files never drift out of sync.
         """
 
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
@@ -1083,22 +1142,51 @@ class ContentRepository:
                 if current_blob_sha != base_blob_sha:
                     raise ContentConflict("home page changed; reload it before saving")
                 document = parse_page(original, default_title=_LEGACY_HOME_TITLE)
+                current_featured_ids = {
+                    entry.get("id")
+                    for entry in (document.metadata.get("widgets") or [])
+                    if isinstance(entry, dict) and entry.get("type") == "featured"
+                }
+                incoming_featured_ids = {
+                    entry["id"] for entry in validated_widgets if entry["type"] == "featured"
+                }
+                purged_grid_ids = current_featured_ids - incoming_featured_ids
                 now = datetime.now(timezone.utc).isoformat()
                 metadata = {"updated_at": now, "widgets": validated_widgets}
                 if title is not None:
                     metadata["title"] = self._validate_title(title)
                 metadata.update(self._repaired_metadata(document, actor, now))
                 serialized = serialize_page(replace(document, content=markdown), metadata=metadata)
+                layout_path = self.root / HOME_LAYOUT_FILE
+                layout_original = layout_path.read_bytes() if layout_path.exists() else None
                 try:
                     tree.write_text(HOME_PAGE_RELATIVE, serialized, overwrite=True)
+                    paths: list[str | Path] = [f"docs/{HOME_PAGE_RELATIVE}"]
+                    if purged_grid_ids:
+                        grids = self._load_home_layout()
+                        remaining = {
+                            grid_id: targets
+                            for grid_id, targets in grids.items()
+                            if grid_id not in purged_grid_ids
+                        }
+                        if remaining != grids:
+                            self._atomic_write(
+                                layout_path,
+                                json.dumps({"grids": remaining}, indent=2) + "\n",
+                            )
+                            paths.append(layout_path)
                     return self.git.commit_paths(
-                        [f"docs/{HOME_PAGE_RELATIVE}"],
+                        paths,
                         name=actor.display_name,
                         email=actor.email,
                         message="Update home page",
                     )
                 except Exception:
                     tree.write_text(HOME_PAGE_RELATIVE, original, overwrite=True)
+                    if layout_original is None:
+                        layout_path.unlink(missing_ok=True)
+                    else:
+                        _atomic_write_bytes(layout_path, layout_original)
                     raise
         except GitWriteLockTimeout as exc:
             raise ContentLockTimeout(str(exc)) from exc

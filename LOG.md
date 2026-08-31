@@ -10,6 +10,61 @@ how long any entry is.
 
 ---
 
+## 2026-08-31 05:42 UTC — Claude Code
+Implemented Phase 1 ("Content layer") of `plans/plan_multiple_featured_grids.md`
+-- the user-approved design for multiple independently-curated named
+featured grids on Home, of which this is the first of five sequential
+phases. Purely an internal storage-shape change in `app/content.py`; zero
+user-visible behavior change (still exactly one grid, `"featured"`).
+
+- `.unstacked-home.json` moves from flat `{"items": [...]}` to grid-keyed
+  `{"grids": {"<grid_id>": [...], ...}}`. A new `_load_home_layout()`
+  reads both shapes -- the old flat shape (no `"grids"` key) is treated as
+  exactly one implicit `"featured"` grid -- with no migration script and
+  no forced rewrite-on-read; the file naturally moves to the new shape the
+  next time any grid is written.
+- `home_items(grid_id: str | None = None)`: a specific grid's ordered
+  targets (`[]` if that grid has no list yet, not an error) when given, or
+  the de-duplicated union of every grid's targets in first-seen,
+  file-key order when omitted -- the shape the admin "Featured page
+  overrides" permission matrix (`app/admin_api.py`, left unchanged, still
+  calls with no `grid_id`) needs.
+- `feature_on_home`/`remove_from_home` gained a required `grid_id`
+  parameter; each reads/writes only that one grid's list inside the
+  shared `{"grids": {...}}` file, leaving every other grid's list
+  untouched under the same write lock.
+- `update_home_page` now diffs the current (pre-write) page's
+  `featured`-type widget ids against the incoming ones; any id dropped
+  from the tray has that grid's curated list deleted (not merely emptied)
+  from `.unstacked-home.json` in the same locked operation -- recreating a
+  widget with the same id later starts empty. Both files land in one
+  `git.commit_paths` call when a grid was purged; only `index.md` is
+  committed otherwise (unchanged from before). Mirrors
+  `set_container_public`'s try/except rollback pattern so a failure after
+  the page write restores both files atomically.
+- Updated every existing call site (`app/web.py`, `app/home_widgets.py`,
+  and the pre-existing tests in `tests/test_home_widgets.py`/
+  `tests/test_admin_api.py`) to pass `grid_id="featured"` explicitly, so
+  today's single-grid behavior is identical end to end -- no template, API
+  parameter, or UI change in this phase.
+- Added unit test coverage in `tests/test_home_page.py`: legacy flat-shape
+  reads, unknown-grid-id returns `[]`, per-grid write isolation, the
+  cross-grid de-duplicated union, the purge-on-widget-delete behavior
+  (confirmed via both `home_items()` and the raw committed JSON, plus the
+  actual commit's changed-file set), and the no-purge case still
+  committing only `index.md`.
+
+`git fetch origin` before starting showed Codex's Milkdown-revert and
+Home-publishing work already merged into local `main`; re-read those
+diffs and confirmed none touch `home_items`/`feature_on_home`/
+`remove_from_home`/`update_home_page`, so this work applied cleanly on
+top with no rebase needed. Full suite and ruff clean immediately before
+committing.
+- Files: `app/content.py`, `app/home_widgets.py`, `app/web.py`,
+  `tests/test_home_page.py`, `tests/test_home_widgets.py`,
+  `tests/test_admin_api.py`, `plans/plan_multiple_featured_grids.md`,
+  `LOG.md`
+
 ## 2026-08-31 02:05 UTC — Claude Code
 Per the user's request, removed the dashboard's redundant "Home" and
 "Featured" heading text: dropped `tree.html`'s `<h1>{{ home_title }}</h1>`
@@ -417,37 +472,3 @@ agents can build the editing UI and settings separation on top.
   `tests/test_admin_api.py`, `tests/test_home_page.py`,
   `tests/test_home_widgets.py`, `LOG.md`
 
-## 2026-08-30 19:23 UTC — Claude Code
-Reviewed Codex's `plan_editable_widget_home.md` at the user's request and
-folded in five concrete revisions before any implementation starts:
-
-- A `config: {}` bag on every widget entry from day one, so a later
-  widget needing a parameter (count, tag filter) doesn't force a schema
-  migration across every existing `index.md`.
-- `index.md`'s read access made explicit (open to every authenticated
-  user by default -- Home is the shared landing screen) and its write
-  access reframed from a hardcoded admin check to the ordinary ACL grant
-  model (Admin's existing blanket grant already covers it; any group can
-  get an explicit grant, same as a book).
-- Widgets render in one fixed slot below the body for v1 rather than
-  interleaved inline via placeholder tokens -- real `mkdocs build
-  --strict` has no concept of such a token and would render it as literal
-  text in the static export; inline placement would need a
-  `hooks/drafts.py`-style build-time handler, deferred as unnecessary for
-  a single-widget v1.
-- A concrete candidate-widget list beyond `featured` (recently updated,
-  by tag, pinned/announcement, your-drafts-or-writable), ordered by how
-  little new plumbing each needs, plus an explicit call to avoid any
-  widget needing a new counter store (e.g. "most viewed") since that's
-  either a new DB table -- outside the users/groups/ACL guardrail -- or a
-  JSON file taking a write on every page view.
-- A concurrency note: a widget-only reorder must still carry the page's
-  current blob SHA, since front matter and body share one file and one
-  conflict domain.
-
-Added a matching acceptance criterion (static build shows only the body,
-no widget content or placeholder text) and a verification-phase mention
-of testing the new default-read grant and the `config` round trip. No
-code changes -- planning only, per the user's request to fold improvements
-in before implementation begins.
-- Files: `plans/plan_editable_widget_home.md`, `LOG.md`

@@ -119,8 +119,8 @@ def test_featured_widget_filters_out_unreadable_targets_and_keeps_order(app_env)
     content: ContentRepository = app.state.content
     content.create_book("Alpha", "alpha", admin)
     content.create_book("Beta", "beta", admin)
-    content.feature_on_home("beta", admin)
-    content.feature_on_home("alpha", admin)  # featured second; order must survive
+    content.feature_on_home("beta", "featured", admin)
+    content.feature_on_home("alpha", "featured", admin)  # featured second; order must survive
 
     with Session(app.state.engine) as session:
         reader = _reader(session, "widget-reader@example.com")
@@ -145,7 +145,7 @@ def test_featured_widget_is_empty_for_a_reader_with_no_grants(app_env):
     app, _settings, admin, _token = app_env
     content: ContentRepository = app.state.content
     content.create_book("Alpha", "alpha", admin)
-    content.feature_on_home("alpha", admin)
+    content.feature_on_home("alpha", "featured", admin)
 
     with Session(app.state.engine) as session:
         reader = _reader(session, "no-grants@example.com")
@@ -163,8 +163,8 @@ def test_featured_widget_resolves_page_and_book_titles(app_env):
     content: ContentRepository = app.state.content
     content.create_book("Handbook", "handbook", admin)
     content.create_page("handbook", "Leave Policy", "leave", "# Leave\n", [], False, admin)
-    content.feature_on_home("handbook/leave.md", admin)
-    content.feature_on_home("handbook", admin)
+    content.feature_on_home("handbook/leave.md", "featured", admin)
+    content.feature_on_home("handbook", "featured", admin)
 
     with Session(app.state.engine) as session:
         authorization = AuthorizationContext(session, session.get(User, admin.id))

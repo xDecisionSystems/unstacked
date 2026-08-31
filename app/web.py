@@ -243,7 +243,7 @@ def _public_home_widgets(content) -> list[dict]:
         if entry.type != "featured":
             continue
         items = []
-        for target in content.home_items():
+        for target in content.home_items("featured"):
             if target.endswith(".md"):
                 if not _public_page(content, target):
                     continue
@@ -373,7 +373,7 @@ def _base_context(request: Request, session: Session, user: User) -> dict:
     authorization = _authorization(session, user)
     raw_tree = request.app.state.ai_service.tree(authorization)
     display_tree = _tree_view_model(content, authorization, raw_tree)
-    home_targets = content.home_items()
+    home_targets = content.home_items("featured")
     featured_targets = set(home_targets)
     for book in display_tree:
         book["featured"] = book["slug"] in featured_targets
@@ -1326,7 +1326,7 @@ async def feature_home_submit(
     with Session(request.app.state.engine) as session:
         try:
             _authorization(session, user).require_admin()
-            request.app.state.content.feature_on_home(form.get("target", ""), user)
+            request.app.state.content.feature_on_home(form.get("target", ""), "featured", user)
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
     return RedirectResponse(_home_return_path(form.get("return_to")), status_code=303)
@@ -1340,7 +1340,7 @@ async def remove_home_submit(
     with Session(request.app.state.engine) as session:
         try:
             _authorization(session, user).require_admin()
-            request.app.state.content.remove_from_home(form.get("target", ""), user)
+            request.app.state.content.remove_from_home(form.get("target", ""), "featured", user)
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
     return RedirectResponse(_home_return_path(form.get("return_to")), status_code=303)

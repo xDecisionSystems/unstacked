@@ -170,7 +170,7 @@ def _render_featured(
 
     items = [
         _describe_target(content, target)
-        for target in content.home_items()
+        for target in content.home_items("featured")
         if authorization.policy.decide(target).can_read
     ]
     return RenderedWidget(

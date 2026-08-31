@@ -7,6 +7,7 @@ startup logic, and a real ``mkdocs build --strict`` against the new starter
 content.
 """
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ from sqlmodel import Session
 
 from app.config import Settings
 from app.content import (
+    HOME_LAYOUT_FILE,
     HOME_STARTER_WIDGETS,
     LEGACY_HOME_PAGE_PLACEHOLDER,
     ContentConflict,
@@ -206,3 +208,118 @@ def test_update_home_page_rejects_malformed_widgets(content, actor, widgets):
     # A rejected update must never have written anything.
     metadata, _body, _raw = content.read_home_page()
     assert metadata["widgets"] == HOME_STARTER_WIDGETS
+
+
+# --------------------------------------------------------------------------
+# Grid-keyed curation storage (Phase 1 of plans/plan_multiple_featured_grids.md)
+# --------------------------------------------------------------------------
+
+
+def test_home_items_reads_legacy_flat_items_shape(content, actor):
+    content.create_book("Alpha", "alpha", actor)
+    content.create_book("Beta", "beta", actor)
+    layout = content.root / HOME_LAYOUT_FILE
+    layout.write_text(json.dumps({"items": ["alpha", "beta"]}), encoding="utf-8")
+
+    # The old flat shape (no "grids" key) is treated as exactly one implicit
+    # "featured" grid -- no migration script or write-on-read needed.
+    assert content.home_items("featured") == ["alpha", "beta"]
+    assert content.home_items() == ["alpha", "beta"]
+
+
+def test_home_items_with_unknown_grid_id_returns_empty_list(content, actor):
+    content.create_book("Alpha", "alpha", actor)
+    content.feature_on_home("alpha", "featured", actor)
+
+    assert content.home_items("some-grid-with-no-list-yet") == []
+
+
+def test_feature_and_remove_from_home_never_perturb_another_grid(content, actor):
+    content.create_book("Alpha", "alpha", actor)
+    content.create_book("Beta", "beta", actor)
+    content.create_book("Gamma", "gamma", actor)
+
+    content.feature_on_home("beta", "news", actor)
+    content.feature_on_home("alpha", "research", actor)
+    content.feature_on_home("gamma", "research", actor)
+
+    assert content.home_items("news") == ["beta"]
+    assert content.home_items("research") == ["alpha", "gamma"]
+
+    # Removing a target from one grid must leave the other grid's list intact.
+    content.remove_from_home("alpha", "research", actor)
+    assert content.home_items("research") == ["gamma"]
+    assert content.home_items("news") == ["beta"]
+
+    # Re-adding an already-present target to a grid is a no-op that leaves
+    # every other grid's list untouched too.
+    content.feature_on_home("beta", "news", actor)
+    assert content.home_items("news") == ["beta"]
+    assert content.home_items("research") == ["gamma"]
+
+
+def test_home_items_union_dedupes_across_grids_in_first_seen_order(content, actor):
+    content.create_book("Alpha", "alpha", actor)
+    content.create_book("Beta", "beta", actor)
+
+    content.feature_on_home("alpha", "research", actor)
+    content.feature_on_home("beta", "news", actor)
+    content.feature_on_home("alpha", "news", actor)  # already seen via "research"
+
+    assert content.home_items() == ["alpha", "beta"]
+
+
+def test_update_home_page_purges_deleted_featured_grids_curated_list(content, actor):
+    content.create_book("Alpha", "alpha", actor)
+    content.create_book("Beta", "beta", actor)
+
+    two_grids = [
+        {"id": "research", "type": "featured", "config": {}},
+        {"id": "news", "type": "featured", "config": {}},
+    ]
+    base_sha = content.home_page_blob_sha()
+    content.update_home_page("# Home\n", two_grids, actor, base_blob_sha=base_sha)
+
+    content.feature_on_home("alpha", "research", actor)
+    content.feature_on_home("beta", "news", actor)
+    assert content.home_items("research") == ["alpha"]
+    assert content.home_items("news") == ["beta"]
+
+    # Drop the "news" widget from the tray, keeping only "research".
+    remaining_widget = [{"id": "research", "type": "featured", "config": {}}]
+    base_sha = content.home_page_blob_sha()
+    commit_sha = content.update_home_page(
+        "# Home, edited\n", remaining_widget, actor, base_blob_sha=base_sha
+    )
+
+    # The purged grid's curated list is gone entirely (not merely emptied);
+    # the surviving grid's list is untouched.
+    assert content.home_items("news") == []
+    layout = json.loads((content.root / HOME_LAYOUT_FILE).read_text(encoding="utf-8"))
+    assert "news" not in layout["grids"]
+    assert content.home_items("research") == ["alpha"]
+
+    # Both files landed in the one commit.
+    repo = Repo(content.root)
+    commit = repo.commit(commit_sha)
+    assert set(commit.stats.files) == {"docs/index.md", HOME_LAYOUT_FILE}
+
+
+def test_update_home_page_commits_only_index_when_no_grid_is_removed(content, actor):
+    content.create_book("Alpha", "alpha", actor)
+    widgets = [{"id": "research", "type": "featured", "config": {}}]
+    base_sha = content.home_page_blob_sha()
+    content.update_home_page("# Home\n", widgets, actor, base_blob_sha=base_sha)
+    content.feature_on_home("alpha", "research", actor)
+
+    # A save that keeps the exact same set of featured widget ids (e.g. a
+    # body-only edit) must not touch the home layout file at all.
+    base_sha = content.home_page_blob_sha()
+    commit_sha = content.update_home_page(
+        "# Home, edited again\n", widgets, actor, base_blob_sha=base_sha
+    )
+
+    repo = Repo(content.root)
+    commit = repo.commit(commit_sha)
+    assert set(commit.stats.files) == {"docs/index.md"}
+    assert content.home_items("research") == ["alpha"]

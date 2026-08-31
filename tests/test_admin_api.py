@@ -200,7 +200,7 @@ def test_book_permissions_list_and_update_without_a_grant_gap(app_env, client, c
 
 def test_featured_page_can_receive_an_exact_permission(app_env, client, content):
     app, _settings, admin, token = app_env
-    content.feature_on_home("handbook/leave.md", admin)
+    content.feature_on_home("handbook/leave.md", "featured", admin)
     group_id = _group_with_member(client, token, admin.id)
 
     assert client.get("/api/admin/home-items", headers=bearer(token)).json() == [
