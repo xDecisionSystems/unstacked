@@ -291,6 +291,51 @@ def test_home_renders_the_index_page_body_and_the_featured_widget(client, conten
     assert "Secret" in home.text
 
 
+def test_home_renders_multiple_featured_widgets_with_disjoint_grids_and_titles(app_env, client):
+    """Two ``featured`` widgets on one Home page each show only their own grid.
+
+    Exercises multiple widget instances the way the editor UI will once
+    phase 4 lands: ``update_home_page`` with two ``featured`` entries, each
+    fed via ``feature_on_home(..., grid_id=<its own id>, ...)``. Only the
+    widget with a non-empty ``config.title`` renders a visible ``<h2>``.
+    """
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research Book", "research-book", admin)
+    content.create_book("News Book", "news-book", admin)
+    content.update_home_page(
+        "Multiple grids.",
+        [
+            {"id": "research", "type": "featured", "config": {"title": "Research"}},
+            {"id": "news", "type": "featured", "config": {}},
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+    content.feature_on_home("research-book", "research", admin)
+    content.feature_on_home("news-book", "news", admin)
+
+    _login(client, "admin")
+    home = client.get("/tree")
+    assert home.status_code == 200
+
+    sections = re.findall(r'<section class="main-pages home-widget".*?</section>', home.text, re.S)
+    assert len(sections) == 2
+    research_section = next(s for s in sections if "Research Book" in s)
+    news_section = next(s for s in sections if s is not research_section)
+
+    assert 'href="/books/research-book"' in research_section
+    assert "News Book" not in research_section
+    assert "<h2>Research</h2>" in research_section
+
+    assert 'href="/books/news-book"' in news_section
+    assert "Research Book" not in news_section
+    assert "<h2>" not in news_section
+    # No visible title -> aria-label falls back to a non-empty derived label.
+    assert 'aria-label=""' not in news_section
+
+
 def test_home_edit_button_visibility_follows_write_access_not_admin_status(app_env, client):
     app, _settings, _admin, _token = app_env
     writer = _make_user(app, "writer")
@@ -1064,6 +1109,59 @@ def test_public_home_page_featured_widget_only_shows_public_items(app_env, clien
     assert 'href="/pages/public-handbook/welcome"' in response.text
     assert 'href="/pages/private-handbook/secret"' not in response.text
     assert "card-home-action" not in response.text
+
+
+def test_public_home_page_renders_multiple_grids_with_disjoint_titles_and_items(app_env, client):
+    """Anonymous mirror of the multi-widget rendering test, via ``_public_home_widgets``.
+
+    Same per-grid disjointness and per-grid optional title as the
+    authenticated path, but filtered by public visibility instead of an
+    ``AuthorizationContext`` -- and a private item in one grid must not leak
+    into either the public grid it shares a page with or the anonymous
+    response at all.
+    """
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.set_home_public(True, admin)
+    content.create_book("Research Book", "research-book", admin)
+    content.set_subtree_public("research-book", True, admin)
+    content.create_book("News Book", "news-book", admin)
+    content.set_subtree_public("news-book", True, admin)
+    content.create_book("Private Book", "private-book", admin)
+    content.update_home_page(
+        "Multiple grids.",
+        [
+            {"id": "research", "type": "featured", "config": {"title": "Research"}},
+            {"id": "news", "type": "featured", "config": {}},
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+    content.feature_on_home("research-book", "research", admin)
+    content.feature_on_home("private-book", "research", admin)  # not public -> filtered out
+    content.feature_on_home("news-book", "news", admin)
+
+    client.cookies.clear()
+    response = client.get("/tree")
+    assert response.status_code == 200
+
+    sections = re.findall(
+        r'<section class="main-pages home-widget".*?</section>', response.text, re.S
+    )
+    assert len(sections) == 2
+    research_section = next(s for s in sections if "Research Book" in s)
+    news_section = next(s for s in sections if s is not research_section)
+
+    assert 'href="/books/research-book"' in research_section
+    assert "Private Book" not in research_section
+    assert "News Book" not in research_section
+    assert "<h2>Research</h2>" in research_section
+
+    assert 'href="/books/news-book"' in news_section
+    assert "Research Book" not in news_section
+    assert "<h2>" not in news_section
+    assert "Private Book" not in response.text
 
 
 def test_home_not_public_keeps_tree_behind_login(client):

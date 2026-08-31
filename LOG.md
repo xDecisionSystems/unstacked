@@ -10,6 +10,40 @@ how long any entry is.
 
 ---
 
+## 2026-08-31 06:15 UTC — Claude Code
+Implemented Phase 2 ("Rendering") of `plans/plan_multiple_featured_grids.md`,
+the second of five sequential phases for multiple independently-curated
+named featured grids on Home. Each `featured` widget instance now curates
+from its own grid and gets its own optional heading, instead of every
+instance implicitly sharing the single `"featured"` grid and a hardcoded
+`"Featured"` title (Phase 1 already made the storage layer grid-keyed;
+this phase makes rendering actually use a widget's own identity).
+
+- `app/home_widgets.py::_render_featured`: reads `content.home_items(entry.id)`
+  instead of the hardcoded `"featured"` id; `title` now comes from
+  `entry.config.get("title")` (stripped; blank/whitespace/non-string all
+  collapse to `""`, meaning no header) instead of the removed
+  `_FEATURED_WIDGET_TITLE` constant.
+- `app/web.py::_public_home_widgets` (the anonymous-visitor mirror added
+  earlier this session) gets the identical two changes, so a public Home
+  view renders multiple grids correctly too.
+- `app/templates/tree.html`: reintroduced a per-widget `<h2>{{ widget.title }}</h2>`,
+  but conditionally -- `{% if widget.title %}` -- so an untitled grid still
+  renders with no visible heading, matching "optional title header" from
+  the plan. Since `widget.title` can now legitimately be empty, the
+  section's `aria-label` gained a fallback (`"<Type> widget"`) so it is
+  never blank for a screen-reader user.
+- Added unit coverage in `tests/test_home_widgets.py` (two independent
+  grids with disjoint, ACL-filtered item sets; title derivation for
+  blank/whitespace/non-string config) and browser-level coverage in
+  `tests/test_web.py` (authenticated and anonymous/public `GET /tree`
+  both showing two widgets with only the titled one rendering an `<h2>`).
+
+Full suite and ruff clean. `git fetch origin` showed no new Codex commits
+throughout.
+- Files: `app/home_widgets.py`, `app/templates/tree.html`, `app/web.py`,
+  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-31 05:50 UTC — Claude Code
 Hid the "History" link on a page view for unauthenticated visitors, per
 the user's request. `/pages/{path}/history` requires a real session
@@ -379,59 +413,4 @@ color-syntax filename is present while the broken one is not. Full suite
 green, ruff clean.
 - Files: `app/templates/page.html`, `app/templates/editor.html`,
   `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 20:25 UTC — Claude Code
-Implemented the remaining phases (3, 4, 5) of `plan_editable_widget_home.md`
-on top of the backend foundation from the prior entry, using two parallel
-subagents in isolated git worktrees (to avoid a shared-tree collision),
-then merged, verified, and pushed both.
-
-**Phase 3 (Home rendering + editing UI):** `GET`/`POST /home/edit` --
-mirrors the existing page-editor route shape, gated on
-`AuthorizationContext.require_write("index.md")` (a real write grant, not
-`is_admin`), reuses the same markdown editor as page editing. `GET /tree`
-now renders `index.md`'s real body through `MarkdownRenderer` plus its
-widgets in one fixed slot below. New `home_editor.html` widget tray: an
-ordered list with move-up/move-down buttons as the primary,
-keyboard-accessible reorder mechanism (plus an optional pointer-drag
-layer) -- deliberately not `reorder.js`'s `localStorage` mechanism, since
-this order is real, git-committed content; the tray's order is serialized
-into the save request and checked against the page's blob SHA even on a
-reorder-only save.
-
-**Phase 4+5 (Settings separation + featured-star verification):** Trimmed
-`Branding` to name + logo only, deleting `home_eyebrow`/`home_title`/
-`home_description`/`featured_label` end to end (dataclass, load/save,
-admin API models, admin.html form) now that `index.md` itself is the live
-source of that copy. Added a Settings "Home page" section: a pointer to
-Home's own Edit button, plus a "reset to starter content" admin action
-that goes through `update_home_page`'s ordinary blob-SHA commit path
-(`ContentRepository.reset_home_page_to_starter`), not a raw overwrite.
-Verified (read-only) that the existing `/home/feature`/`/home/remove`
-star toggles still work unchanged against the new model.
-
-**Integration:** both worktree branches merged into `main` cleanly --
-only `tests/test_web.py` was touched by both, and git's own merge
-resolved it with no manual conflict. Full suite (100% pass, all dots) and
-ruff clean on the merged tree. Verified through a real Docker Compose
-deployment per `AGENTS.md`: container healthy, `/healthz` 200, and --
-more telling than an HTTP smoke test -- directly inspected the actual
-`index.md` written into the real content volume by genuine container
-bootstrap, confirming the widget front matter is correct outside of test
-fixtures. Could not exercise the new routes over HTTP in that container
-since its persisted `data` volume already holds an admin account from an
-earlier verification run with a since-changed password (expected --
-`AGENTS.md` forbids wiping these volumes between runs).
-
-Deferred, per the implementing agents' own judgment, not required by the
-plan: inline widget-placeholder tokens (v1 uses one fixed slot, as the
-plan already specifies) and additional widget types beyond `featured`.
-
-Merge commits `f26c10e` and `75af1c5` on `main`; worktrees and their
-branches removed after merging.
-- Files: `app/web.py`, `app/templates/tree.html`,
-  `app/templates/home_editor.html`, `app/static/style.css`,
-  `app/branding.py`, `app/admin_api.py`, `app/content.py`,
-  `app/templates/admin.html`, `tests/test_web.py`,
-  `tests/test_admin_api.py`, `LOG.md`
 

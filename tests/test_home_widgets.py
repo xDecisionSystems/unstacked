@@ -13,6 +13,7 @@ from app.auth import hash_password
 from app.content import ContentRepository
 from app.home_widgets import (
     WidgetEntry,
+    _render_featured,
     build_home_widgets,
     parse_widget_entries,
     render_widgets,
@@ -177,3 +178,73 @@ def test_featured_widget_resolves_page_and_book_titles(app_env):
     assert items["handbook/leave"]["title"] == "Leave Policy"
     assert items["handbook"]["kind"] == "book"
     assert items["handbook"]["title"] == "Handbook"
+
+
+# --------------------------------------------------------------------------
+# Multiple independent ``featured`` widget instances (per-widget grids).
+# --------------------------------------------------------------------------
+
+
+def test_multiple_featured_widgets_have_disjoint_grids_and_independent_acl(app_env):
+    """Two ``featured`` widgets curate different grids, each with its own ACL view.
+
+    Two widget instances (``research``/``news``) are each fed into their own
+    ``feature_on_home`` grid; a reader with access to only some of the
+    targets must see each grid's own subset, never a merged list and never
+    an item leaking from a grid they cannot read.
+    """
+
+    app, _settings, admin, _token = app_env
+    content: ContentRepository = app.state.content
+    content.create_book("Alpha", "alpha", admin)
+    content.create_book("Beta", "beta", admin)
+    content.create_book("Gamma", "gamma", admin)
+    content.feature_on_home("alpha", "research", admin)
+    content.feature_on_home("beta", "research", admin)  # reader cannot read this one
+    content.feature_on_home("gamma", "news", admin)
+
+    with Session(app.state.engine) as session:
+        reader = _reader(session, "grid-reader@example.com")
+        _grant(session, reader, "alpha", read=True, group_name="alpha-readers")
+        _grant(session, reader, "gamma", read=True, group_name="gamma-readers")
+        # No grant for "beta" -- default deny.
+        authorization = AuthorizationContext(session, reader)
+        result = build_home_widgets(
+            [
+                {"id": "research", "type": "featured", "config": {"title": "Research"}},
+                {"id": "news", "type": "featured", "config": {}},
+            ],
+            authorization,
+            content,
+        )
+
+    assert result.errors == []
+    research, news = result.rendered
+    assert research.id == "research"
+    assert research.title == "Research"
+    assert [item["target"] for item in research.data["items"]] == ["alpha"]
+    assert news.id == "news"
+    assert news.title == ""
+    assert [item["target"] for item in news.data["items"]] == ["gamma"]
+
+
+def test_render_featured_title_is_taken_from_the_widget_instances_own_config(app_env):
+    """``title`` comes from ``entry.config['title']``, not a shared constant.
+
+    Unset, blank/whitespace-only, and non-string ``config['title']`` values
+    all collapse to ``""`` (no header) rather than raising or falling back
+    to a hardcoded "Featured".
+    """
+
+    app, _settings, admin, _token = app_env
+    content: ContentRepository = app.state.content
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        for config in ({}, {"title": ""}, {"title": "   "}, {"title": 42}):
+            entry = WidgetEntry(id="featured", type="featured", config=config)
+            widget = _render_featured(entry, authorization, content)
+            assert widget.title == ""
+
+        entry = WidgetEntry(id="featured", type="featured", config={"title": "  News  "})
+        widget = _render_featured(entry, authorization, content)
+        assert widget.title == "News"

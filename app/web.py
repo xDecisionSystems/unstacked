@@ -223,14 +223,16 @@ def _unauthenticated_destination(content) -> str:
 
 
 def _public_home_widgets(content) -> list[dict]:
-    """Render the Home page's ``featured`` widget for an anonymous visitor.
+    """Render each ``featured`` widget instance for an anonymous visitor.
 
     Mirrors ``app.home_widgets._render_featured``, but filters by public
     visibility (:func:`_public_page`/:func:`_container_public`) rather than
     an :class:`AuthorizationContext`, since an anonymous visitor has no ACL
     identity to evaluate. Unknown widget types and malformed entries are
     silently skipped -- an anonymous visitor is never shown an editor-only
-    error message.
+    error message. Each widget instance curates its own grid, keyed by its
+    own ``entry.id``, and its title comes from its own ``config['title']``
+    (default ``""``, meaning no visible header).
     """
 
     try:
@@ -243,7 +245,7 @@ def _public_home_widgets(content) -> list[dict]:
         if entry.type != "featured":
             continue
         items = []
-        for target in content.home_items("featured"):
+        for target in content.home_items(entry.id):
             if target.endswith(".md"):
                 if not _public_page(content, target):
                     continue
@@ -270,8 +272,14 @@ def _public_home_widgets(content) -> list[dict]:
                         "card_image": None,
                     }
                 )
+        title = entry.config.get("title")
         rendered.append(
-            {"id": entry.id, "type": entry.type, "title": "Featured", "data": {"items": items}}
+            {
+                "id": entry.id,
+                "type": entry.type,
+                "title": title.strip() if isinstance(title, str) else "",
+                "data": {"items": items},
+            }
         )
     return rendered
 

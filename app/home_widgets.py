@@ -26,12 +26,6 @@ from app.content import ContentError, ContentRepository
 from app.nav import NavigationError, read_navigation
 from app.paths import UnsafePath
 
-# Folded in from the pre-widget Home defaults in ``app.branding``
-# (``DEFAULT_FEATURED_LABEL``), as a literal copy for the same reason
-# ``app.content``'s starter/migration copy is literal rather than imported:
-# those Branding fields are being retired in a parallel change.
-_FEATURED_WIDGET_TITLE = "Featured"
-
 
 @dataclass(frozen=True)
 class WidgetEntry:
@@ -162,19 +156,28 @@ def _describe_target(content: ContentRepository, target: str) -> dict[str, Any]:
 def _render_featured(
     entry: WidgetEntry, authorization: AuthorizationContext, content: ContentRepository
 ) -> RenderedWidget:
-    """Render the curated home-screen list, filtered to what this user may read.
+    """Render one widget instance's own curated grid, filtered to what this user may read.
 
-    Order matches ``content.home_items()``'s stored order; a target the
-    viewer cannot read is filtered out entirely rather than shown redacted.
+    Each ``featured`` widget instance curates its own grid, keyed by its own
+    ``entry.id`` -- order matches ``content.home_items(entry.id)``'s stored
+    order; a target the viewer cannot read is filtered out entirely rather
+    than shown redacted. ``title`` comes from this instance's own
+    ``config['title']`` (default ``""``, meaning no visible header) rather
+    than a shared constant, since independent grids may each be named
+    differently or left untitled.
     """
 
     items = [
         _describe_target(content, target)
-        for target in content.home_items("featured")
+        for target in content.home_items(entry.id)
         if authorization.policy.decide(target).can_read
     ]
+    title = entry.config.get("title")
     return RenderedWidget(
-        id=entry.id, type=entry.type, title=_FEATURED_WIDGET_TITLE, data={"items": items}
+        id=entry.id,
+        type=entry.type,
+        title=title.strip() if isinstance(title, str) else "",
+        data={"items": items},
     )
 
 

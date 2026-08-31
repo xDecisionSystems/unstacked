@@ -8,7 +8,8 @@
 {% if home_widget_errors and can_write_home %}<p class="error-message">Some widgets could not be displayed: {{ home_widget_errors|join('; ') }}</p>{% endif %}
 <article class="page-body home-body">{{ home_body | safe }}</article>
 {% for widget in home_widgets %}
-<section class="main-pages home-widget" aria-label="{{ widget.title }}">
+<section class="main-pages home-widget" aria-label="{{ widget.title or (widget.type|capitalize ~ ' widget') }}">
+  {% if widget.title %}<h2>{{ widget.title }}</h2>{% endif %}
   {% if widget.type == 'featured' %}
     {% set widget_items = widget.data['items'] %}
     {% if widget_items %}<ul class="page-cards book-page-grid">
