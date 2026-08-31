@@ -39,7 +39,7 @@ from app.acl import AccessDenied, AuthorizationContext
 from app.assets import AssetTooLarge, UnsupportedAsset, detect_image
 from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
 from app.export import ExportError, StaticExportRunner
-from app.home_widgets import build_home_widgets
+from app.home_widgets import build_home_widgets, parse_widget_entries
 from app.models import User
 from app.nav import NavigationError, read_navigation
 from app.paths import UnsafePath
@@ -199,6 +199,105 @@ def _public_context(request: Request) -> dict:
         "tree": [],
         "is_admin": False,
     }
+
+
+def _home_public(content) -> bool:
+    try:
+        metadata, _markdown, _raw = content.read_home_page()
+    except (ContentError, UnsafePath):
+        return False
+    return bool(metadata.get("public"))
+
+
+def _unauthenticated_destination(content) -> str:
+    """Where an unauthenticated visitor lands after a login-gated dead end.
+
+    Home when it is public (a real, working page), ``/login`` otherwise --
+    used both for ``/`` and for any protected page/book an anonymous
+    visitor cannot read, so the response never depends on whether the
+    specific target exists (see the callers' own docstrings on why that
+    matters).
+    """
+
+    return "/tree" if _home_public(content) else "/login"
+
+
+def _public_home_widgets(content) -> list[dict]:
+    """Render the Home page's ``featured`` widget for an anonymous visitor.
+
+    Mirrors ``app.home_widgets._render_featured``, but filters by public
+    visibility (:func:`_public_page`/:func:`_container_public`) rather than
+    an :class:`AuthorizationContext`, since an anonymous visitor has no ACL
+    identity to evaluate. Unknown widget types and malformed entries are
+    silently skipped -- an anonymous visitor is never shown an editor-only
+    error message.
+    """
+
+    try:
+        metadata, _markdown, _raw = content.read_home_page()
+    except (ContentError, UnsafePath):
+        return []
+    entries, _errors = parse_widget_entries(metadata.get("widgets"))
+    rendered = []
+    for entry in entries:
+        if entry.type != "featured":
+            continue
+        items = []
+        for target in content.home_items():
+            if target.endswith(".md"):
+                if not _public_page(content, target):
+                    continue
+                page_metadata, _body, _raw = content.read_page(target)
+                slug = target.rsplit("/", 1)[-1].removesuffix(".md")
+                title = page_metadata.get("title") or _slug_title(slug)
+                card_image = page_metadata.get("card_image")
+                items.append(
+                    {
+                        "kind": "page",
+                        "target": target.removesuffix(".md"),
+                        "title": title,
+                        "card_image": card_image if isinstance(card_image, str) else None,
+                    }
+                )
+            else:
+                if not _container_public(content.docs, target):
+                    continue
+                items.append(
+                    {
+                        "kind": "book",
+                        "target": target,
+                        "title": _container_title(content.docs, target),
+                        "card_image": None,
+                    }
+                )
+        rendered.append(
+            {"id": entry.id, "type": entry.type, "title": "Featured", "data": {"items": items}}
+        )
+    return rendered
+
+
+def _public_home_context(request: Request, content) -> dict:
+    """Mirror ``_home_context`` for an anonymous visitor to a public Home."""
+
+    context = _public_context(request)
+    try:
+        metadata, markdown, _raw = content.read_home_page()
+    except (ContentError, UnsafePath):
+        metadata, markdown = {}, ""
+    try:
+        body_html = MarkdownRenderer(content.root).render("index.md", markdown)
+    except RenderConfigurationError:
+        body_html = ""
+    context.update(
+        {
+            "home_title": metadata.get("title") or "Home",
+            "home_body": body_html,
+            "home_widgets": _public_home_widgets(content),
+            "home_widget_errors": [],
+            "can_write_home": False,
+        }
+    )
+    return context
 
 
 def _page_view(content, path: str) -> dict[str, str | bool]:
@@ -418,7 +517,10 @@ def index(request: Request) -> RedirectResponse:
     try:
         user = get_current_web_user(request)
     except HTTPException:
-        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+        content = request.app.state.content
+        return RedirectResponse(
+            _unauthenticated_destination(content), status_code=status.HTTP_303_SEE_OTHER
+        )
     if user.must_change_password:
         return RedirectResponse("/change-password", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/tree", status_code=status.HTTP_303_SEE_OTHER)
@@ -527,8 +629,22 @@ def logout_submit(
 @router.get("/tree", response_class=HTMLResponse, include_in_schema=False)
 def tree_view(
     request: Request,
-    user: Annotated[User, Depends(require_normal_web_user)],
+    user: Annotated[User | None, Depends(_optional_normal_web_user)],
 ) -> Response:
+    """The dashboard: an anonymous visitor sees it read-only when it is public.
+
+    Mirrors ``page_view``/``book_view``'s existing anonymous-public branch
+    rather than gating on ``require_normal_web_user`` unconditionally, since
+    Home can now be published the same way a book or page can.
+    """
+
+    content = request.app.state.content
+    if user is None:
+        if not _home_public(content):
+            return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+        return templates.TemplateResponse(
+            request, "tree.html", _public_home_context(request, content)
+        )
     with Session(request.app.state.engine) as session:
         context = _home_context(request, session, user)
     return templates.TemplateResponse(request, "tree.html", context)
@@ -565,7 +681,10 @@ def book_view(
     Reuses the same ACL-filtered ``tree`` context every page already builds
     rather than a second query -- a book absent from it is either nonexistent
     or unreadable by this user, and the two must stay indistinguishable, so
-    both collapse to the same 404 as everywhere else in this module.
+    both collapse to the same 404 for a *signed-in* user. An anonymous
+    visitor gets a redirect instead (see ``_unauthenticated_destination``):
+    the response still depends only on Home's public status, never on
+    whether this specific book exists or is merely unreadable.
     """
 
     if user is None:
@@ -581,7 +700,9 @@ def book_view(
             else []
         )
         if not pages and not _container_public(content.docs, book_slug):
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+            return RedirectResponse(
+                _unauthenticated_destination(content), status_code=status.HTTP_303_SEE_OTHER
+            )
         context = _public_context(request)
         context["book"] = {
             "slug": book_slug,
@@ -1331,7 +1452,9 @@ def page_view(
     target = page_path if page_path.endswith(".md") else f"{page_path}.md"
     if user is None:
         if not _public_page(content, target):
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+            return RedirectResponse(
+                _unauthenticated_destination(content), status_code=status.HTTP_303_SEE_OTHER
+            )
         metadata, markdown_source, _raw = content.read_page(target)
         try:
             html = MarkdownRenderer(content.root).render(target, markdown_source)

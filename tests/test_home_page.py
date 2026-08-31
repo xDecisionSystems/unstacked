@@ -61,7 +61,6 @@ def test_bootstrap_writes_widget_aware_starter_home_page(tmp_path: Path):
 
     assert metadata["title"] == "Home"
     assert metadata["widgets"] == HOME_STARTER_WIDGETS
-    assert "Home" in body
     assert "Your featured books and pages." in body
 
     result = _strict_build(root)

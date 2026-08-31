@@ -900,3 +900,62 @@ def test_reset_home_page_requires_admin(app_env, client):
     reader = _make_user(app, "reset-reader@example.com")
     token = create_api_token(reader, settings)
     assert client.post("/api/admin/home/reset", json={}, headers=bearer(token)).status_code == 403
+
+
+# --------------------------------------------------------------------------
+# Home page visibility (publish Home for unauthenticated visitors)
+# --------------------------------------------------------------------------
+
+
+def test_home_visibility_defaults_to_private_and_can_be_toggled(app_env, client):
+    app, _settings, _admin, token = app_env
+    content = app.state.content
+
+    assert client.get("/api/admin/home/visibility", headers=bearer(token)).json() == {
+        "public": False
+    }
+
+    made_public = client.put(
+        "/api/admin/home/visibility", json={"public": True}, headers=bearer(token)
+    )
+    assert made_public.status_code == 200
+    assert made_public.json() == {"public": True}
+    metadata, _body, _raw = content.read_home_page()
+    assert metadata["public"] is True
+
+    made_private = client.put(
+        "/api/admin/home/visibility", json={"public": False}, headers=bearer(token)
+    )
+    assert made_private.json() == {"public": False}
+    metadata, _body, _raw = content.read_home_page()
+    assert metadata["public"] is False
+
+
+def test_home_visibility_survives_an_ordinary_home_page_edit(app_env, client):
+    """``public`` is an unknown field to update_home_page -- it must round-trip
+    through the same raw-metadata preservation every other custom front
+    matter key gets, not be silently dropped by the next save."""
+
+    app, _settings, admin, token = app_env
+    content = app.state.content
+    client.put("/api/admin/home/visibility", json={"public": True}, headers=bearer(token))
+
+    content.update_home_page(
+        "Updated body", [], admin, base_blob_sha=content.home_page_blob_sha()
+    )
+
+    metadata, _body, _raw = content.read_home_page()
+    assert metadata["public"] is True
+
+
+def test_home_visibility_requires_admin(app_env, client):
+    app, settings, _admin, _token = app_env
+    reader = _make_user(app, "visibility-reader@example.com")
+    token = create_api_token(reader, settings)
+    assert client.get("/api/admin/home/visibility", headers=bearer(token)).status_code == 403
+    assert (
+        client.put(
+            "/api/admin/home/visibility", json={"public": True}, headers=bearer(token)
+        ).status_code
+        == 403
+    )

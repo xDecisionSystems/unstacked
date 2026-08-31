@@ -157,6 +157,16 @@ class HomeItemResponse(BaseModel):
     kind: Literal["book", "page"]
 
 
+class HomeVisibilityResponse(BaseModel):
+    """Whether the Home page is currently readable without a session."""
+
+    public: bool
+
+
+class HomeVisibilityUpdate(BaseModel):
+    public: bool
+
+
 class OrphanedPermissionResponse(PermissionResponse):
     """A stored grant that can no longer match anything on disk."""
 
@@ -1363,3 +1373,30 @@ def reset_home_page(request: Request, actor: AdminActor) -> DetailResponse:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     _audit("admin.home.reset", actor, commit=commit)
     return DetailResponse(detail=f"Home page reset to starter content ({commit[:12]})")
+
+
+@router.get("/home/visibility", response_model=HomeVisibilityResponse)
+def read_home_visibility(request: Request, actor: AdminActor) -> HomeVisibilityResponse:
+    metadata, _markdown, _raw = _content(request).read_home_page()
+    return HomeVisibilityResponse(public=bool(metadata.get("public")))
+
+
+@router.put(
+    "/home/visibility", response_model=HomeVisibilityResponse, dependencies=CsrfGuard
+)
+def update_home_visibility(
+    payload: HomeVisibilityUpdate, request: Request, actor: AdminActor
+) -> HomeVisibilityResponse:
+    """Publish or unpublish the Home page for anonymous, unauthenticated visitors.
+
+    An unauthenticated visitor who lands on a non-public page is routed to
+    Home when it is public (a real, working destination) and to ``/login``
+    otherwise -- see ``app.web``'s ``_unauthenticated_destination``.
+    """
+
+    try:
+        commit = _content(request).set_home_public(payload.public, actor)
+    except ContentError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    _audit("admin.home.visibility", actor, public=payload.public, commit=commit)
+    return HomeVisibilityResponse(public=payload.public)

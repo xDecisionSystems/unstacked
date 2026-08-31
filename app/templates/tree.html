@@ -2,14 +2,13 @@
 {% block title %}{{ home_title }} · Unstacked{% endblock %}
 {% block content %}
 <div class="screen-heading dashboard-header">
-  <div><h1>{{ home_title }}</h1></div>
+  <div></div>
   {% if can_write_home %}<a class="button" href="/home/edit">Edit</a>{% endif %}
 </div>
 {% if home_widget_errors and can_write_home %}<p class="error-message">Some widgets could not be displayed: {{ home_widget_errors|join('; ') }}</p>{% endif %}
 <article class="page-body home-body">{{ home_body | safe }}</article>
 {% for widget in home_widgets %}
 <section class="main-pages home-widget" aria-label="{{ widget.title }}">
-  <h2>{{ widget.title }}</h2>
   {% if widget.type == 'featured' %}
     {% set widget_items = widget.data['items'] %}
     {% if widget_items %}<ul class="page-cards book-page-grid">

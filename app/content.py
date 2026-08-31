@@ -429,8 +429,6 @@ def _home_page_starter_body() -> str:
     return (
         f"*{_LEGACY_HOME_EYEBROW.title()}*\n"
         "\n"
-        f"# {_LEGACY_HOME_TITLE}\n"
-        "\n"
         f"{_LEGACY_HOME_DESCRIPTION}\n"
     )
 
@@ -1104,6 +1102,42 @@ class ContentRepository:
                     raise
         except GitWriteLockTimeout as exc:
             raise ContentLockTimeout(str(exc)) from exc
+
+    def set_home_public(self, public: bool, actor: User) -> str:
+        """Toggle the Home page's anonymous-read visibility.
+
+        Mirrors :meth:`set_page_title`'s minimal single-field write rather
+        than :meth:`set_container_public`/:meth:`set_subtree_public`, which
+        both require a directory -- ``index.md`` is a fixed, single reserved
+        *file*, never a container.
+        """
+
+        with self.git.write_lock():
+            tree = ConfinedTree(self.docs)
+            try:
+                original = tree.read_text(
+                    HOME_PAGE_RELATIVE, max_bytes=self.settings.max_page_bytes
+                )
+            except ConfinedFileTooLarge as exc:
+                raise ContentError("home page exceeds configured size limit") from exc
+            except UnsafePath as exc:
+                raise ContentMissing("home page not found") from exc
+            document = parse_page(original, default_title=_LEGACY_HOME_TITLE)
+            now = datetime.now(timezone.utc).isoformat()
+            metadata = {"public": public, "updated_at": now}
+            metadata.update(self._repaired_metadata(document, actor, now))
+            serialized = serialize_page(document, metadata=metadata)
+            try:
+                tree.write_text(HOME_PAGE_RELATIVE, serialized, overwrite=True)
+                return self.git.commit_paths(
+                    [f"docs/{HOME_PAGE_RELATIVE}"],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Make home page {'public' if public else 'private'}",
+                )
+            except Exception:
+                tree.write_text(HOME_PAGE_RELATIVE, original, overwrite=True)
+                raise
 
     def reset_home_page_to_starter(self, actor: User) -> str:
         """Discard the Home page's current body/widgets and restore the starter.

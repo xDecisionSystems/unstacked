@@ -721,10 +721,15 @@ def test_page_view_404s_for_a_missing_or_unreadable_path_never_403(app_env, clie
 
 
 def test_web_routes_require_a_session(client):
-    """The bare cookie dependency, not just the normal one, still gates access."""
+    """No session still gates access -- redirected to login, Home not being public."""
 
-    assert client.get("/tree", follow_redirects=False).status_code == 401
-    assert client.get("/pages/alice-book/secret", follow_redirects=False).status_code == 404
+    tree = client.get("/tree", follow_redirects=False)
+    assert tree.status_code == 303
+    assert tree.headers["location"] == "/login"
+
+    page = client.get("/pages/alice-book/secret", follow_redirects=False)
+    assert page.status_code == 303
+    assert page.headers["location"] == "/login"
 
 
 # --------------------------------------------------------------------------
@@ -907,6 +912,11 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert "automatically synchronized to its <code>main</code> branch" in response.text
     assert 'data-admin-panel="groups"' in response.text
     assert 'data-admin-panel="book-permissions"' in response.text
+    assert 'data-title="Permissions"' in response.text
+    assert "Book Permissions" not in response.text
+    assert 'id="home-public-toggle"' in response.text
+    assert "Publish the Home page publicly" in response.text
+    assert "/api/admin/home/visibility" in response.text
     assert "Groups &amp; Assignments" in response.text
     assert 'data-admin-section="groups"' in response.text
     assert 'data-admin-section="users"' in response.text
@@ -977,6 +987,82 @@ def test_public_page_and_book_are_available_without_a_session(app_env, client):
     client.cookies.clear()
     assert client.get("/pages/public-handbook/welcome").status_code == 200
     assert client.get("/books/public-handbook").status_code == 200
+
+
+def test_public_home_page_renders_read_only_for_an_anonymous_visitor(app_env, client):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.set_home_public(True, admin)
+    content.create_book("Public handbook", "public-handbook", admin)
+    content.create_page(
+        "public-handbook", "Welcome", "welcome", "# Welcome", [], False, admin
+    )
+    content.set_subtree_public("public-handbook", True, admin)
+    content.create_book("Private handbook", "private-handbook", admin)
+    content.create_page(
+        "private-handbook", "Secret", "secret", "# Secret", [], False, admin
+    )
+
+    client.cookies.clear()
+    response = client.get("/tree")
+    assert response.status_code == 200
+    assert "Your featured books and pages." in response.text
+    assert 'href="/home/edit"' not in response.text
+
+
+def test_public_home_page_featured_widget_only_shows_public_items(app_env, client):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.set_home_public(True, admin)
+    content.create_book("Public handbook", "public-handbook", admin)
+    content.create_page(
+        "public-handbook", "Welcome", "welcome", "# Welcome", [], False, admin
+    )
+    content.set_subtree_public("public-handbook", True, admin)
+    content.create_book("Private handbook", "private-handbook", admin)
+    content.create_page(
+        "private-handbook", "Secret", "secret", "# Secret", [], False, admin
+    )
+    _login(client, "admin")
+    csrf = _csrf_from(client.get("/tree").text)
+    client.post(
+        "/home/feature",
+        data={"csrf_token": csrf, "target": "public-handbook/welcome.md"},
+        follow_redirects=False,
+    )
+    client.post(
+        "/home/feature",
+        data={"csrf_token": csrf, "target": "private-handbook/secret.md"},
+        follow_redirects=False,
+    )
+
+    client.cookies.clear()
+    response = client.get("/tree")
+    assert 'href="/pages/public-handbook/welcome"' in response.text
+    assert 'href="/pages/private-handbook/secret"' not in response.text
+    assert "card-home-action" not in response.text
+
+
+def test_home_not_public_keeps_tree_behind_login(client):
+    client.cookies.clear()
+    response = client.get("/tree", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_unauthenticated_non_public_page_redirects_to_public_home(app_env, client, content):
+    app, _settings, admin, _token = app_env
+    app.state.content.set_home_public(True, admin)
+
+    client.cookies.clear()
+    page = client.get("/pages/alice-book/secret", follow_redirects=False)
+    assert page.status_code == 303
+    assert page.headers["location"] == "/tree"
+    book = client.get("/books/alice-book", follow_redirects=False)
+    assert book.status_code == 303
+    assert book.headers["location"] == "/tree"
+    root = client.get("/", follow_redirects=False)
+    assert root.headers["location"] == "/tree"
 
 
 # --------------------------------------------------------------------------
