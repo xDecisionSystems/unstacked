@@ -10,6 +10,54 @@ how long any entry is.
 
 ---
 
+## 2026-08-31 01:20 UTC — Claude Code
+Reverted the Milkdown/Crepe editor (Codex's five commits, `06bb974`..`9a18394`)
+back to Toast UI, per the user's explicit instruction after directly
+comparing both: "Fix it. Or create a simple page that uses Toast and test
+if same issue exists. I like toast better." Verified with Playwright
+(headless Chromium) against a standalone test page that Toast UI, with the
+three CDN plugin dependency fixes already committed earlier, correctly
+tracks cursor position (heading button's `active` class toggles right);
+Milkdown's own `TopBar` heading label, by contrast, never left "Paragraph"
+and `document.activeElement` incorrectly became a `<button>` after clicking
+into content -- a genuine bug in Crepe, not this app's code. Restored
+`app/templates/page.html`, `editor.html`, `home_editor.html`,
+`app/static/style.css`, and `tests/test_web.py` to their pre-Milkdown
+(`539689b`) content; deleted `app/static/markdown-editor.js`. Did not carry
+forward Codex's `6234fc1` heading-popup-dismissal workaround, since it
+treated a symptom of the underlying dependency bugs that no longer exists
+once those are fixed.
+
+While re-verifying against the real app (not just the standalone test
+page), found a second, previously-undiagnosed bug via Playwright bisection:
+clicking anywhere in the editor content moved focus to the toolbar's
+Heading button and opened its dropdown, blocking further input -- this is
+almost certainly the actual root cause of the original "H stuck" report,
+not (only) the missing plugin dependencies. Root cause: all three templates
+wrapped the markdown `<textarea>` in `<label>Markdown<textarea>...
+</textarea></label>`; Toast UI's mount point is inserted via
+`source.before(mount)`, landing it *inside* that same `<label>` alongside
+the now-hidden textarea. A browser's native `<label>` forwards clicks
+anywhere within it to its associated control, and this silently corrupted
+Toast UI's own focus/toolbar-state tracking. Fixed by splitting label and
+textarea into siblings, associated only via `for`/`id`
+(`app/templates/page.html` uses a `<div class="markdown-field">` wrapper to
+preserve its CSS grid placement; `editor.html`/`home_editor.html` use a
+plain sibling pair, no CSS depended on the old nesting there). Renamed the
+corresponding `style.css` selectors from `.editor-form>label` to
+`.editor-form>.markdown-field`.
+
+Verified with a real local Docker Compose deployment (not just a static
+test file): rebuilt the image, created a page with real heading+paragraph
+content, and drove the actual inline editor, the full "New page" editor,
+and the Home editor with Playwright -- in all three, the heading button now
+toggles correctly and `document.activeElement` stays on the real
+ProseMirror content region, with zero console errors. Full suite and ruff
+clean. `git fetch origin` showed no new commits since this work started.
+- Files: `app/templates/page.html`, `app/templates/editor.html`,
+  `app/templates/home_editor.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md` (deleted `app/static/markdown-editor.js`)
+
 ## 2026-08-30 23:42 UTC — Codex
 Corrected the remaining Milkdown CDN failures visible in Safari. The prior
 paths pointed at package-relative stylesheet wrappers that only work after a
@@ -358,10 +406,3 @@ in before implementation begins.
 Documented the phased implementation plan for a Git-versioned, editable
 Markdown homepage with ACL-aware, reorderable widgets.
 - Files: `plans/plan_editable_widget_home.md`, `LOG.md`
-
-## 2026-08-30 18:39 UTC — Codex
-Added a generated badger-at-a-typewriter header logo and administrator-managed
-branding controls for a custom workspace name and validated raster logo.
-- Files: `app/admin_api.py`, `app/branding.py`, `app/config.py`,
-  `app/static/branding/badger-typewriter.png`, `app/static/style.css`,
-  `app/templates/admin.html`, `app/templates/base.html`, `app/web.py`, `LOG.md`
