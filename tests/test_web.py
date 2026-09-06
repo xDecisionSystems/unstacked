@@ -10,6 +10,7 @@ content escaping into the rendered HTML.
 
 import json
 import re
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from sqlmodel import Session
@@ -183,6 +184,34 @@ def test_regular_user_can_open_their_own_password_change_page(app_env, client):
     assert page.status_code == 200
     assert "Choose a new password for your account." in page.text
     assert 'href="/change-password"' in client.get("/tree").text
+
+
+def test_forgot_password_sends_a_reset_only_for_an_active_matching_email(
+    app_env, client, monkeypatch
+):
+    app, settings, _admin, _token = app_env
+    user = _make_user(app, "reset-user")
+    settings.public_base_url = "https://wiki.example.test"
+    delivered = []
+    def capture_reset(_config, recipient, url):
+        delivered.append((recipient, url))
+
+    monkeypatch.setattr("app.web.mailer.send_password_reset", capture_reset)
+
+    known = client.post("/forgot-password", data={"email": user.email})
+    unknown = client.post("/forgot-password", data={"email": "missing@example.com"})
+    assert "If that email belongs" in known.text
+    assert known.text == unknown.text
+    assert [recipient for recipient, _url in delivered] == [user.email]
+
+    token = parse_qs(urlparse(delivered[0][1]).query)["token"][0]
+    reset = client.post(
+        f"/reset-password?token={token}",
+        data={"password": "a fresh secure password"},
+        follow_redirects=False,
+    )
+    assert reset.headers["location"] == "/login"
+    assert _login(client, "reset-user", password="a fresh secure password").status_code == 303
 
 
 # --------------------------------------------------------------------------
@@ -1258,6 +1287,8 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert 'data-admin-panel="users"' in response.text
     assert "/api/admin/users" in response.text
     assert "/api/admin/backup/config" in response.text
+    assert "/api/admin/smtp" in response.text
+    assert "data-smtp" in response.text
     assert "GitHub repository" in response.text
     assert "automatically synchronized to its <code>main</code> branch" in response.text
     assert 'data-admin-panel="groups"' in response.text

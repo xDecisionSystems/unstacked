@@ -38,7 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
-from app import backup_config, backup_runtime, branding, theme, theme_config
+from app import backup_config, backup_runtime, branding, smtp_config, theme, theme_config
 from app.acl import AccessPolicy, Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
@@ -295,6 +295,28 @@ class BrandingResponse(BaseModel):
 class BrandingUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     logo_base64: str | None = Field(default=None, max_length=20_000_000)
+
+
+class SMTPUpdate(BaseModel):
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=587, ge=1, le=65535)
+    username: str = Field(default="", max_length=512)
+    # Do not constrain this secret here: validation errors can include the
+    # rejected input in FastAPI's response body.
+    password: str | None = None
+    from_email: EmailStr
+    starttls: bool = True
+    use_ssl: bool = False
+
+
+class SMTPResponse(BaseModel):
+    configured: bool
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    from_email: str | None = None
+    starttls: bool = True
+    use_ssl: bool = False
 
 
 # --------------------------------------------------------------------------
@@ -1352,6 +1374,47 @@ def update_branding(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     _audit("admin.branding.update", actor)
     return BrandingResponse(**state.__dict__)
+
+
+def _smtp_response(request: Request) -> SMTPResponse:
+    state = smtp_config.load(request.app.state.settings.smtp_config_path)
+    return SMTPResponse(
+        configured=state.configured,
+        host=state.host or None,
+        port=state.port if state.configured else None,
+        username=state.username or None,
+        from_email=state.from_email or None,
+        starttls=state.starttls,
+        use_ssl=state.use_ssl,
+    )
+
+
+@router.get("/smtp", response_model=SMTPResponse)
+def read_smtp(request: Request, actor: AdminActor) -> SMTPResponse:
+    return _smtp_response(request)
+
+
+@router.put("/smtp", response_model=SMTPResponse, dependencies=CsrfGuard)
+def update_smtp(payload: SMTPUpdate, request: Request, actor: AdminActor) -> SMTPResponse:
+    path = request.app.state.settings.smtp_config_path
+    current = smtp_config.load(path)
+    try:
+        state = smtp_config.save(
+            path,
+            smtp_config.SMTPConfig(
+                host=payload.host.strip(),
+                port=payload.port,
+                username=payload.username.strip(),
+                password=payload.password if payload.password is not None else current.password,
+                from_email=str(payload.from_email),
+                starttls=payload.starttls,
+                use_ssl=payload.use_ssl,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    _audit("admin.smtp.update", actor, host=state.host, from_email=state.from_email)
+    return _smtp_response(request)
 
 
 @router.post("/home/reset", response_model=DetailResponse, dependencies=CsrfGuard)

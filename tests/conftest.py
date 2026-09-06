@@ -22,6 +22,7 @@ def app_env(tmp_path: Path):
         # target must never reach the repository's real `data/`.
         backup_config_path=tmp_path / "data" / "backup_config.json",
         theme_config_path=tmp_path / "data" / "theme.json",
+        smtp_config_path=tmp_path / "data" / "smtp.json",
         api_token_secret="test-secret-that-is-long-and-random-enough",
     )
     app = create_app(settings)

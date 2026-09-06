@@ -26,17 +26,19 @@ import difflib
 import json
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from markupsafe import Markup, escape
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from app import branding, theme, theme_config
+from app import branding, mailer, smtp_config, theme, theme_config
 from app.acl import AccessDenied, AuthorizationContext
 from app.assets import AssetTooLarge, UnsupportedAsset, detect_image
+from app.auth import client_identifier, hash_password
 from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
 from app.export import ExportError, StaticExportRunner
 from app.home_widgets import build_home_widgets, parse_widget_entries
@@ -64,6 +66,8 @@ router = APIRouter(tags=["Web UI"])
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 EDITOR_FORM_OVERHEAD = 16_384
+PASSWORD_RESET_SALT = "unstacked.password-reset"
+PASSWORD_RESET_MAX_AGE_SECONDS = 30 * 60
 
 
 def _theme_style_tag(request: Request) -> Markup:
@@ -89,6 +93,31 @@ def _branding(request: Request) -> dict[str, str | None]:
 
 
 templates.env.globals["branding"] = _branding
+
+
+def _password_reset_serializer(request: Request) -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(request.app.state.settings.token_secret, salt=PASSWORD_RESET_SALT)
+
+
+def _read_reset_token(request: Request) -> User | None:
+    try:
+        payload = _password_reset_serializer(request).loads(
+            request.query_params.get("token", ""), max_age=PASSWORD_RESET_MAX_AGE_SECONDS
+        )
+    except (BadSignature, SignatureExpired):
+        return None
+    if not isinstance(payload, dict) or not isinstance(payload.get("sub"), int):
+        return None
+    with Session(request.app.state.engine) as session:
+        user = session.get(User, payload["sub"])
+        if (
+            user is None
+            or not user.is_active
+            or payload.get("generation") != user.api_token_generation
+        ):
+            return None
+        session.expunge(user)
+        return user
 
 
 @router.get("/branding/logo", include_in_schema=False)
@@ -599,6 +628,91 @@ async def login_submit(request: Request) -> Response:
     if result.must_change_password:
         redirect.headers["location"] = "/change-password"
     return redirect
+
+
+@router.get("/forgot-password", response_class=HTMLResponse, include_in_schema=False)
+def forgot_password_page(request: Request) -> Response:
+    return templates.TemplateResponse(request, "forgot_password.html", {"sent": False})
+
+
+@router.post("/forgot-password", response_class=HTMLResponse, include_in_schema=False)
+async def forgot_password_submit(request: Request) -> Response:
+    form = await _read_form(request)
+    email = form.get("email", "").strip().casefold()
+    settings = request.app.state.settings
+    # Rate-limit delivery attempts too, but keep the response identical for
+    # unknown addresses so this endpoint cannot be used to enumerate users.
+    try:
+        request.app.state.login_limiter.check(
+            f"password-reset:{client_identifier(request, settings.trusted_proxy_hops)}:{email}"
+        )
+    except HTTPException:
+        return templates.TemplateResponse(request, "forgot_password.html", {"sent": True})
+    with Session(request.app.state.engine) as session:
+        user = session.exec(
+            select(User).where(User.email == email).where(User.is_active.is_(True))
+        ).first()
+        if user is not None and settings.public_base_url:
+            token = _password_reset_serializer(request).dumps(
+                {"sub": user.id, "generation": user.api_token_generation}
+            )
+            url = (
+                f"{settings.public_base_url.rstrip('/')}/reset-password?"
+                f"{urlencode({'token': token})}"
+            )
+            try:
+                mailer.send_password_reset(
+                    smtp_config.load(settings.smtp_config_path), user.email, url
+                )
+            except mailer.MailDeliveryError:
+                pass
+    return templates.TemplateResponse(request, "forgot_password.html", {"sent": True})
+
+
+@router.get("/reset-password", response_class=HTMLResponse, include_in_schema=False)
+def reset_password_page(request: Request) -> Response:
+    return templates.TemplateResponse(
+        request,
+        "reset_password.html",
+        {"valid": _read_reset_token(request) is not None, "error": None},
+    )
+
+
+@router.post("/reset-password", include_in_schema=False)
+async def reset_password_submit(request: Request) -> Response:
+    user = _read_reset_token(request)
+    if user is None:
+        return templates.TemplateResponse(
+            request,
+            "reset_password.html",
+            {"valid": False, "error": "This reset link is invalid or expired."},
+            status_code=400,
+        )
+    form = await _read_form(request)
+    password = form.get("password", "")
+    if len(password) < 12:
+        return templates.TemplateResponse(
+            request,
+            "reset_password.html",
+            {"valid": True, "error": "New password must be at least 12 characters"},
+            status_code=400,
+        )
+    with Session(request.app.state.engine) as session:
+        persisted = session.get(User, user.id)
+        if persisted is None or persisted.api_token_generation != user.api_token_generation:
+            return templates.TemplateResponse(
+                request,
+                "reset_password.html",
+                {"valid": False, "error": "This reset link is invalid or expired."},
+                status_code=400,
+            )
+        persisted.password_hash = hash_password(password)
+        persisted.must_change_password = False
+        persisted.session_generation += 1
+        persisted.api_token_generation += 1
+        session.add(persisted)
+        session.commit()
+    return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/change-password", response_class=HTMLResponse, include_in_schema=False)

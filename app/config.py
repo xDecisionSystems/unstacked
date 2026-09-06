@@ -135,6 +135,7 @@ class Settings(BaseSettings):
     # admin API, and the file then wins outright.
     theme_config_path: Path = Path("data/theme.json")
     branding_config_path: Path = Path("data/branding.json")
+    smtp_config_path: Path = Path("data/smtp.json")
 
     @field_validator(
         "github_token_path",

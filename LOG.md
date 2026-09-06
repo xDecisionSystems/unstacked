@@ -10,6 +10,22 @@ how long any entry is.
 
 ---
 
+## 2026-09-06 03:47 UTC — Codex
+Added administrator-managed SMTP delivery settings and a self-service
+forgot-password flow. SMTP credentials are stored only in a private `data/`
+file; reset emails go only to active accounts with a matching email address,
+without disclosing account existence. Reset links are signed, expire after 30
+minutes, and become invalid when a password changes. The Docker deployment
+configuration now carries the public URL needed to build email links.
+
+Focused SMTP/password-reset tests and ruff pass. Compose verification could
+not run because Docker Desktop's daemon is unavailable on this machine.
+- Files: `app/smtp_config.py`, `app/mailer.py`, `app/admin_api.py`,
+  `app/web.py`, `app/config.py`, `app/templates/admin.html`,
+  `app/templates/login.html`, `app/templates/forgot_password.html`,
+  `app/templates/reset_password.html`, `docker-compose.yaml`, `.env.example`,
+  `tests/conftest.py`, `tests/test_admin_api.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-06 03:18 UTC — Codex
 Exposed the existing self-service password-change flow to all authenticated
 users with a Change password link in the top bar. The page now distinguishes
@@ -431,21 +447,6 @@ editor-side bypass. The native textarea remains as a usable fallback if the
 editor bundle cannot load. All pinned CDN assets returned 200; focused editor
 tests and ruff pass. Verified with production Compose on port 18765:
 `/healthz` returned 200 and the Milkdown script was served.
-- Files: `app/static/markdown-editor.js`, `app/static/style.css`,
-  `app/templates/editor.html`, `app/templates/home_editor.html`,
-  `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 23:07 UTC — Codex
-Replaced Toast UI across page, standalone-page, and home Markdown editing
-with a lightweight native textarea editor owned by the application. The new
-toolbar uses direct Markdown insertions for headings, text formatting,
-quotes, lists, tasks, links, images, and inline code; it has no CDN
-dependencies, browser-specific popup behavior, or conversion layer, so the
-stored Markdown and existing save routes remain unchanged. Added focused
-template assertions and removed the now-unused Toast UI styling.
-Focused editor, page-view, and home-editor tests pass; ruff passes. Verified
-through production Compose on port 18765: container started and `/healthz`
-returned 200; the new static toolbar script was served successfully.
 - Files: `app/static/markdown-editor.js`, `app/static/style.css`,
   `app/templates/editor.html`, `app/templates/home_editor.html`,
   `app/templates/page.html`, `tests/test_web.py`, `LOG.md`

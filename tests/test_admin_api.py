@@ -401,6 +401,33 @@ def test_orphan_report_also_flags_a_prefix_the_model_would_have_refused(app_env,
 # --------------------------------------------------------------------------
 
 
+def test_admin_can_save_smtp_configuration_without_reading_the_password(app_env, client):
+    _app, settings, _admin, token = app_env
+    payload = {
+        "host": "smtp.example.test",
+        "port": 587,
+        "username": "mailer",
+        "password": "smtp-secret",
+        "from_email": "no-reply@example.com",
+        "starttls": True,
+        "use_ssl": False,
+    }
+    response = client.put("/api/admin/smtp", json=payload, headers=bearer(token))
+    assert response.status_code == 200
+    assert response.json() == {
+        "configured": True,
+        "host": "smtp.example.test",
+        "port": 587,
+        "username": "mailer",
+        "from_email": "no-reply@example.com",
+        "starttls": True,
+        "use_ssl": False,
+    }
+    assert "smtp-secret" not in response.text
+    assert settings.smtp_config_path.is_file()
+    assert client.get("/api/admin/smtp", headers=bearer(token)).json() == response.json()
+
+
 def test_password_reset_revokes_the_cookie_and_the_bearer_token(app_env, client, content):
     """One reset, both transports: either survivor would defeat the reset."""
 
