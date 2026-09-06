@@ -10,6 +10,18 @@ how long any entry is.
 
 ---
 
+## 2026-09-06 03:16 UTC — Codex
+Made the existing administrator password-reset API reachable from Settings.
+Every user row now has a temporary-password field and Reset password control;
+the confirmation clearly explains that all sessions and API tokens are
+revoked and the affected user must replace the temporary password on login.
+The API already enforced those security properties, so this exposes the
+capability without duplicating auth logic. Added a console markup regression
+test for the control and its API wiring.
+
+Focused web and password-reset API tests plus ruff pass.
+- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-06 03:01 UTC — Codex
 Fixed the Home editor's “Add featured grid” control. It was implemented as
 a form nested inside the page-save form, which is invalid HTML and caused
@@ -438,34 +450,3 @@ cleanup path rather than forcing its DOM closed. This prevents the menu from
 obscuring the editing surface while preserving access to its heading choices.
 Focused page-view regression test passes; ruff passes.
 - Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 22:47 UTC — Claude Code
-Third round on the Toast UI toolbar bug. With the color-picker fix
-confirmed live (`GET /version` showed the deployed commit, and its specific
-console error was gone), a fresh console check still showed a `SyntaxError`
-with no source-file attribution -- unusual enough to suspect a browser
-extension, ruled out by the user reproducing it in a Private Browsing
-window.
-
-Went back and checked the one plugin never actually verified for hidden
-dependencies: `code-syntax-highlight`. Despite its "-all" filename
-(everywhere else in this set, "-all" meant "self-contained bundle"), it
-references `window.Prism` directly and does not include Prism.js -- the
-same missing-peer-dependency shape as chart and color-syntax, just from a
-different, unrelated library (Prism ships from cdnjs, not uicdn.toast.com).
-Added Prism.js + its theme CSS before the plugin script in all three
-templates.
-
-Also re-checked `table-merged-cell` and `uml` more thoroughly this time
-(broader pattern match, not just `window.X`) before calling the set clean:
-`table-merged-cell` references nothing external; `uml` does reference a
-`plantuml-encoder` dependency and an external plantuml.com rendering
-service, but both are inside a lazily-invoked, try/caught code path used
-only when someone actually renders a UML diagram -- not at editor
-construction time -- so left alone rather than adding a dependency nothing
-has exercised yet.
-
-Extended the existing regression test with the same load-order assertion
-pattern. Full suite green, ruff clean.
-- Files: `app/templates/page.html`, `app/templates/editor.html`,
-  `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`

@@ -1267,6 +1267,9 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
         "data-user-deactivate",
         "data-user-reactivate",
         "data-user-delete",
+        "data-password-reset",
+        "Temporary password",
+        "Reset password",
         "primary Admin account cannot be deleted",
         "data-group-delete",
         "data-group-membership",
@@ -1279,6 +1282,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
         assert control in response.text
     assert "confirmAction" in response.text
     assert "/members/${user}`,'DELETE'" in response.text
+    assert "/users/${userId}/password`,'POST'" in response.text
     assert "/permissions/${b.dataset.permissionDelete}`,'DELETE'" in response.text
     client.cookies.clear()
     _make_user(app, "reader")
