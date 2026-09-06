@@ -33,11 +33,11 @@
       </li>
       {% endfor %}
     </ul>
-    <form id="add-widget-form" class="widget-add-form">
+    <div id="add-widget-form" class="widget-add-form">
       <label>Grid id<input type="text" id="add-widget-id" placeholder="e.g. research"></label>
       <label>Title (optional)<input type="text" id="add-widget-title" placeholder="e.g. Research"></label>
-      <button type="submit">Add featured grid</button>
-    </form>
+      <button type="button" id="add-widget-submit">Add featured grid</button>
+    </div>
     <p class="error-message" id="add-widget-error" hidden></p>
   </fieldset>
   <div class="form-actions"><button type="submit">Save</button><a class="button" href="/tree">Cancel</a></div>
@@ -187,23 +187,31 @@
     addError.textContent = '';
   }
 
+  function addWidget() {
+    clearAddError();
+    const slug = slugify(addIdInput ? addIdInput.value : '');
+    if (!slug) {
+      showAddError('Enter a grid id made of letters, numbers, or dashes.');
+      return;
+    }
+    if (rows().some((row) => row.dataset.id === slug)) {
+      showAddError(`A widget with id "${slug}" already exists.`);
+      return;
+    }
+    const title = addTitleInput ? addTitleInput.value.trim() : '';
+    list.append(buildWidgetRow(slug, 'featured', title));
+    if (addIdInput) addIdInput.value = '';
+    if (addTitleInput) addTitleInput.value = '';
+  }
+
   if (addForm && list) {
-    addForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      clearAddError();
-      const slug = slugify(addIdInput ? addIdInput.value : '');
-      if (!slug) {
-        showAddError('Enter a grid id made of letters, numbers, or dashes.');
-        return;
-      }
-      if (rows().some((row) => row.dataset.id === slug)) {
-        showAddError(`A widget with id "${slug}" already exists.`);
-        return;
-      }
-      const title = addTitleInput ? addTitleInput.value.trim() : '';
-      list.append(buildWidgetRow(slug, 'featured', title));
-      if (addIdInput) addIdInput.value = '';
-      if (addTitleInput) addTitleInput.value = '';
+    document.getElementById('add-widget-submit')?.addEventListener('click', addWidget);
+    [addIdInput, addTitleInput].forEach((input) => {
+      input?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        addWidget();
+      });
     });
   }
 

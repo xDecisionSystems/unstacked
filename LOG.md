@@ -10,6 +10,20 @@ how long any entry is.
 
 ---
 
+## 2026-09-06 03:01 UTC — Codex
+Fixed the Home editor's “Add featured grid” control. It was implemented as
+a form nested inside the page-save form, which is invalid HTML and caused
+browsers to submit the outer form and redirect to the workspace before adding
+the grid. The controls now use a non-form container and a non-submitting
+button; Enter in either field adds the grid as well. Updated the template
+regression assertion to prevent reintroducing nested forms.
+
+Focused web regression test and ruff pass. The full suite had 738 passing
+tests; its lone export failure was caused by this shell's missing `mkdocs` on
+`PATH`, and that export test passes when the virtualenv's absolute bin path is
+provided.
+- Files: `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-08-31 06:57 UTC — Claude Code
 Implemented Phase 5 ("Card popover"), the fifth and LAST phase of
 `plans/plan_multiple_featured_grids.md`. Replaces Phase 3's temporary
@@ -455,26 +469,3 @@ Extended the existing regression test with the same load-order assertion
 pattern. Full suite green, ruff clean.
 - Files: `app/templates/page.html`, `app/templates/editor.html`,
   `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 22:23 UTC — Claude Code
-Follow-up to the Toast UI toolbar fix: with `GET /version` confirming the
-live site really was running the earlier fix, the user still saw the "H"
-button stuck -- a fresh console check (after a hard refresh) showed the
-color-syntax plugin now loads (no more 404) but throws its own error:
-`TypeError: undefined is not an object (evaluating 't.tui.colorPicker')`.
-
-Same root cause as the chart plugin, one plugin over: color-syntax also
-depends on a separate library -- TOAST UI Color Picker -- that the "-all"
-bundle variant would have included inline, but the plain variant (the only
-one that actually exists for this plugin) does not. Added the missing
-`tui-color-picker` JS+CSS before the color-syntax plugin script, in all
-three templates. Checked the remaining two plugins (table-merged-cell, uml)
-for the same pattern first -- neither has an "-all" variant and neither
-references any external global, so neither has this problem. Re-verified
-every TOAST UI CDN URL now used across all three templates returns 200.
-
-Extended the existing regression test with the same load-order assertion
-already used for the chart fix. Full suite green, ruff clean.
-- Files: `app/templates/page.html`, `app/templates/editor.html`,
-  `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
-

@@ -507,8 +507,11 @@ def test_home_editor_widget_tray_includes_add_edit_remove_markup(app_env, client
     assert editor.status_code == 200
     text = editor.text
 
-    # Add-a-grid form.
-    assert '<form id="add-widget-form" class="widget-add-form">' in text
+    # Add-a-grid control. A nested <form> here would be invalid HTML --
+    # browsers silently drop it, breaking the JS wiring and letting the
+    # button fall through to submit the outer Home-edit form instead.
+    assert '<div id="add-widget-form" class="widget-add-form">' in text
+    assert '<button type="button" id="add-widget-submit">Add featured grid</button>' in text
     assert 'id="add-widget-id"' in text
     assert 'id="add-widget-title"' in text
     assert '<p class="error-message" id="add-widget-error" hidden></p>' in text
