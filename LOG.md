@@ -10,6 +10,17 @@ how long any entry is.
 
 ---
 
+## 2026-09-06 03:18 UTC — Codex
+Exposed the existing self-service password-change flow to all authenticated
+users with a Change password link in the top bar. The page now distinguishes
+between a mandatory change after an administrator reset and an ordinary
+voluntary password update. Added coverage that a regular user can reach the
+page and use the navigation link.
+
+Focused web and full web-auth tests plus ruff pass.
+- Files: `app/templates/base.html`, `app/templates/change_password.html`,
+  `app/web.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-06 03:16 UTC — Codex
 Made the existing administrator password-reset API reachable from Settings.
 Every user row now has a temporary-password field and Reset password control;
@@ -438,15 +449,3 @@ returned 200; the new static toolbar script was served successfully.
 - Files: `app/static/markdown-editor.js`, `app/static/style.css`,
   `app/templates/editor.html`, `app/templates/home_editor.html`,
   `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 22:59 UTC — Codex
-Completed the follow-up review of the Toast UI heading control. The plugin
-dependency fixes already committed by Claude eliminate the editor
-initialization failure; the rendered inline script was also checked with a
-real page response and is valid JavaScript. Added a small inline-editor
-interaction guard so the heading chooser dismisses shortly after the pointer
-leaves both the toolbar and its menu, using Toast UI's own outside-click
-cleanup path rather than forcing its DOM closed. This prevents the menu from
-obscuring the editing surface while preserving access to its heading choices.
-Focused page-view regression test passes; ruff passes.
-- Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`

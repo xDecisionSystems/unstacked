@@ -612,7 +612,11 @@ def change_password_page(
     return templates.TemplateResponse(
         request,
         "change_password.html",
-        {"error": None, "csrf_token": session_info.csrf_token},
+        {
+            "error": None,
+            "csrf_token": session_info.csrf_token,
+            "must_change_password": user.must_change_password,
+        },
     )
 
 
@@ -638,6 +642,7 @@ async def change_password_submit(
             {
                 "error": "New password must be at least 12 characters",
                 "csrf_token": read_session(request, user).csrf_token,
+                "must_change_password": user.must_change_password,
             },
             status_code=status.HTTP_400_BAD_REQUEST,
         )
@@ -651,6 +656,7 @@ async def change_password_submit(
             {
                 "error": "Current password is incorrect",
                 "csrf_token": read_session(request, user).csrf_token,
+                "must_change_password": user.must_change_password,
             },
             status_code=exc.status_code,
         )

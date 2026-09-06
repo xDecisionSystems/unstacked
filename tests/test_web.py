@@ -174,6 +174,17 @@ def test_change_password_flow_unblocks_the_tree(app_env, client):
     assert client.get("/tree").status_code == 200
 
 
+def test_regular_user_can_open_their_own_password_change_page(app_env, client):
+    app, _settings, _admin, _token = app_env
+    _make_user(app, "newhire")
+    _login(client, "newhire")
+
+    page = client.get("/change-password")
+    assert page.status_code == 200
+    assert "Choose a new password for your account." in page.text
+    assert 'href="/change-password"' in client.get("/tree").text
+
+
 # --------------------------------------------------------------------------
 # ACL-filtered tree and page view
 # --------------------------------------------------------------------------

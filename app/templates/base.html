@@ -17,6 +17,7 @@
     </form>
     {% if current_user %}<form method="post" action="/logout">
       {% if is_admin %}<a class="settings-link" href="/settings" aria-label="Settings" title="Settings"><span aria-hidden="true">⚙</span><span class="visually-hidden">Settings</span></a>{% endif %}
+      <a href="/change-password">Change password</a>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="quiet-action" type="submit">Log out</button>
     </form>{% else %}<a class="quiet-action" href="/login">Log in</a>{% endif %}
