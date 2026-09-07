@@ -16,7 +16,7 @@
       <input id="site-search-query" name="q" type="search" placeholder="⌕  Search every page…" value="{{ query|default('') }}">
     </form>
     {% if current_user %}<div class="account-actions">
-      {% if is_admin %}<a class="settings-link" href="/settings" aria-label="Settings" title="Settings"><span aria-hidden="true">⚙</span><span class="visually-hidden">Settings</span></a>{% endif %}
+      {% if is_admin %}<a class="settings-link" href="/settings" aria-label="Settings" title="Settings"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.6 2.6-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-3.7v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L4.9 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3.6v-3.7h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.6-2.6.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5v-.2h3.7v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.6 2.6-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2V14h-.2a1.7 1.7 0 0 0-1.5 1Z"></path></svg><span class="visually-hidden">Settings</span></a>{% endif %}
       <details class="account-menu">
         <summary aria-label="User menu" title="User menu"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.5 20c.8-3.4 3.4-5.2 7.5-5.2s6.7 1.8 7.5 5.2"></path></svg><span class="visually-hidden">User menu</span></summary>
         <div class="account-menu-panel">

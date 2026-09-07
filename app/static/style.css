@@ -165,3 +165,30 @@
 .widget-add-form label { display: block; font-size: 13px; font-weight: 600; }
 .widget-add-form input { display: block; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
 .widget-tray #add-widget-error { margin-top: 10px; }
+
+/* Visual-system refinement from the live Figma review: common controls share
+   one comfortable desktop target, while icon controls remain compact but clear. */
+button, .button { min-height: 40px; padding: 9px 16px; border-radius: 10px; line-height: 1.2; }
+button:focus-visible, .button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(235, 110, 33, .38); outline-offset: 3px; }
+.topbar .settings-link, .account-menu summary { width:38px; height:38px; }
+.topbar .settings-link svg, .account-menu summary svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.card-visibility-actions button, .chapter-visibility-toggle button, .feature-star { width:38px; height:38px; }
+.card-visibility-actions svg, .chapter-visibility-toggle svg { width:19px; height:19px; stroke-width:1.9; }
+.feature-star { font-size:22px; }
+.card-visibility-actions { margin-top:2px; }
+.book-card-footer { padding-top:14px; }
+.tag-filter, .filter-chip, .card-tags span, .tag-bubble { min-height:28px; display:inline-flex; align-items:center; }
+@media (max-width:680px) {
+  .topbar { grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:'brand nav account' 'search search search'; gap:10px 14px; padding:12px 20px; }
+  .topbar-nav { gap:12px; }
+  .topbar .brand { font-size:23px; }
+  .topbar .brand img { width:32px; height:32px; }
+  .screen-heading { flex-direction:row; align-items:center; gap:16px; }
+  .screen-heading h1 { font-size:34px; }
+  .content { padding-top:28px; }
+}
+@media (max-width:480px) {
+  .topbar { grid-template-columns:minmax(0,1fr) auto; grid-template-areas:'brand account' 'nav nav' 'search search'; }
+  .screen-heading { align-items:flex-start; flex-direction:column; }
+  .screen-heading h1 { font-size:32px; }
+}
