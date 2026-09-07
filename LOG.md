@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 05:18 UTC — Codex
+Versioned the shared stylesheet URL with the deployed commit so browsers fetch
+the matching header/menu CSS after each release instead of rendering new menu
+markup using a cached older stylesheet.
+
+Focused navigation tests and ruff pass.
+- Files: `app/templates/base.html`, `LOG.md`
+
 ## 2026-09-07 05:13 UTC — Codex
 Reworked the responsive top bar so the brand, navigation, and account controls
 remain aligned on one row, while search occupies a deliberate full-width row
@@ -423,19 +431,3 @@ clean. `git fetch origin` showed no new commits since this work started.
 - Files: `app/templates/page.html`, `app/templates/editor.html`,
   `app/templates/home_editor.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md` (deleted `app/static/markdown-editor.js`)
-
-## 2026-08-30 23:42 UTC — Codex
-Corrected the remaining Milkdown CDN failures visible in Safari. The prior
-paths pointed at package-relative stylesheet wrappers that only work after a
-bundler rewrites them; they now load the pinned underlying `@milkdown/prose`
-styles directly. Switched the browser editor import from esm.sh to the
-pinned jsDelivr ESM bundle, whose source map resolves, and disabled Crepe's
-collaboration cursor feature so it does not request unused cursor CSS.
-The regular rich-text controls remain enabled; image upload remains disabled
-until it can use a server-validated browser upload flow. All pinned runtime
-assets return 200, and focused tests and ruff pass. Production Compose
-started cleanly on port 18765; `/healthz` returned 200 and served the new
-editor bundle before teardown.
-- Files: `app/static/markdown-editor.js`, `app/templates/editor.html`,
-  `app/templates/home_editor.html`, `app/templates/page.html`,
-  `tests/test_web.py`, `LOG.md`
