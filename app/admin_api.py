@@ -251,13 +251,14 @@ class DetailResponse(BaseModel):
 
 
 class PaletteModel(BaseModel):
-    """The five colors a palette is made of; see :mod:`app.theme`."""
+    """The editable colors a palette is made of; see :mod:`app.theme`."""
 
     accent: str
     accent_secondary: str
     warm: str
     muted: str
     text: str
+    chrome: str
 
 
 class PresetOption(BaseModel):

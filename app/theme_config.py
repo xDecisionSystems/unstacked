@@ -91,9 +91,10 @@ def load(path: Path) -> ThemeState:
             logger.warning("theme configuration at %s has no custom palette", path)
             return DEFAULT_STATE
         try:
-            palette = Palette(
-                **{field: raw_palette.get(field, "") for field in theme.PALETTE_FIELDS}
-            )
+            values = {field: raw_palette.get(field, "") for field in theme.PALETTE_FIELDS}
+            if not values["chrome"]:
+                values["chrome"] = theme.tint(theme.normalize_hex(values["accent"]), 0.84)
+            palette = Palette(**values)
         except (ValueError, TypeError):
             logger.warning("theme configuration at %s has an invalid custom palette", path)
             return DEFAULT_STATE

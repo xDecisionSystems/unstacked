@@ -20,6 +20,7 @@ SAMPLE_PALETTE = {
     "warm": "#abcdef",
     "muted": "#999999",
     "text": "#000000",
+    "chrome": "#c0ffee",
 }
 
 

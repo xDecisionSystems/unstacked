@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:42 UTC — Codex
+Added Navigation chrome to custom palette controls, presets, API responses,
+and persisted theme records. Older custom palettes keep their prior derived
+navigation colour when loaded.
+
+Ruff and the complete theme API test suite pass.
+- Files: `app/theme.py`, `app/theme_config.py`, `app/admin_api.py`,
+  `app/templates/admin.html`, `tests/test_theme_api.py`, `LOG.md`
+
 ## 2026-09-07 14:38 UTC — Codex
 Extended palette application to the navigation chrome: the top bar, Settings
 sidebar, and active Settings control now receive visible palette-derived
@@ -129,14 +138,3 @@ now leads directly to the relevant content without duplicating that action.
 
 Ruff and focused web tests pass.
 - Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-09-07 06:10 UTC — Codex
-Captured the live Books workspace into the connected Figma file, then refined
-the shared UI rhythm from that review: controls and icon actions now have
-consistent sizing, keyboard focus is visible, small screens retain a compact
-header, and the Settings control uses the same stroke-based icon language as
-the account menu.
-
-Ruff and focused static-export test pass. The full suite has one unrelated
-environment failure because `mkdocs` is absent from the shell PATH.
-- Files: `app/templates/base.html`, `app/static/style.css`, `LOG.md`

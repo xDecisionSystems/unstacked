@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
-PALETTE_FIELDS = ("accent", "accent_secondary", "warm", "muted", "text")
+PALETTE_FIELDS = ("accent", "accent_secondary", "warm", "muted", "text", "chrome")
 
 # Uniform, not hand-picked per palette: a custom palette gets the same
 # treatment as a preset.  Chosen to land close to the original hand-tuned
@@ -44,6 +44,7 @@ class Palette:
     warm: str
     muted: str
     text: str
+    chrome: str
 
     def __post_init__(self) -> None:
         for name in PALETTE_FIELDS:
@@ -67,6 +68,7 @@ PRESETS: dict[str, Palette] = {
         warm="#ffb54c",
         muted="#808080",
         text="#002e5d",
+        chrome="#d6f7ed",
     ),
     "ocean-blue": Palette(
         accent="#0077b6",
@@ -74,6 +76,7 @@ PRESETS: dict[str, Palette] = {
         warm="#f4a261",
         muted="#6c757d",
         text="#03045e",
+        chrome="#d6eaf4",
     ),
     "sunset-coral": Palette(
         accent="#e85d04",
@@ -81,6 +84,7 @@ PRESETS: dict[str, Palette] = {
         warm="#ffba08",
         muted="#6c757d",
         text="#6a040f",
+        chrome="#fbe5d3",
     ),
     "slate-mono": Palette(
         accent="#3b5bdb",
@@ -88,6 +92,7 @@ PRESETS: dict[str, Palette] = {
         warm="#f08c00",
         muted="#868e96",
         text="#212529",
+        chrome="#e0e6fa",
     ),
 }
 
@@ -132,6 +137,7 @@ def derived_variables(palette: Palette) -> dict[str, str]:
         "warm": palette.warm,
         "muted": palette.muted,
         "text": palette.text,
+        "chrome": palette.chrome,
         "accent-dark": darken(palette.accent, ACCENT_DARK_AMOUNT),
         "bg-alt": tint(palette.accent, BG_ALT_TINT_AMOUNT),
     }
@@ -157,7 +163,6 @@ def css_block(palette: Palette) -> str:
             "canvas": values["bg-alt"],
             "surface-subtle": tint(palette.warm, 0.78),
             "green": palette.accent_secondary,
-            "chrome": tint(palette.accent, 0.84),
             "selection": tint(palette.warm, 0.68),
         }
     )
