@@ -60,6 +60,8 @@ def test_theme_css_applies_palette_to_the_existing_ui_variables():
     assert f"--tag:{palette.warm};" in css
     assert f"--burgundy:{palette.text};" in css
     assert f"--green:{palette.accent_secondary};" in css
+    assert "--chrome:" in css
+    assert "--selection:" in css
 
 
 def test_theme_routes_reject_an_unauthenticated_caller(client):

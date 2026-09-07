@@ -157,6 +157,8 @@ def css_block(palette: Palette) -> str:
             "canvas": values["bg-alt"],
             "surface-subtle": tint(palette.warm, 0.78),
             "green": palette.accent_secondary,
+            "chrome": tint(palette.accent, 0.84),
+            "selection": tint(palette.warm, 0.68),
         }
     )
     body = "".join(f"--{name}:{value};" for name, value in values.items())

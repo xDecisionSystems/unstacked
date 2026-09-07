@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:38 UTC — Codex
+Extended palette application to the navigation chrome: the top bar, Settings
+sidebar, and active Settings control now receive visible palette-derived
+backgrounds as well as the content controls.
+
+Ruff and the complete theme API test suite pass.
+- Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme_api.py`,
+  `LOG.md`
+
 ## 2026-09-07 14:25 UTC — Codex
 Fixed saved color palettes so they override the established UI variables used
 by buttons, headings, links, tags, backgrounds, and status accents instead of
@@ -131,11 +140,3 @@ the account menu.
 Ruff and focused static-export test pass. The full suite has one unrelated
 environment failure because `mkdocs` is absent from the shell PATH.
 - Files: `app/templates/base.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-09-07 05:18 UTC — Codex
-Versioned the shared stylesheet URL with the deployed commit so browsers fetch
-the matching header/menu CSS after each release instead of rendering new menu
-markup using a cached older stylesheet.
-
-Focused navigation tests and ruff pass.
-- Files: `app/templates/base.html`, `LOG.md`
