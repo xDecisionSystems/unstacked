@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 15:21 UTC — Codex
+Renamed the UCF preset to Pegasus Nights. The Figma comparison now verifies
+the exact UCF black, bright gold, and white treatment across Home, Books, and
+Settings while retaining readable dark labels on gold actions.
+
+Ruff and focused palette tests pass.
+- Files: `app/theme.py`, `tests/test_theme_api.py`, `LOG.md`
+
 ## 2026-09-07 15:18 UTC — Codex
 Added a selectable UCF Black & Gold palette based on UCF's official digital
 black and bright gold. Bright action colors now receive an automatically
@@ -127,11 +135,3 @@ checkbox matrix, so no per-user delete control is presented.
 Ruff and the focused Settings page test pass.
 - Files: `app/templates/admin.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 13:34 UTC — Codex
-Moved the destructive Home reset action from Settings into the Home editor,
-where it is available only to administrators and carries its warning next to
-the content it replaces. Removed the obsolete Settings navigation item.
-
-Ruff and focused Settings/Home editor tests pass.
-- Files: `app/templates/admin.html`, `app/templates/home_editor.html`, `LOG.md`
