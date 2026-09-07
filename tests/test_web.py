@@ -183,7 +183,10 @@ def test_regular_user_can_open_their_own_password_change_page(app_env, client):
     page = client.get("/change-password")
     assert page.status_code == 200
     assert "Choose a new password for your account." in page.text
-    assert 'href="/change-password"' in client.get("/tree").text
+    tree = client.get("/tree").text
+    assert 'class="account-menu"' in tree
+    assert 'href="/change-password"' in tree
+    assert 'action="/logout"' in tree
 
 
 def test_forgot_password_sends_a_reset_only_for_an_active_matching_email(

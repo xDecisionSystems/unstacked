@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 05:03 UTC — Codex
+Replaced the separate top-bar Change password and Log out controls with an
+accessible user-icon menu. The menu contains both existing actions while the
+administrator settings icon remains directly available.
+
+Focused password-navigation tests and ruff pass.
+- Files: `app/templates/base.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-06 03:47 UTC — Codex
 Added administrator-managed SMTP delivery settings and a self-service
 forgot-password flow. SMTP credentials are stored only in a private `data/`
@@ -435,18 +444,3 @@ Compose also started cleanly on port 18765 and `/healthz` returned 200.
 - Files: `app/static/markdown-editor.js`, `app/templates/editor.html`,
   `app/templates/home_editor.html`, `app/templates/page.html`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 23:27 UTC — Codex
-Replaced the temporary native Markdown toolbar with Milkdown Crepe, a
-WYSIWYG Markdown editor. Crepe is loaded from pinned v7.21.1 browser assets
-and submits `getMarkdown()` to the unchanged form routes, so content remains
-plain Markdown on disk. Included the required Crepe styles and workspace
-theme-token overrides. Image-block and LaTex features are intentionally off:
-uploads will continue through the app's validated asset path rather than an
-editor-side bypass. The native textarea remains as a usable fallback if the
-editor bundle cannot load. All pinned CDN assets returned 200; focused editor
-tests and ruff pass. Verified with production Compose on port 18765:
-`/healthz` returned 200 and the Milkdown script was served.
-- Files: `app/static/markdown-editor.js`, `app/static/style.css`,
-  `app/templates/editor.html`, `app/templates/home_editor.html`,
-  `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
