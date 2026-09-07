@@ -1297,6 +1297,9 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert "GitHub repository" in response.text
     assert "automatically synchronized to its <code>main</code> branch" in response.text
     assert 'data-title="Import / Export"' in response.text
+    assert 'data-admin-panel="branding"' not in response.text
+    assert 'id="branding-section"' not in response.text
+    assert 'data-branding' in response.text
     assert 'data-backup-restore' in response.text
     assert "/api/admin/backup/restore" in response.text
     assert 'data-mkdocs-import' in response.text

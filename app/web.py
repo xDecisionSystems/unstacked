@@ -24,6 +24,8 @@ redirect from ``/``.
 
 import difflib
 import json
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import parse_qsl, urlencode
@@ -69,6 +71,15 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 EDITOR_FORM_OVERHEAD = 16_384
 PASSWORD_RESET_SALT = "unstacked.password-reset"
 PASSWORD_RESET_MAX_AGE_SECONDS = 30 * 60
+
+
+def _mkdocs_export_filename(request: Request) -> str:
+    """Build a portable, header-safe archive name from the workspace brand."""
+
+    name = branding.load(request.app.state.settings.branding_config_path).name
+    compact_name = re.sub(r"[^A-Za-z0-9_-]+", "", name) or "workspace"
+    timestamp = datetime.now().strftime("%d%m%Y-%H%M")
+    return f"keybadger_{compact_name}{timestamp}.zip"
 
 
 def _theme_style_tag(request: Request) -> Markup:
@@ -1066,7 +1077,9 @@ async def download_static_export(
     return Response(
         content=archive,
         media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="unstacked-mkdocs.zip"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{_mkdocs_export_filename(request)}"'
+        },
     )
 
 

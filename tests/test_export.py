@@ -1,3 +1,4 @@
+import re
 import stat
 from io import BytesIO
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 from app.export import ExportAccessDenied, ExportError, StaticExportRunner
 from app.mkdocs_import import MkDocsImportError, MkDocsImportService
 from app.models import User
+from app.web import _mkdocs_export_filename
 from tests.conftest import bearer
 
 
@@ -173,3 +175,13 @@ def test_mkdocs_zip_import_rejects_unsafe_members(app_env):
 
     with pytest.raises(MkDocsImportError, match="unsafe"):
         MkDocsImportService(app.state.content).prepare(output.getvalue(), admin)
+
+
+def test_mkdocs_export_filename_uses_space_free_brand_and_timestamp(app_env):
+    app, settings, _admin, _token = app_env
+    settings.branding_config_path.write_text('{"name": "Key Badger Lab"}', encoding="utf-8")
+    request = type("Request", (), {"app": app})()
+
+    assert re.fullmatch(
+        r"keybadger_KeyBadgerLab\d{8}-\d{4}\.zip", _mkdocs_export_filename(request)
+    )

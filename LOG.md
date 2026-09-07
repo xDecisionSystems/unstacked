@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:12 UTC — Codex
+Merged Branding into Appearance so color and header identity are managed in
+one Settings page. MkDocs ZIP downloads now use the space-free branded format
+`keybadger_<name><DDMMYYYY>-<HHMM>.zip`.
+
+Ruff and focused export/Settings tests pass.
+- Files: `app/templates/admin.html`, `app/web.py`, `tests/test_export.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 14:09 UTC — Codex
 Removed the Back to workspace link and arrow from the Settings sidebar, along
 with its obsolete styling, so the sidebar contains only Settings navigation.
@@ -133,19 +142,3 @@ administrator settings icon remains directly available.
 Focused password-navigation tests and ruff pass.
 - Files: `app/templates/base.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-09-06 03:47 UTC — Codex
-Added administrator-managed SMTP delivery settings and a self-service
-forgot-password flow. SMTP credentials are stored only in a private `data/`
-file; reset emails go only to active accounts with a matching email address,
-without disclosing account existence. Reset links are signed, expire after 30
-minutes, and become invalid when a password changes. The Docker deployment
-configuration now carries the public URL needed to build email links.
-
-Focused SMTP/password-reset tests and ruff pass. Compose verification could
-not run because Docker Desktop's daemon is unavailable on this machine.
-- Files: `app/smtp_config.py`, `app/mailer.py`, `app/admin_api.py`,
-  `app/web.py`, `app/config.py`, `app/templates/admin.html`,
-  `app/templates/login.html`, `app/templates/forgot_password.html`,
-  `app/templates/reset_password.html`, `docker-compose.yaml`, `.env.example`,
-  `tests/conftest.py`, `tests/test_admin_api.py`, `tests/test_web.py`, `LOG.md`
