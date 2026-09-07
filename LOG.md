@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 13:13 UTC — Codex
+Standardized ordinary actions to a compact 36px control and stopped Settings
+form submit buttons from stretching across their entire panels. This keeps
+actions such as Create user proportional to their labels while retaining
+larger, dedicated icon targets where interaction needs them.
+
+Ruff and focused web tests pass.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-09-07 13:10 UTC — Codex
 Removed the redundant Settings-page Invite user shortcut. The Users panel
 already contains the complete creation form, so the compact settings layout
@@ -297,58 +306,3 @@ account -- clicking it just hit a raw 401. Wrapped the link in
 confirming the link is present for a signed-in viewer and absent for an
 anonymous one on the same public page. Full suite and ruff clean.
 - Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-31 05:42 UTC — Claude Code
-Implemented Phase 1 ("Content layer") of `plans/plan_multiple_featured_grids.md`
--- the user-approved design for multiple independently-curated named
-featured grids on Home, of which this is the first of five sequential
-phases. Purely an internal storage-shape change in `app/content.py`; zero
-user-visible behavior change (still exactly one grid, `"featured"`).
-
-- `.unstacked-home.json` moves from flat `{"items": [...]}` to grid-keyed
-  `{"grids": {"<grid_id>": [...], ...}}`. A new `_load_home_layout()`
-  reads both shapes -- the old flat shape (no `"grids"` key) is treated as
-  exactly one implicit `"featured"` grid -- with no migration script and
-  no forced rewrite-on-read; the file naturally moves to the new shape the
-  next time any grid is written.
-- `home_items(grid_id: str | None = None)`: a specific grid's ordered
-  targets (`[]` if that grid has no list yet, not an error) when given, or
-  the de-duplicated union of every grid's targets in first-seen,
-  file-key order when omitted -- the shape the admin "Featured page
-  overrides" permission matrix (`app/admin_api.py`, left unchanged, still
-  calls with no `grid_id`) needs.
-- `feature_on_home`/`remove_from_home` gained a required `grid_id`
-  parameter; each reads/writes only that one grid's list inside the
-  shared `{"grids": {...}}` file, leaving every other grid's list
-  untouched under the same write lock.
-- `update_home_page` now diffs the current (pre-write) page's
-  `featured`-type widget ids against the incoming ones; any id dropped
-  from the tray has that grid's curated list deleted (not merely emptied)
-  from `.unstacked-home.json` in the same locked operation -- recreating a
-  widget with the same id later starts empty. Both files land in one
-  `git.commit_paths` call when a grid was purged; only `index.md` is
-  committed otherwise (unchanged from before). Mirrors
-  `set_container_public`'s try/except rollback pattern so a failure after
-  the page write restores both files atomically.
-- Updated every existing call site (`app/web.py`, `app/home_widgets.py`,
-  and the pre-existing tests in `tests/test_home_widgets.py`/
-  `tests/test_admin_api.py`) to pass `grid_id="featured"` explicitly, so
-  today's single-grid behavior is identical end to end -- no template, API
-  parameter, or UI change in this phase.
-- Added unit test coverage in `tests/test_home_page.py`: legacy flat-shape
-  reads, unknown-grid-id returns `[]`, per-grid write isolation, the
-  cross-grid de-duplicated union, the purge-on-widget-delete behavior
-  (confirmed via both `home_items()` and the raw committed JSON, plus the
-  actual commit's changed-file set), and the no-purge case still
-  committing only `index.md`.
-
-`git fetch origin` before starting showed Codex's Milkdown-revert and
-Home-publishing work already merged into local `main`; re-read those
-diffs and confirmed none touch `home_items`/`feature_on_home`/
-`remove_from_home`/`update_home_page`, so this work applied cleanly on
-top with no rebase needed. Full suite and ruff clean immediately before
-committing.
-- Files: `app/content.py`, `app/home_widgets.py`, `app/web.py`,
-  `tests/test_home_page.py`, `tests/test_home_widgets.py`,
-  `tests/test_admin_api.py`, `plans/plan_multiple_featured_grids.md`,
-  `LOG.md`
