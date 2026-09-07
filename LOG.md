@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 15:40 UTC — Codex
+Replaced the Settings known-hosts-path field with an SSH server fingerprint
+check. Administrators review and confirm the discovered fingerprint; Unstacked
+then stores and enforces the matching host key privately for future syncs.
+
+Ruff and focused backup tests pass. Full suite: 750 passed; one pre-existing
+Settings navigation assertion fails because it expects an obsolete Home entry.
+- Files: `app/admin_api.py`, `app/backup_config.py`, `app/templates/admin.html`,
+  `tests/test_backup_config.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 15:24 UTC — Codex
 Corrected the palette display name to Pegasus nights, preserving the approved
 UCF colors and all palette behavior.
@@ -121,14 +131,6 @@ Ruff, focused Settings markup, and MkDocs export/import tests pass.
 ## 2026-09-07 14:01 UTC — Codex
 Shortened the Settings sidebar label from SMTP server to SMTP. The SMTP form
 now has more space below its guidance and between field labels and inputs.
-
-Ruff and the focused Settings page test pass.
-- Files: `app/templates/admin.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 13:59 UTC — Codex
-Constrained the Group name and Description fields to a compact, readable
-creation row. On phones, the fields stack so they continue to fit the screen.
 
 Ruff and the focused Settings page test pass.
 - Files: `app/templates/admin.html`, `app/static/style.css`,

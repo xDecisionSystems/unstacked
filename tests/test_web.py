@@ -1297,6 +1297,9 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert 'data-admin-panel="users"' in response.text
     assert "/api/admin/users" in response.text
     assert "/api/admin/backup/config" in response.text
+    assert "/api/admin/backup/ssh-host-key" in response.text
+    assert "Known-hosts path" not in response.text
+    assert "Check SSH server fingerprint" in response.text
     assert "/api/admin/smtp" in response.text
     assert "data-smtp" in response.text
     assert 'data-title="SMTP"' in response.text

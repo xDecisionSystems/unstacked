@@ -77,6 +77,7 @@ def test_unconfigured_status_is_admin_only_and_has_no_runtime_services(app_env, 
         "confirmed_private": False,
         "requires_private_repository": False,
         "credential": "none",
+        "ssh_host_fingerprint": None,
         "source": "unset",
         "updated_at": None,
         "active": False,
@@ -87,6 +88,68 @@ def test_unconfigured_status_is_admin_only_and_has_no_runtime_services(app_env, 
         "requires_admin_action": False,
     }
     assert not hasattr(app.state, "backup_sync_worker")
+
+
+def test_admin_can_confirm_a_discovered_ssh_host_key_without_a_known_hosts_path(
+    app_env, client, monkeypatch, tmp_path
+):
+    app, settings, _admin, token = app_env
+    discovered = backup_config.SshHostKey(
+        fingerprint="SHA256:server-key", known_hosts_line="git.example ssh-ed25519 AAAAtest\n"
+    )
+    monkeypatch.setattr(backup_config, "discover_ssh_host_key", lambda _url: discovered)
+    monkeypatch.setattr(app.state.content.git, "test_remote", lambda: None)
+    monkeypatch.setattr(backup_runtime, "activate", lambda _app: True)
+    payload = {
+        "url": "git@git.example:team/wiki.git",
+        "confirmed_private": True,
+        "ssh_key_path": str(tmp_path / "deploy-key"),
+        "ssh_host_fingerprint": discovered.fingerprint,
+    }
+    (tmp_path / "deploy-key").write_text("private key", encoding="utf-8")
+
+    preview = client.post(
+        "/api/admin/backup/ssh-host-key", json={"url": payload["url"]}, headers=bearer(token)
+    )
+    assert preview.status_code == 200
+    assert preview.json() == {"fingerprint": discovered.fingerprint}
+    response = client.put("/api/admin/backup/config", json=payload, headers=bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["ssh_host_fingerprint"] == discovered.fingerprint
+    assert (
+        backup_config.managed_known_hosts_path(settings).read_text()
+        == discovered.known_hosts_line
+    )
+    assert "ssh_known_hosts_path" in settings.backup_config_path.read_text()
+
+
+def test_ssh_backup_requires_explicit_fingerprint_confirmation(
+    app_env, client, monkeypatch, tmp_path
+):
+    app, _settings, _admin, token = app_env
+    monkeypatch.setattr(
+        backup_config,
+        "discover_ssh_host_key",
+        lambda _url: backup_config.SshHostKey(
+            "SHA256:server-key", "git.example ssh-ed25519 AAAAtest\n"
+        ),
+    )
+    key = tmp_path / "deploy-key"
+    key.write_text("private key", encoding="utf-8")
+
+    response = client.put(
+        "/api/admin/backup/config",
+        json={
+            "url": "git@git.example:team/wiki.git",
+            "confirmed_private": True,
+            "ssh_key_path": str(key),
+        },
+        headers=bearer(token),
+    )
+
+    assert response.status_code == 409
+    assert "fingerprint" in response.json()["detail"]
 
 
 def test_authenticated_non_admin_cannot_read_backup_configuration(app_env, client):

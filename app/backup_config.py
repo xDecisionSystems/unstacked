@@ -35,10 +35,14 @@ record must never be able to stop the wiki from serving content.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import logging
 import os
+import re
 import stat
+import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -59,6 +63,7 @@ NO_TARGET = "none"
 # Filename of the app-managed token file, kept beside the config record so one
 # setting locates both.
 MANAGED_TOKEN_FILENAME = "backup_token"
+MANAGED_KNOWN_HOSTS_FILENAME = "backup_known_hosts"
 
 # Owner-only, as with every other secret this application writes.
 _PRIVATE_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
@@ -83,6 +88,7 @@ class BackupTarget:
     token_path: Path | None = None
     ssh_key_path: Path | None = None
     ssh_known_hosts_path: Path | None = None
+    ssh_host_fingerprint: str | None = None
     updated_at: str | None = None
     source: str = _SOURCE_UNSET
     token: str | None = field(default=None, repr=False, compare=False)
@@ -130,6 +136,56 @@ def managed_token_path(settings: Settings) -> Path:
     """
 
     return settings.backup_config_path.parent / MANAGED_TOKEN_FILENAME
+
+
+def managed_known_hosts_path(settings: Settings) -> Path:
+    """Location of the host key confirmed through the Settings UI."""
+
+    return settings.backup_config_path.parent / MANAGED_KNOWN_HOSTS_FILENAME
+
+
+@dataclass(frozen=True)
+class SshHostKey:
+    """A discovered server host key that an administrator can verify."""
+
+    fingerprint: str
+    known_hosts_line: str
+
+
+def discover_ssh_host_key(url: str) -> SshHostKey | None:
+    """Return the preferred public key for an SSH Git URL.
+
+    This is deliberately a discovery step, not trust.  The caller displays
+    the fingerprint and must receive an explicit confirmation before writing
+    the returned key to the app-managed known_hosts file.
+    """
+
+    endpoint = _ssh_endpoint(url)
+    if endpoint is None:
+        return None
+    host, port = endpoint
+    command = ["ssh-keyscan", "-T", "5"]
+    if port is not None:
+        command.extend(["-p", str(port)])
+    command.append(host)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=8, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ValueError("could not retrieve the SSH server fingerprint") from exc
+    keys: list[SshHostKey] = []
+    for raw_line in result.stdout.splitlines():
+        parts = raw_line.split()
+        if len(parts) < 3 or parts[0].startswith("#"):
+            continue
+        try:
+            key_bytes = base64.b64decode(parts[2], validate=True)
+        except ValueError:
+            continue
+        digest = base64.b64encode(hashlib.sha256(key_bytes).digest()).decode().rstrip("=")
+        keys.append(SshHostKey(fingerprint=f"SHA256:{digest}", known_hosts_line=raw_line + "\n"))
+    if not keys:
+        raise ValueError("the SSH server did not provide a usable host key")
+    return next((key for key in keys if "ed25519" in key.known_hosts_line), keys[0])
 
 
 def target_from_settings(settings: Settings) -> BackupTarget:
@@ -193,6 +249,7 @@ def load(path: Path) -> BackupTarget | None:
         token_path=_path(record.get("token_path")),
         ssh_key_path=_path(record.get("ssh_key_path")),
         ssh_known_hosts_path=_path(record.get("ssh_known_hosts_path")),
+        ssh_host_fingerprint=_text(record.get("ssh_host_fingerprint")),
         updated_at=_text(record.get("updated_at")),
         source=_SOURCE_FILE,
     )
@@ -219,6 +276,7 @@ def save(path: Path, target: BackupTarget) -> BackupTarget:
         token_path=target.token_path,
         ssh_key_path=target.ssh_key_path,
         ssh_known_hosts_path=target.ssh_known_hosts_path,
+        ssh_host_fingerprint=target.ssh_host_fingerprint,
         updated_at=target.updated_at or datetime.now(timezone.utc).isoformat(),
         source=_SOURCE_FILE,
     )
@@ -318,6 +376,7 @@ def _record(target: BackupTarget) -> dict[str, object]:
         "token_path": _as_text(target.token_path),
         "ssh_key_path": _as_text(target.ssh_key_path),
         "ssh_known_hosts_path": _as_text(target.ssh_known_hosts_path),
+        "ssh_host_fingerprint": target.ssh_host_fingerprint,
         "updated_at": target.updated_at,
     }
 
@@ -333,3 +392,18 @@ def _path(value: object) -> Path | None:
 
 def _as_text(value: Path | None) -> str | None:
     return str(value) if value is not None else None
+
+
+def _ssh_endpoint(url: str) -> tuple[str, int | None] | None:
+    """Extract host and optional port from the two standard Git SSH forms."""
+
+    text = url.strip()
+    if text.startswith("ssh://"):
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(text)
+        return (parsed.hostname, parsed.port) if parsed.hostname else None
+    # SCP-like Git syntax, e.g. git@github.com:owner/wiki.git.  Reject paths
+    # with no user/host separator so local paths never trigger a network scan.
+    match = re.match(r"^[^@/:]+@([^/:]+):.+$", text)
+    return (match.group(1), None) if match else None

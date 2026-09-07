@@ -216,9 +216,18 @@ class BackupConfigUpdate(BaseModel):
     # file) or the path of a token file the operator manages themselves.
     token: str | None = None
     token_path: str | None = Field(default=None, max_length=4096)
-    # SSH: a deploy key plus the known_hosts entry its host key is pinned to.
+    # SSH: a deploy key plus the fingerprint the administrator verified in the
+    # Settings UI. Unstacked writes the corresponding known_hosts entry itself.
     ssh_key_path: str | None = Field(default=None, max_length=4096)
-    ssh_known_hosts_path: str | None = Field(default=None, max_length=4096)
+    ssh_host_fingerprint: str | None = Field(default=None, max_length=200)
+
+
+class SshHostKeyRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2000)
+
+
+class SshHostKeyResponse(BaseModel):
+    fingerprint: str
 
 
 class BackupConfigResponse(BaseModel):
@@ -232,6 +241,7 @@ class BackupConfigResponse(BaseModel):
     # Which kind of credential is in place, not the credential or its path.
     # Changing a credential requires supplying it again; nothing is prefilled.
     credential: str
+    ssh_host_fingerprint: str | None = None
     # "file" once saved through this API, "environment" while the deployment's
     # variables are still the only source, "unset" when there is no target.
     source: str
@@ -1128,6 +1138,7 @@ def _backup_status_response(request: Request) -> BackupConfigResponse:
         confirmed_private=target.confirmed_private,
         requires_private_repository=requires_private,
         credential=target.credential,
+        ssh_host_fingerprint=target.ssh_host_fingerprint,
         source=target.source,
         updated_at=target.updated_at,
         active=backup_runtime.is_active(request.app),
@@ -1144,6 +1155,24 @@ def read_backup_config(request: Request, actor: AdminActor) -> BackupConfigRespo
     """Report the current backup target and its sync state, credentials aside."""
 
     return _backup_status_response(request)
+
+
+@router.post("/backup/ssh-host-key", response_model=SshHostKeyResponse, dependencies=CsrfGuard)
+def discover_backup_ssh_host_key(
+    payload: SshHostKeyRequest, request: Request, actor: AdminActor
+) -> SshHostKeyResponse:
+    """Discover, but do not trust, the SSH key for a proposed Git remote."""
+
+    try:
+        discovered = backup_config.discover_ssh_host_key(payload.url)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
+    if discovered is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "An SSH Git URL is required to retrieve a server fingerprint",
+        )
+    return SshHostKeyResponse(fingerprint=discovered.fingerprint)
 
 
 @router.put("/backup/config", response_model=BackupConfigResponse, dependencies=CsrfGuard)
@@ -1172,6 +1201,7 @@ def update_backup_config(
     content = _content(request)
     config_path = settings.backup_config_path
     managed_token = backup_config.managed_token_path(settings)
+    managed_known_hosts = backup_config.managed_known_hosts_path(settings)
 
     if payload.token and payload.token_path:
         raise HTTPException(
@@ -1198,7 +1228,19 @@ def update_backup_config(
                     "read access",
                 )
 
-    snapshot = backup_config.FileSnapshot(config_path, managed_token)
+    try:
+        discovered_host_key = (
+            backup_config.discover_ssh_host_key(url) if payload.ssh_key_path else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
+    if discovered_host_key and payload.ssh_host_fingerprint != discovered_host_key.fingerprint:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Confirm the current SSH server fingerprint before linking this repository",
+        )
+
+    snapshot = backup_config.FileSnapshot(config_path, managed_token, managed_known_hosts)
     try:
         with content.git.remote_configuration_transaction():
             if payload.token:
@@ -1206,14 +1248,19 @@ def update_backup_config(
                 token_path: Path | None = managed_token
             else:
                 token_path = Path(payload.token_path) if payload.token_path else None
+            if discovered_host_key:
+                backup_config.write_private_bytes(
+                    managed_known_hosts, discovered_host_key.known_hosts_line.encode("utf-8")
+                )
             target = BackupTarget(
                 type=GIT_REMOTE,
                 url=url,
                 confirmed_private=payload.confirmed_private,
                 token_path=token_path,
                 ssh_key_path=Path(payload.ssh_key_path) if payload.ssh_key_path else None,
-                ssh_known_hosts_path=(
-                    Path(payload.ssh_known_hosts_path) if payload.ssh_known_hosts_path else None
+                ssh_known_hosts_path=managed_known_hosts if discovered_host_key else None,
+                ssh_host_fingerprint=(
+                    discovered_host_key.fingerprint if discovered_host_key else None
                 ),
             )
             content.git.configure_remote(target.remote_config())
@@ -1224,6 +1271,8 @@ def update_backup_config(
                 # this cleanup inside both snapshots so even an unlink failure
                 # leaves the entire previous configuration in effect.
                 backup_config.forget_managed_token(managed_token)
+            if not discovered_host_key:
+                managed_known_hosts.unlink(missing_ok=True)
     except GitSyncError as exc:
         snapshot.undo()
         # These messages are written to be operator-actionable and are
@@ -1267,7 +1316,10 @@ def clear_backup_config(request: Request, actor: AdminActor) -> BackupConfigResp
     settings = request.app.state.settings
     content = _content(request)
     managed_token = backup_config.managed_token_path(settings)
-    snapshot = backup_config.FileSnapshot(settings.backup_config_path, managed_token)
+    managed_known_hosts = backup_config.managed_known_hosts_path(settings)
+    snapshot = backup_config.FileSnapshot(
+        settings.backup_config_path, managed_token, managed_known_hosts
+    )
     previous = backup_config.effective_target(settings)
     try:
         with content.git.remote_configuration_transaction():
@@ -1275,6 +1327,7 @@ def clear_backup_config(request: Request, actor: AdminActor) -> BackupConfigResp
                 content.git.clear_configured_remote()
             stored = backup_config.clear(settings.backup_config_path)
             backup_config.forget_managed_token(managed_token)
+            managed_known_hosts.unlink(missing_ok=True)
     except Exception:
         snapshot.undo()
         raise
