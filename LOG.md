@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 13:55 UTC — Codex
+Moved the group deletion action into each group heading and replaced the
+ambiguous “×” with a labelled trash-can icon. Group membership remains a
+checkbox matrix, so no per-user delete control is presented.
+
+Ruff and the focused Settings page test pass.
+- Files: `app/templates/admin.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 13:34 UTC — Codex
 Moved the destructive Home reset action from Settings into the Home editor,
 where it is available only to administrators and carries its warning next to
@@ -210,80 +219,3 @@ both showed no new Codex commits.
   `app/templates/pages.html`, `app/templates/tree.html`,
   `app/templates/base.html`, `app/static/feature-popover.js` (new),
   `app/static/style.css`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-31 06:40 UTC — Claude Code
-Implemented Phase 4 ("Editor UI") of `plans/plan_multiple_featured_grids.md`,
-the fourth of five sequential phases for multiple independently-curated
-named featured grids on Home. Entirely a client-side/template change --
-`POST /home/edit` already accepted an arbitrary `widgets` list before this
-phase, so no new backend route was needed.
-
-- `app/templates/home_editor.html`'s widget tray gained an "Add featured
-  grid" form (`#add-widget-form`): an id input, client-side slugified and
-  checked against existing rows' `data-id` for uniqueness, plus an
-  optional title input. On success it appends a new `.widget-row` built
-  the same shape as the server-rendered ones.
-- Every row (server-rendered or newly added) now has an editable
-  `.widget-title-input`; an `input`-event listener rewrites that row's
-  `data-config` JSON in place, so the existing `serializeWidgets()` needed
-  no changes at all.
-- Every row also has a `.widget-remove` delete button. Its `confirm()`
-  names the permanent-deletion behavior explicitly (the user's earlier
-  decision: deleting a grid discards its curated list, not just hides it).
-  Deletion itself is just `row.remove()` -- the actual
-  `.unstacked-home.json` purge already happens automatically, server-side,
-  via Phase 1's diff-and-purge logic in `update_home_page` once the row is
-  simply absent from the submitted `widgets_json`.
-- `app/static/style.css` gained matching styles for the new form/inputs/
-  button, following the existing `.widget-*` conventions.
-- Added `tests/test_web.py::test_home_edit_renders_multiple_featured_grids_with_their_titles`
-  (three grids, each with independent id/title, all correctly pre-filled
-  in `GET /home/edit`) and
-  `::test_home_editor_widget_tray_includes_add_edit_remove_markup`
-  (guards the exact ids/classes/attributes the new client-side JS depends
-  on, since real browser interaction is out of scope for the FastAPI
-  `TestClient`).
-
-Full suite and ruff clean. `git fetch origin` showed no new Codex commits.
-- Files: `app/templates/home_editor.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-31 06:25 UTC — Claude Code
-Implemented Phase 3 ("API") of `plans/plan_multiple_featured_grids.md`, the
-third of five sequential phases for multiple independently-curated named
-featured grids on Home. Before this, Phase 1 (storage) and Phase 2
-(rendering) had already made grids independent end to end *except* the two
-routes a user actually toggles a star through were still hardcoded to the
-one `"featured"` grid id -- this phase makes them genuinely grid-aware.
-
-- `POST /home/feature` and `POST /home/remove` now read a required
-  `grid_id` form field instead of hardcoding `"featured"`. A new
-  `app/web.py::_require_featured_grid_id` helper reads
-  `content.read_home_page()`'s `widgets` front matter through
-  `app.home_widgets.parse_widget_entries` and rejects (`400 Bad Request`)
-  any submitted `grid_id` that isn't the id of a currently-configured
-  `featured`-type widget, before either content-layer call runs -- the same
-  "reject rather than silently create an orphaned grid" posture the widget
-  registry already takes with an unknown widget `type`. A rejected request
-  writes nothing to `.unstacked-home.json`.
-- Temporary stopgap (this task only, not phase 5's popover): added a hidden
-  `<input type="hidden" name="grid_id" value="featured">` to the ★/☆ toggle
-  forms in `app/templates/book.html`, `books.html`, `pages.html`, and
-  `tree.html` (remove-only there), so the existing single-star interaction
-  keeps working against the now-validating API, pointed at the one grid
-  guaranteed to exist in every repo. Phase 4/5 replace this with real
-  add/remove/rename controls and a multi-grid checkbox popover.
-- Updated all ~8 existing `tests/test_web.py` call sites that posted to
-  `/home/feature`/`/home/remove` to include `"grid_id": "featured"`. Added
-  three new tests: an unconfigured `grid_id` is rejected with 400 on both
-  routes and leaves `.unstacked-home.json` byte-for-byte unchanged; a valid
-  non-default grid (`research`, added via `update_home_page` the way the
-  future editor UI will) receives exactly the toggled target while
-  `featured` stays empty; and the same target toggled into two different
-  valid grids ends up in both independently.
-
-Full suite and ruff clean; `git fetch origin` immediately before starting
-and again immediately before committing both showed no new Codex commits.
-- Files: `app/web.py`, `app/templates/book.html`, `app/templates/books.html`,
-  `app/templates/pages.html`, `app/templates/tree.html`,
-  `tests/test_web.py`, `LOG.md`
