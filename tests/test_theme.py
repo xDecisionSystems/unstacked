@@ -69,6 +69,10 @@ def test_every_preset_is_internally_consistent():
             assert theme.normalize_hex(value) == value
 
 
+def test_presets_keep_the_original_light_navigation_surface():
+    assert {palette.chrome for palette in theme.PRESETS.values()} == {"#fffdf9"}
+
+
 def test_darken_moves_every_channel_toward_black():
     assert theme.darken("#ffffff", 0.5) == "#808080"
     assert theme.darken("#00ca8c", 0.0) == "#00ca8c"

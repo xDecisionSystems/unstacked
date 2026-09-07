@@ -68,7 +68,7 @@ PRESETS: dict[str, Palette] = {
         warm="#ffb54c",
         muted="#808080",
         text="#002e5d",
-        chrome="#d6f7ed",
+        chrome="#fffdf9",
     ),
     "ocean-blue": Palette(
         accent="#0077b6",
@@ -76,7 +76,7 @@ PRESETS: dict[str, Palette] = {
         warm="#f4a261",
         muted="#6c757d",
         text="#03045e",
-        chrome="#d6eaf4",
+        chrome="#fffdf9",
     ),
     "sunset-coral": Palette(
         accent="#e85d04",
@@ -84,7 +84,7 @@ PRESETS: dict[str, Palette] = {
         warm="#ffba08",
         muted="#6c757d",
         text="#6a040f",
-        chrome="#fbe5d3",
+        chrome="#fffdf9",
     ),
     "slate-mono": Palette(
         accent="#3b5bdb",
@@ -92,7 +92,7 @@ PRESETS: dict[str, Palette] = {
         warm="#f08c00",
         muted="#868e96",
         text="#212529",
-        chrome="#e0e6fa",
+        chrome="#fffdf9",
     ),
 }
 

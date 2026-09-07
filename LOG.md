@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:55 UTC — Codex
+Restored the original light navigation surface for every built-in color
+preset. Navigation chrome remains available for custom palette changes.
+
+Ruff and the focused palette tests pass.
+- Files: `app/theme.py`, `tests/test_theme.py`, `LOG.md`
+
 ## 2026-09-07 14:46 UTC — Codex
 Expanded every preset preview to show all six editable palette colors,
 including Navigation chrome, so no color disappears from the palette chooser.
@@ -129,12 +136,3 @@ second confirmation before local content changes.
 
 Ruff, focused settings, and backup-restore tests pass.
 - Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 13:13 UTC — Codex
-Standardized ordinary actions to a compact 36px control and stopped Settings
-form submit buttons from stretching across their entire panels. This keeps
-actions such as Create user proportional to their labels while retaining
-larger, dedicated icon targets where interaction needs them.
-
-Ruff and focused web tests pass.
-- Files: `app/static/style.css`, `LOG.md`
