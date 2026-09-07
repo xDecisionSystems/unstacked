@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:09 UTC — Codex
+Removed the Back to workspace link and arrow from the Settings sidebar, along
+with its obsolete styling, so the sidebar contains only Settings navigation.
+
+Ruff and the focused Settings page test pass.
+- Files: `app/templates/admin.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 14:06 UTC — Codex
 Added a guarded MkDocs ZIP import to Import / Export. Archives are screened
 for unsafe paths and links, staged as a fresh content Git repository, and can
@@ -141,14 +149,3 @@ not run because Docker Desktop's daemon is unavailable on this machine.
   `app/templates/login.html`, `app/templates/forgot_password.html`,
   `app/templates/reset_password.html`, `docker-compose.yaml`, `.env.example`,
   `tests/conftest.py`, `tests/test_admin_api.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-06 03:18 UTC — Codex
-Exposed the existing self-service password-change flow to all authenticated
-users with a Change password link in the top bar. The page now distinguishes
-between a mandatory change after an administrator reset and an ordinary
-voluntary password update. Added coverage that a regular user can reach the
-page and use the navigation link.
-
-Focused web and full web-auth tests plus ruff pass.
-- Files: `app/templates/base.html`, `app/templates/change_password.html`,
-  `app/web.py`, `tests/test_web.py`, `LOG.md`

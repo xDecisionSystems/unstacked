@@ -1287,6 +1287,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     response = client.get("/admin")
     assert response.status_code == 200
     assert "Settings · Unstacked" in response.text
+    assert "Back to workspace" not in response.text
     assert 'data-admin-panel="users"' in response.text
     assert "/api/admin/users" in response.text
     assert "/api/admin/backup/config" in response.text
