@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 05:13 UTC — Codex
+Reworked the responsive top bar so the brand, navigation, and account controls
+remain aligned on one row, while search occupies a deliberate full-width row
+below. This prevents the settings and user controls from breaking into the
+awkward vertical layout shown at tablet widths.
+
+Ruff and whitespace checks pass.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-09-07 05:03 UTC — Codex
 Replaced the separate top-bar Change password and Log out controls with an
 accessible user-icon menu. The menu contains both existing actions while the
@@ -427,20 +436,6 @@ until it can use a server-validated browser upload flow. All pinned runtime
 assets return 200, and focused tests and ruff pass. Production Compose
 started cleanly on port 18765; `/healthz` returned 200 and served the new
 editor bundle before teardown.
-- Files: `app/static/markdown-editor.js`, `app/templates/editor.html`,
-  `app/templates/home_editor.html`, `app/templates/page.html`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-08-30 23:34 UTC — Codex
-Fixed Milkdown’s CSS delivery after Safari exposed real 404s for styles that
-were written for a bundler rather than direct CDN use. Replaced the broken
-package-relative CSS imports with the pinned underlying ProseMirror,
-gap-cursor, table, virtual-cursor, and KaTeX styles. Restored the default
-CodeMirror and LaTeX features and enabled Crepe’s optional Top Bar so the
-editor exposes the richer library interface. Image-block upload remains
-disabled until it can call the app’s server-validated upload flow.
-All replacement styles returned 200; focused tests and ruff pass. Production
-Compose also started cleanly on port 18765 and `/healthz` returned 200.
 - Files: `app/static/markdown-editor.js`, `app/templates/editor.html`,
   `app/templates/home_editor.html`, `app/templates/page.html`,
   `tests/test_web.py`, `LOG.md`
