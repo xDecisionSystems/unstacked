@@ -42,6 +42,7 @@
   </fieldset>
   <div class="form-actions"><button type="submit">Save</button><a class="button" href="/tree">Cancel</a></div>
 </form>
+{% if is_admin %}<details class="home-reset"><summary>Reset Home to starter content</summary><p class="error-message">This replaces the current Home page body and widget layout. It cannot be undone.</p><button type="button" class="danger" id="home-reset">Reset Home</button></details>{% endif %}
 <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
 <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
 <!-- The chart plugin depends on the separate TOAST UI Chart library; without
@@ -82,6 +83,13 @@
     });
     form.addEventListener('submit', () => { element.value = editor.getMarkdown(); });
   }
+
+  document.getElementById('home-reset')?.addEventListener('click', async () => {
+    if (!confirm('Reset the Home page to its starter content? This discards its current body and widget layout and cannot be undone.')) return;
+    const response = await fetch('/api/admin/home/reset', { method: 'POST', headers: { 'X-CSRF-Token': {{ csrf_token|tojson }}, 'Content-Type': 'application/json' }, body: '{}' });
+    if (!response.ok) { alert('Home could not be reset.'); return; }
+    window.location.assign('/tree');
+  });
 
   // Widget tray reordering. Keyboard-accessible move-up/move-down buttons
   // are the primary mechanism (they work with one widget today and scale to

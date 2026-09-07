@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 13:34 UTC — Codex
+Moved the destructive Home reset action from Settings into the Home editor,
+where it is available only to administrators and carries its warning next to
+the content it replaces. Removed the obsolete Settings navigation item.
+
+Ruff and focused Settings/Home editor tests pass.
+- Files: `app/templates/admin.html`, `app/templates/home_editor.html`, `LOG.md`
+
 ## 2026-09-07 13:33 UTC — Codex
 Changed the Settings download from generated static HTML to a portable MkDocs
 source ZIP. The archive contains the buildable content project and excludes
