@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 13:59 UTC — Codex
+Constrained the Group name and Description fields to a compact, readable
+creation row. On phones, the fields stack so they continue to fit the screen.
+
+Ruff and the focused Settings page test pass.
+- Files: `app/templates/admin.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 13:55 UTC — Codex
 Moved the group deletion action into each group heading and replaced the
 ambiguous “×” with a labelled trash-can icon. Group membership remains a
@@ -152,70 +160,3 @@ tests; its lone export failure was caused by this shell's missing `mkdocs` on
 `PATH`, and that export test passes when the virtualenv's absolute bin path is
 provided.
 - Files: `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-31 06:57 UTC — Claude Code
-Implemented Phase 5 ("Card popover"), the fifth and LAST phase of
-`plans/plan_multiple_featured_grids.md`. Replaces Phase 3's temporary
-hardcoded `grid_id=featured` stopgap on every book/page card's ★/☆ toggle
-with a real popover letting an admin choose which grid(s) (of however many
-are now configured via Phase 4's editor) a target belongs to. This closes
-out the whole 5-phase plan.
-
-- `app/web.py::_base_context` now computes, once per request: a shared
-  `_featured_grid_entries(content)` helper (also now used by
-  `_require_featured_grid_id`, replacing its own duplicate parse) reads
-  Home's configured `featured`-type widgets; each book/page dict gains a
-  `featured_grid_ids` set (which configured grids it currently belongs to)
-  and `featured` stays as a derived `bool(featured_grid_ids)` convenience;
-  the context gains a top-level `featured_grids` list (`{"id", "title"}`
-  per configured grid, in authored order) for the popover to render.
-- New `app/templates/_widgets.html` partial: one Jinja macro
-  `feature_popover(target, return_to, featured_grid_ids, featured_grids,
-  csrf_token)`, replacing the identical inline `<form class="card-home-action">`
-  block that was previously duplicated in `book.html`/`books.html`/
-  `pages.html`. Renders a `<details class="feature-popover">` disclosure
-  (matching the existing `new-book-popover` pattern) whose `<summary>`
-  reuses the `.feature-star`/★/☆ look, and a panel listing every configured
-  grid as a checkbox (checked per `featured_grid_ids`), or, with zero grids
-  configured, an `empty-state` message linking to `/home/edit` instead of
-  an empty list.
-- New `app/static/feature-popover.js`, loaded unconditionally from
-  `base.html` (so all four card-bearing pages get it with no per-template
-  script block): a single delegated `change` listener on
-  `.feature-grid-checkbox` fires one `fetch()` `POST` (form-encoded, via
-  `URLSearchParams`, mirroring `page.html`'s existing inline-title-edit
-  fetch convention) to `/home/feature` or `/home/remove` per checkbox --
-  neither route gained batch support, so this is genuinely one request per
-  changed checkbox, not a diff-on-submit. The checkbox disables during the
-  request and reverts + `alert()`s on failure; on success the summary
-  ★/☆ and `is-featured` class update in place, no page reload.
-- `tree.html` keeps its own simple remove-only form (per the plan, its
-  cards already belong to the grid they render, so the full checkbox
-  popover would be redundant) but now sends the enclosing widget's own
-  `id` as `grid_id` instead of Phase 3's hardcoded `"featured"` -- a real
-  bug fix: removing an item from e.g. a `research` grid's rendered card
-  previously always hit `grid_id=featured` regardless of which grid was
-  actually showing it.
-- `app/static/style.css`: `.feature-star` joined the base `button,.button`
-  selector (it is now sometimes a `<summary>`, not always a `<button>`,
-  and needs the same base sizing/cursor/transition), plus new
-  `.feature-popover`/`.feature-popover-panel`/`.feature-popover-list`/
-  `.feature-popover-option` rules mirroring `.new-book-popover`'s existing
-  positioning convention.
-- `tests/test_web.py`: the two pre-existing `feature-star`/`is-featured`
-  markup assertions needed no changes (the macro renders byte-identical
-  classes for those states). Added four new tests: correct per-grid
-  checked/unchecked state across three configured grids; the zero-grids
-  empty state (message + no checkboxes); `is_admin` gating of the popover
-  across `book.html`/`books.html`/`pages.html`; and the `tree.html`
-  grid_id bug fix specifically (a widget's own remove form now carries
-  its own id, not the old stopgap).
-
-Full suite (313 tests) and ruff clean immediately before committing.
-`git fetch origin` before starting and again immediately before committing
-both showed no new Codex commits.
-- Files: `app/web.py`, `app/templates/_widgets.html` (new),
-  `app/templates/book.html`, `app/templates/books.html`,
-  `app/templates/pages.html`, `app/templates/tree.html`,
-  `app/templates/base.html`, `app/static/feature-popover.js` (new),
-  `app/static/style.css`, `tests/test_web.py`, `LOG.md`
