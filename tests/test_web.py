@@ -1298,6 +1298,8 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert 'data-title="Import / Export"' in response.text
     assert 'data-backup-restore' in response.text
     assert "/api/admin/backup/restore" in response.text
+    assert 'data-mkdocs-import' in response.text
+    assert "/admin/import/mkdocs" in response.text
     assert 'data-admin-panel="groups"' in response.text
     assert 'data-admin-panel="book-permissions"' in response.text
     assert 'data-title="Permissions"' in response.text

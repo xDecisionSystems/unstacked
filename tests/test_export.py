@@ -6,6 +6,7 @@ from zipfile import ZipFile
 import pytest
 
 from app.export import ExportAccessDenied, ExportError, StaticExportRunner
+from app.mkdocs_import import MkDocsImportError, MkDocsImportService
 from app.models import User
 from tests.conftest import bearer
 
@@ -137,3 +138,38 @@ def test_packaging_rejects_non_admins_and_excludes_symlinked_files(app_env, tmp_
         assert "unstacked-mkdocs/safe.txt" in zip_file.namelist()
         assert "unstacked-mkdocs/outside.txt" not in zip_file.namelist()
         assert b"must not escape" not in archive
+
+
+def test_portable_mkdocs_zip_import_requires_confirmation_and_preserves_recovery(app_env):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Imported", None, admin)
+    content.create_page("imported", "New page", None, "# New", [], False, admin)
+    archive = StaticExportRunner(app.state.settings, content).package_for(admin)
+
+    content.create_book("Current", None, admin)
+    service = MkDocsImportService(content)
+    prepared = service.prepare(archive, admin)
+
+    assert prepared.action == "confirmation_required"
+    assert prepared.recovery_verified is True
+    assert (content.docs / "current").is_dir()
+    result = service.confirm(prepared.confirmation_id or "")
+
+    assert result.action == "imported_after_recovery"
+    assert (content.docs / "imported" / "new-page.md").is_file()
+    assert not (content.docs / "current").exists()
+    recovery_root = content.root.parent / ".unstacked-recovery"
+    assert any((entry / "docs" / "current").is_dir() for entry in recovery_root.iterdir())
+
+
+def test_mkdocs_zip_import_rejects_unsafe_members(app_env):
+    app, _settings, admin, _token = app_env
+    output = BytesIO()
+    with ZipFile(output, "w") as archive:
+        archive.writestr("unstacked-mkdocs/mkdocs.yml", "site_name: Unsafe\n")
+        archive.writestr("unstacked-mkdocs/docs/index.md", "# Home\n")
+        archive.writestr("unstacked-mkdocs/../escape.txt", "nope")
+
+    with pytest.raises(MkDocsImportError, match="unsafe"):
+        MkDocsImportService(app.state.content).prepare(output.getvalue(), admin)

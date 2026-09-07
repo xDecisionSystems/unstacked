@@ -95,7 +95,10 @@ def _is_upload_request(scope: Scope) -> bool:
     return (
         scope.get("type") == "http"
         and scope.get("method") == "POST"
-        and scope.get("path", "").endswith("/assets")
+        and (
+            scope.get("path", "").endswith("/assets")
+            or scope.get("path", "") == "/admin/import/mkdocs"
+        )
     )
 
 

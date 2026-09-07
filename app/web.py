@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import parse_qsl, urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -42,6 +42,7 @@ from app.auth import client_identifier, hash_password
 from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
 from app.export import ExportError, StaticExportRunner
 from app.home_widgets import build_home_widgets, parse_widget_entries
+from app.mkdocs_import import MkDocsImportError, MkDocsImportService
 from app.models import User
 from app.nav import NavigationError, read_navigation
 from app.paths import UnsafePath
@@ -1067,6 +1068,60 @@ async def download_static_export(
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="unstacked-mkdocs.zip"'},
     )
+
+
+def _mkdocs_import_service(request: Request) -> MkDocsImportService:
+    service = getattr(request.app.state, "mkdocs_import", None)
+    if service is None:
+        service = MkDocsImportService(request.app.state.content)
+        request.app.state.mkdocs_import = service
+    return service
+
+
+@router.post("/admin/import/mkdocs", include_in_schema=False, dependencies=[Depends(require_csrf)])
+async def import_mkdocs_archive(
+    request: Request,
+    archive: UploadFile = File(...),
+    user: Annotated[User, Depends(require_normal_web_user)] = None,
+) -> JSONResponse:
+    """Stage a portable source ZIP and require confirmation before replacement."""
+
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+    if archive.content_type not in {"application/zip", "application/x-zip-compressed"}:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Choose a ZIP file")
+    data = await archive.read(request.app.state.settings.max_upload_bytes + 1)
+    if len(data) > request.app.state.settings.max_upload_bytes:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE, "Import ZIP exceeds the configured size limit"
+        )
+    try:
+        result = _mkdocs_import_service(request).prepare(data, user)
+    except MkDocsImportError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    return JSONResponse(result.__dict__)
+
+
+@router.post(
+    "/admin/import/mkdocs/confirm", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+async def confirm_mkdocs_import(
+    request: Request,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> JSONResponse:
+    """Complete a previously staged MkDocs ZIP import."""
+
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+    payload = await request.json()
+    confirmation_id = payload.get("confirmation_id") if isinstance(payload, dict) else None
+    if not isinstance(confirmation_id, str):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Import confirmation is required")
+    try:
+        result = _mkdocs_import_service(request).confirm(confirmation_id)
+    except MkDocsImportError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    return JSONResponse(result.__dict__)
 
 
 @router.get("/pages/{page_path:path}/history", response_class=HTMLResponse, include_in_schema=False)

@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:06 UTC — Codex
+Added a guarded MkDocs ZIP import to Import / Export. Archives are screened
+for unsafe paths and links, staged as a fresh content Git repository, and can
+replace the workspace only after a verified recovery copy and confirmation.
+
+Ruff, focused Settings markup, and MkDocs export/import tests pass.
+- Files: `app/mkdocs_import.py`, `app/upload_limit.py`, `app/web.py`,
+  `app/templates/admin.html`, `tests/test_export.py`, `tests/test_web.py`,
+  `LOG.md`
+
 ## 2026-09-07 14:01 UTC — Codex
 Shortened the Settings sidebar label from SMTP server to SMTP. The SMTP form
 now has more space below its guidance and between field labels and inputs.
@@ -142,15 +152,3 @@ page and use the navigation link.
 Focused web and full web-auth tests plus ruff pass.
 - Files: `app/templates/base.html`, `app/templates/change_password.html`,
   `app/web.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-06 03:16 UTC — Codex
-Made the existing administrator password-reset API reachable from Settings.
-Every user row now has a temporary-password field and Reset password control;
-the confirmation clearly explains that all sessions and API tokens are
-revoked and the affected user must replace the temporary password on login.
-The API already enforced those security properties, so this exposes the
-capability without duplicating auth logic. Added a console markup regression
-test for the control and its API wiring.
-
-Focused web and password-reset API tests plus ruff pass.
-- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
