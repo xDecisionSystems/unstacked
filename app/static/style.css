@@ -106,6 +106,10 @@
 .admin-sidebar > a.is-active, .admin-sidebar > a:not(.admin-sidebar-brand):not(.admin-back):hover { background: var(--tag); color: var(--burgundy); font-weight: 600; }
 .admin-content { min-width: 0; padding: 42px 48px 48px 0; }
 .admin-header { display: flex; align-items: center; gap: 24px; margin-bottom: 24px; }
+/* The panel title/description are visually-hidden (the sidebar's active link
+   already shows it), so this button is the header's only visible child --
+   push it to the right where the title used to leave it. */
+#invite-user { margin-left: auto; }
 /* Clears the topbar's account-menu dropdown, which otherwise overlaps this
    corner when open. Only needed above 1000px, where the topbar is a single
    80px row -- below that it grows tall enough on its own (see .topbar's
