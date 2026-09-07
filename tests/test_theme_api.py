@@ -52,7 +52,7 @@ def test_default_theme_is_the_heritage_orange_preset(app_env, client):
     assert body["mode"] == "preset"
     assert body["preset"] == theme.DEFAULT_PRESET
     assert body["presets"][0]["label"] == "Heritage Orange"
-    assert body["presets"][-1]["label"] == "Pegasus Nights"
+    assert body["presets"][-1]["label"] == "Pegasus nights"
     assert len(body["presets"]) == 5
     assert {p["key"] for p in body["presets"]} == set(theme.PRESETS)
 

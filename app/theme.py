@@ -56,7 +56,7 @@ PRESET_LABELS: dict[str, str] = {
     "ocean-blue": "Harbor Ink",
     "sunset-coral": "Orchard Editorial",
     "slate-mono": "Slate Apricot",
-    "ucf-black-gold": "Pegasus Nights",
+    "ucf-black-gold": "Pegasus nights",
 }
 
 PRESETS: dict[str, Palette] = {

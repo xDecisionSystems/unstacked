@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 15:24 UTC — Codex
+Corrected the palette display name to Pegasus nights, preserving the approved
+UCF colors and all palette behavior.
+
+Ruff and focused palette tests pass.
+- Files: `app/theme.py`, `tests/test_theme_api.py`, `LOG.md`
+
 ## 2026-09-07 15:21 UTC — Codex
 Renamed the UCF preset to Pegasus Nights. The Figma comparison now verifies
 the exact UCF black, bright gold, and white treatment across Home, Books, and
@@ -122,15 +129,6 @@ Ruff and the focused Settings page test pass.
 ## 2026-09-07 13:59 UTC — Codex
 Constrained the Group name and Description fields to a compact, readable
 creation row. On phones, the fields stack so they continue to fit the screen.
-
-Ruff and the focused Settings page test pass.
-- Files: `app/templates/admin.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 13:55 UTC — Codex
-Moved the group deletion action into each group heading and replaced the
-ambiguous “×” with a labelled trash-can icon. Group membership remains a
-checkbox matrix, so no per-user delete control is presented.
 
 Ruff and the focused Settings page test pass.
 - Files: `app/templates/admin.html`, `app/static/style.css`,
