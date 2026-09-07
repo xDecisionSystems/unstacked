@@ -14,7 +14,7 @@
 <div class="page-title-row">
   <div class="page-title-wrap"><h1 class="page-title">
     {% if can_write %}<span id="editable-title" class="editable-title" role="textbox" aria-label="Page title" title="Click to edit title">{{ page_title }}</span>{% else %}{{ page_title }}{% endif %}
-  </h1><p class="title-help">Click the title to rename this Markdown file</p></div>
+  </h1></div>
   {% if draft %}<em class="page-draft-status">(Draft)</em>{% endif %}
   {% if can_write %}<label id="draft-toggle" class="draft-toggle" hidden><input form="inline-edit-form" type="checkbox" name="draft" {% if edit_form.draft %}checked{% endif %}> Draft</label>{% endif %}
 </div>

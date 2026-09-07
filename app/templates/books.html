@@ -3,7 +3,7 @@
 {% block title %}Books · Unstacked{% endblock %}
 {% block content %}
 <div class="screen-heading dashboard-header">
-  <div><p class="eyebrow">KNOWLEDGE WORKSPACE</p><h1>Books</h1><p>Browse the folders that make up your team wiki.</p></div>
+  <div><h1>Books</h1></div>
   {% if is_admin %}<details class="new-book-popover"><summary class="button">Create book</summary><form method="post" action="/manage/book" class="new-book-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Title<input name="title" required></label><button type="submit">Create book</button></form></details>{% endif %}
 </div>
 {% if tree %}
