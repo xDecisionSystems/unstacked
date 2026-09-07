@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 13:17 UTC — Codex
+Renamed the Settings Export panel to Import / Export and added a guarded
+Import action. It restores only from the already-linked Git repository and,
+when replacement is needed, first verifies a recovery copy and requires a
+second confirmation before local content changes.
+
+Ruff, focused settings, and backup-restore tests pass.
+- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 13:13 UTC — Codex
 Standardized ordinary actions to a compact 36px control and stopped Settings
 form submit buttons from stretching across their entire panels. This keeps
@@ -294,15 +303,3 @@ Full suite and ruff clean. `git fetch origin` showed no new Codex commits
 throughout.
 - Files: `app/home_widgets.py`, `app/templates/tree.html`, `app/web.py`,
   `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-08-31 05:50 UTC — Claude Code
-Hid the "History" link on a page view for unauthenticated visitors, per
-the user's request. `/pages/{path}/history` requires a real session
-(`require_normal_web_user`); on a public page (see the earlier
-Publish-Home-publicly work) the link was a dead end for anyone without an
-account -- clicking it just hit a raw 401. Wrapped the link in
-`{% if current_user %}` in `app/templates/page.html`. Added
-`tests/test_web.py::test_public_page_hides_the_history_link_for_an_anonymous_visitor`
-confirming the link is present for a signed-in viewer and absent for an
-anonymous one on the same public page. Full suite and ruff clean.
-- Files: `app/templates/page.html`, `tests/test_web.py`, `LOG.md`
