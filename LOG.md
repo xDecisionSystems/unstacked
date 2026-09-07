@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:01 UTC — Codex
+Shortened the Settings sidebar label from SMTP server to SMTP. The SMTP form
+now has more space below its guidance and between field labels and inputs.
+
+Ruff and the focused Settings page test pass.
+- Files: `app/templates/admin.html`, `app/static/style.css`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 13:59 UTC — Codex
 Constrained the Group name and Description fields to a compact, readable
 creation row. On phones, the fields stack so they continue to fit the screen.
@@ -146,17 +154,3 @@ test for the control and its API wiring.
 
 Focused web and password-reset API tests plus ruff pass.
 - Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-06 03:01 UTC — Codex
-Fixed the Home editor's “Add featured grid” control. It was implemented as
-a form nested inside the page-save form, which is invalid HTML and caused
-browsers to submit the outer form and redirect to the workspace before adding
-the grid. The controls now use a non-form container and a non-submitting
-button; Enter in either field adds the grid as well. Updated the template
-regression assertion to prevent reintroducing nested forms.
-
-Focused web regression test and ruff pass. The full suite had 738 passing
-tests; its lone export failure was caused by this shell's missing `mkdocs` on
-`PATH`, and that export test passes when the virtualenv's absolute bin path is
-provided.
-- Files: `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`

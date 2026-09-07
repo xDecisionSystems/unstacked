@@ -1292,6 +1292,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert "/api/admin/backup/config" in response.text
     assert "/api/admin/smtp" in response.text
     assert "data-smtp" in response.text
+    assert 'data-title="SMTP"' in response.text
     assert "GitHub repository" in response.text
     assert "automatically synchronized to its <code>main</code> branch" in response.text
     assert 'data-title="Import / Export"' in response.text
