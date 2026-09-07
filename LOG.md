@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 13:33 UTC — Codex
+Changed the Settings download from generated static HTML to a portable MkDocs
+source ZIP. The archive contains the buildable content project and excludes
+Git internals and symlinks, so it is safe to transfer or retain as a source
+backup.
+
+Ruff and focused export/settings tests pass.
+- Files: `app/export.py`, `app/web.py`, `app/templates/admin.html`,
+  `tests/test_export.py`, `LOG.md`
+
 ## 2026-09-07 13:17 UTC — Codex
 Renamed the Settings Export panel to Import / Export and added a guarded
 Import action. It restores only from the already-linked Git repository and,
@@ -269,37 +279,3 @@ and again immediately before committing both showed no new Codex commits.
 - Files: `app/web.py`, `app/templates/book.html`, `app/templates/books.html`,
   `app/templates/pages.html`, `app/templates/tree.html`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-08-31 06:15 UTC — Claude Code
-Implemented Phase 2 ("Rendering") of `plans/plan_multiple_featured_grids.md`,
-the second of five sequential phases for multiple independently-curated
-named featured grids on Home. Each `featured` widget instance now curates
-from its own grid and gets its own optional heading, instead of every
-instance implicitly sharing the single `"featured"` grid and a hardcoded
-`"Featured"` title (Phase 1 already made the storage layer grid-keyed;
-this phase makes rendering actually use a widget's own identity).
-
-- `app/home_widgets.py::_render_featured`: reads `content.home_items(entry.id)`
-  instead of the hardcoded `"featured"` id; `title` now comes from
-  `entry.config.get("title")` (stripped; blank/whitespace/non-string all
-  collapse to `""`, meaning no header) instead of the removed
-  `_FEATURED_WIDGET_TITLE` constant.
-- `app/web.py::_public_home_widgets` (the anonymous-visitor mirror added
-  earlier this session) gets the identical two changes, so a public Home
-  view renders multiple grids correctly too.
-- `app/templates/tree.html`: reintroduced a per-widget `<h2>{{ widget.title }}</h2>`,
-  but conditionally -- `{% if widget.title %}` -- so an untitled grid still
-  renders with no visible heading, matching "optional title header" from
-  the plan. Since `widget.title` can now legitimately be empty, the
-  section's `aria-label` gained a fallback (`"<Type> widget"`) so it is
-  never blank for a screen-reader user.
-- Added unit coverage in `tests/test_home_widgets.py` (two independent
-  grids with disjoint, ACL-filtered item sets; title derivation for
-  blank/whitespace/non-string config) and browser-level coverage in
-  `tests/test_web.py` (authenticated and anonymous/public `GET /tree`
-  both showing two widgets with only the titled one rendering an `<h2>`).
-
-Full suite and ruff clean. `git fetch origin` showed no new Codex commits
-throughout.
-- Files: `app/home_widgets.py`, `app/templates/tree.html`, `app/web.py`,
-  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`

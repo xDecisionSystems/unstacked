@@ -1046,7 +1046,7 @@ def admin_view(
 async def download_static_export(
     request: Request, user: Annotated[User, Depends(require_normal_web_user)]
 ) -> Response:
-    """Return a freshly packaged static export after explicit ACL warning."""
+    """Return a portable MkDocs source archive after explicit ACL warning."""
 
     if not user.is_admin:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
@@ -1054,7 +1054,7 @@ async def download_static_export(
     if form.get("acknowledge_no_acl") != "on":
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Acknowledge that this export includes all non-draft content without ACLs",
+            "Acknowledge that this export includes all content without ACLs",
         )
     try:
         archive = StaticExportRunner(
@@ -1065,7 +1065,7 @@ async def download_static_export(
     return Response(
         content=archive,
         media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="unstacked-static-export.zip"'},
+        headers={"Content-Disposition": 'attachment; filename="unstacked-mkdocs.zip"'},
     )
 
 
