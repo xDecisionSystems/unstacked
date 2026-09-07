@@ -56,6 +56,7 @@ PRESET_LABELS: dict[str, str] = {
     "ocean-blue": "Harbor Ink",
     "sunset-coral": "Orchard Editorial",
     "slate-mono": "Slate Apricot",
+    "ucf-black-gold": "UCF Black & Gold",
 }
 
 PRESETS: dict[str, Palette] = {
@@ -92,6 +93,17 @@ PRESETS: dict[str, Palette] = {
         muted="#747b92",
         text="#212836",
         chrome="#e5e9fa",
+    ),
+    # UCF's official digital colors are black and bright gold (#FFC904).
+    # Warm and secondary tones support readable controls without introducing
+    # a competing brand color.
+    "ucf-black-gold": Palette(
+        accent="#ffc904",
+        accent_secondary="#7a5e00",
+        warm="#fff0b3",
+        muted="#5c5c5c",
+        text="#000000",
+        chrome="#000000",
     ),
 }
 
@@ -144,6 +156,7 @@ def derived_variables(palette: Palette) -> dict[str, str]:
     """CSS custom-property names (hyphenated) to values for one palette."""
 
     dark_chrome = relative_luminance(palette.chrome) < 0.4
+    light_accent = relative_luminance(palette.accent) > 0.45
     return {
         "accent": palette.accent,
         "accent-secondary": palette.accent_secondary,
@@ -153,6 +166,7 @@ def derived_variables(palette: Palette) -> dict[str, str]:
         "chrome": palette.chrome,
         "chrome-text": "#fffdf9" if dark_chrome else palette.text,
         "chrome-text-soft": "#dce5ed" if dark_chrome else darken(palette.text, 0.18),
+        "accent-text": "#000000" if light_accent else "#fffdf9",
         "accent-dark": darken(palette.accent, ACCENT_DARK_AMOUNT),
         "bg-alt": tint(palette.accent, BG_ALT_TINT_AMOUNT),
     }

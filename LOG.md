@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 15:18 UTC — Codex
+Added a selectable UCF Black & Gold palette based on UCF's official digital
+black and bright gold. Bright action colors now receive an automatically
+contrasting dark label, preserving readable controls.
+
+Ruff and focused palette tests pass.
+- Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme.py`,
+  `tests/test_theme_api.py`, `LOG.md`
+
 ## 2026-09-07 15:11 UTC — Codex
 Implemented the four reviewed Figma palette directions as the selectable
 built-in palettes. Navigation now uses palette-aware contrasting text, so the
@@ -126,13 +135,3 @@ the content it replaces. Removed the obsolete Settings navigation item.
 
 Ruff and focused Settings/Home editor tests pass.
 - Files: `app/templates/admin.html`, `app/templates/home_editor.html`, `LOG.md`
-
-## 2026-09-07 13:33 UTC — Codex
-Changed the Settings download from generated static HTML to a portable MkDocs
-source ZIP. The archive contains the buildable content project and excludes
-Git internals and symlinks, so it is safe to transfer or retain as a source
-backup.
-
-Ruff and focused export/settings tests pass.
-- Files: `app/export.py`, `app/web.py`, `app/templates/admin.html`,
-  `tests/test_export.py`, `LOG.md`

@@ -52,7 +52,7 @@ def test_default_theme_is_the_heritage_orange_preset(app_env, client):
     assert body["mode"] == "preset"
     assert body["preset"] == theme.DEFAULT_PRESET
     assert body["presets"][0]["label"] == "Heritage Orange"
-    assert len(body["presets"]) == 4
+    assert len(body["presets"]) == 5
     assert {p["key"] for p in body["presets"]} == set(theme.PRESETS)
 
 
@@ -66,6 +66,7 @@ def test_theme_css_applies_palette_to_the_existing_ui_variables():
     assert f"--green:{palette.accent_secondary};" in css
     assert "--chrome:" in css
     assert "--chrome-text:" in css
+    assert "--accent-text:" in css
     assert "--selection:" in css
 
 

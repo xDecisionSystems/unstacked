@@ -192,3 +192,17 @@ button:focus-visible, .button:focus-visible, a:focus-visible, summary:focus-visi
   .screen-heading { align-items:flex-start; flex-direction:column; }
   .screen-heading h1 { font-size:32px; }
 }
+
+/* Bright accents such as UCF gold need dark labels, while the existing deeper
+   accents retain light labels. The palette supplies this derived contrast. */
+button, .button, .feature-star,
+.page-actions #edit-toggle,
+.password-reset-popover summary {
+  color: var(--accent-text, #fffdf9);
+}
+.permission-icon.is-active, .permission-icon.is-active:hover {
+  color: var(--accent-text, #fffdf9) !important;
+}
+.permission-icon.is-active svg, .permission-icon.is-active svg * {
+  stroke: var(--accent-text, #fffdf9) !important;
+}

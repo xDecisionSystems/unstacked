@@ -75,6 +75,7 @@ def test_presets_represent_the_reviewed_navigation_treatments():
         "ocean-blue": "#17263c",
         "sunset-coral": "#e1ecd7",
         "slate-mono": "#e5e9fa",
+        "ucf-black-gold": "#000000",
     }
 
 
@@ -104,6 +105,14 @@ def test_dark_navigation_chrome_gets_contrasting_derived_text():
     assert variables["chrome-text-soft"] == "#dce5ed"
 
 
+def test_ucf_palette_uses_official_black_and_bright_gold_with_dark_action_text():
+    palette = theme.PRESETS["ucf-black-gold"]
+    variables = theme.derived_variables(palette)
+    assert palette.accent == "#ffc904"
+    assert palette.chrome == "#000000"
+    assert variables["accent-text"] == "#000000"
+
+
 def test_css_block_is_a_single_root_rule_with_every_variable():
     palette = theme.PRESETS[theme.DEFAULT_PRESET]
     block = theme.css_block(palette)
@@ -117,6 +126,7 @@ def test_css_block_is_a_single_root_rule_with_every_variable():
         "chrome",
         "chrome-text",
         "chrome-text-soft",
+        "accent-text",
         "accent-dark",
         "bg-alt",
     ):
