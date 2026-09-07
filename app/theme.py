@@ -1,6 +1,6 @@
 """The web UI's color palette: four built-in presets plus a validated custom one.
 
-Deliberately five roles, not the full set of CSS custom properties in
+The palette has six editable roles, not the full set of CSS custom properties in
 ``style.css``.  ``--border``, ``--bg`` and ``--danger`` stay fixed regardless
 of palette -- a delete/revoke control reading as "danger" matters more than
 palette purism, and a neutral border/background keeps every palette legible.
@@ -37,7 +37,7 @@ def normalize_hex(value: str) -> str:
 
 @dataclass(frozen=True)
 class Palette:
-    """Five hex colors, normalized on construction."""
+    """Six hex colors, normalized on construction."""
 
     accent: str
     accent_secondary: str

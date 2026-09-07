@@ -14,7 +14,12 @@ from app import theme, theme_config
 from app.theme import Palette
 
 SAMPLE_PALETTE = Palette(
-    accent="#123456", accent_secondary="#654321", warm="#abcdef", muted="#999999", text="#000000"
+    accent="#123456",
+    accent_secondary="#654321",
+    warm="#abcdef",
+    muted="#999999",
+    text="#000000",
+    chrome="#c0ffee",
 )
 
 
@@ -37,6 +42,7 @@ def test_palette_normalizes_every_field_on_construction():
         warm="#FFB54C",
         muted="#808080",
         text="#002E5D",
+        chrome="#D6F7ED",
     )
     assert palette.accent == "#00ca8c"
     assert palette.text == "#002e5d"
@@ -50,6 +56,7 @@ def test_palette_rejects_a_malformed_field():
             warm="#ffb54c",
             muted="#808080",
             text="#002e5d",
+            chrome="#d6f7ed",
         )
 
 
@@ -86,7 +93,16 @@ def test_css_block_is_a_single_root_rule_with_every_variable():
     palette = theme.PRESETS[theme.DEFAULT_PRESET]
     block = theme.css_block(palette)
     assert block.startswith(":root{") and block.endswith("}")
-    for name in ("accent", "accent-secondary", "warm", "muted", "text", "accent-dark", "bg-alt"):
+    for name in (
+        "accent",
+        "accent-secondary",
+        "warm",
+        "muted",
+        "text",
+        "chrome",
+        "accent-dark",
+        "bg-alt",
+    ):
         assert f"--{name}:" in block
 
 

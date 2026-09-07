@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:46 UTC — Codex
+Expanded every preset preview to show all six editable palette colors,
+including Navigation chrome, so no color disappears from the palette chooser.
+
+Ruff and the complete theme test suite pass.
+- Files: `app/templates/admin.html`, `app/theme.py`, `tests/test_theme.py`,
+  `tests/test_theme_api.py`, `LOG.md`
+
 ## 2026-09-07 14:42 UTC — Codex
 Added Navigation chrome to custom palette controls, presets, API responses,
 and persisted theme records. Older custom palettes keep their prior derived
@@ -130,11 +138,3 @@ larger, dedicated icon targets where interaction needs them.
 
 Ruff and focused web tests pass.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-09-07 13:10 UTC — Codex
-Removed the redundant Settings-page Invite user shortcut. The Users panel
-already contains the complete creation form, so the compact settings layout
-now leads directly to the relevant content without duplicating that action.
-
-Ruff and focused web tests pass.
-- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
