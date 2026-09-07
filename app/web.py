@@ -1537,14 +1537,14 @@ async def create_book_submit(
     form = await _read_form(request)
     with Session(request.app.state.engine) as session:
         try:
-            created = request.app.state.ai_service.create_book(
+            request.app.state.ai_service.create_book(
                 _authorization(session, user),
                 title=form.get("title", ""),
                 slug=form.get("slug") or None,
             )
         except (AccessDenied, ContentError, UnsafePath) as exc:
             return _manage_error_response(request, session, user, exc)
-    return RedirectResponse(f"/pages/new?parent={created.path}", status_code=303)
+    return RedirectResponse("/books", status_code=303)
 
 
 def _require_featured_grid_id(content, grid_id: str) -> None:

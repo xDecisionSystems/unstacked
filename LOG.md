@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 14:20 UTC — Codex
+Changed successful Book creation to return to the Books library rather than
+sending the administrator directly into Page creation.
+
+Ruff and the focused browser content-management test pass.
+- Files: `app/web.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 14:12 UTC — Codex
 Merged Branding into Appearance so color and header identity are managed in
 one Settings page. MkDocs ZIP downloads now use the space-free branded format
@@ -133,12 +140,3 @@ awkward vertical layout shown at tablet widths.
 
 Ruff and whitespace checks pass.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-09-07 05:03 UTC — Codex
-Replaced the separate top-bar Change password and Log out controls with an
-accessible user-icon menu. The menu contains both existing actions while the
-administrator settings icon remains directly available.
-
-Focused password-navigation tests and ruff pass.
-- Files: `app/templates/base.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`

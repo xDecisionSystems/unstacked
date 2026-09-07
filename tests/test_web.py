@@ -1239,6 +1239,12 @@ def test_browser_create_move_and_delete_use_the_existing_acl_rules(app_env, clie
     _login(client, "admin")
     manage = client.get("/manage")
     csrf_token = _csrf_from(manage.text)
+    book = client.post(
+        "/manage/book",
+        data={"csrf_token": csrf_token, "title": "New book"},
+        follow_redirects=False,
+    )
+    assert book.headers["location"] == "/books"
     created = client.post(
         "/pages/new",
         data={
