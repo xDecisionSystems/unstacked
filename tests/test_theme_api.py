@@ -52,6 +52,16 @@ def test_default_theme_is_the_future_green_preset(app_env, client):
     assert {p["key"] for p in body["presets"]} == set(theme.PRESETS)
 
 
+def test_theme_css_applies_palette_to_the_existing_ui_variables():
+    palette = theme.PRESETS["ocean-blue"]
+    css = theme.css_block(palette)
+
+    assert f"--orange:{palette.accent};" in css
+    assert f"--tag:{palette.warm};" in css
+    assert f"--burgundy:{palette.text};" in css
+    assert f"--green:{palette.accent_secondary};" in css
+
+
 def test_theme_routes_reject_an_unauthenticated_caller(client):
     assert client.get("/api/admin/theme").status_code == 401
 

@@ -138,7 +138,26 @@ def derived_variables(palette: Palette) -> dict[str, str]:
 
 
 def css_block(palette: Palette) -> str:
-    """A ``:root{...}`` declaration overriding just the palette variables."""
+    """A ``:root{...}`` declaration that applies the palette to the live UI.
 
-    body = "".join(f"--{name}:{value};" for name, value in derived_variables(palette).items())
+    The stylesheet predates the palette feature and uses its original semantic
+    names (``--orange``, ``--burgundy``, and ``--tag``) throughout. Override
+    those names too; setting only the newer ``--accent`` aliases would save a
+    palette successfully but leave the rendered interface unchanged.
+    """
+
+    values = derived_variables(palette)
+    values.update(
+        {
+            "orange": palette.accent,
+            "orange-dark": values["accent-dark"],
+            "tag": palette.warm,
+            "burgundy": palette.text,
+            "burgundy-soft": darken(palette.text, 0.18),
+            "canvas": values["bg-alt"],
+            "surface-subtle": tint(palette.warm, 0.78),
+            "green": palette.accent_secondary,
+        }
+    )
+    body = "".join(f"--{name}:{value};" for name, value in values.items())
     return f":root{{{body}}}"
