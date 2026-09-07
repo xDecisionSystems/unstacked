@@ -19,9 +19,8 @@ _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 PALETTE_FIELDS = ("accent", "accent_secondary", "warm", "muted", "text", "chrome")
 
 # Uniform, not hand-picked per palette: a custom palette gets the same
-# treatment as a preset.  Chosen to land close to the original hand-tuned
-# Future Green shades (`--accent-dark: #00a374`, `--bg-alt: #eefaf5`) without
-# depending on values that only existed for that one palette.
+# treatment as a preset. This keeps hover shades and background tints
+# coherent without requiring extra manual colors.
 ACCENT_DARK_AMOUNT = 0.18
 BG_ALT_TINT_AMOUNT = 0.92
 
@@ -53,46 +52,46 @@ class Palette:
 
 # Slug -> display label, in the order the admin UI presents them.
 PRESET_LABELS: dict[str, str] = {
-    "future-green": "Future Green",
-    "ocean-blue": "Ocean Blue",
-    "sunset-coral": "Sunset Coral",
-    "slate-mono": "Slate Mono",
+    "future-green": "Heritage Orange",
+    "ocean-blue": "Harbor Ink",
+    "sunset-coral": "Orchard Editorial",
+    "slate-mono": "Slate Apricot",
 }
 
 PRESETS: dict[str, Palette] = {
-    # The brand palette applied earlier: eco-conscious mint green, warm
-    # orange, soft lime, neutral gray, deep navy text.
+    # Figma palette review directions. The stable keys preserve existing
+    # saved preset selections while their visible names and values evolve.
     "future-green": Palette(
-        accent="#00ca8c",
-        accent_secondary="#8cd47e",
-        warm="#ffb54c",
-        muted="#808080",
-        text="#002e5d",
+        accent="#e76f25",
+        accent_secondary="#4d7c57",
+        warm="#fce1cf",
+        muted="#8c847c",
+        text="#3b0d1b",
         chrome="#fffdf9",
     ),
     "ocean-blue": Palette(
-        accent="#0077b6",
-        accent_secondary="#48cae4",
-        warm="#f4a261",
-        muted="#6c757d",
-        text="#03045e",
-        chrome="#fffdf9",
+        accent="#167c80",
+        accent_secondary="#5c9a83",
+        warm="#d9eeee",
+        muted="#71808a",
+        text="#17263c",
+        chrome="#17263c",
     ),
     "sunset-coral": Palette(
-        accent="#e85d04",
-        accent_secondary="#2a9d8f",
-        warm="#ffba08",
-        muted="#6c757d",
-        text="#6a040f",
-        chrome="#fffdf9",
+        accent="#4d7c57",
+        accent_secondary="#7c9c6d",
+        warm="#dce8d2",
+        muted="#72806d",
+        text="#2f3a27",
+        chrome="#e1ecd7",
     ),
     "slate-mono": Palette(
-        accent="#3b5bdb",
-        accent_secondary="#748ffc",
-        warm="#f08c00",
-        muted="#868e96",
-        text="#212529",
-        chrome="#fffdf9",
+        accent="#4255a4",
+        accent_secondary="#8092d1",
+        warm="#d8def8",
+        muted="#747b92",
+        text="#212836",
+        chrome="#e5e9fa",
     ),
 }
 
@@ -128,9 +127,23 @@ def tint(hex_color: str, amount: float) -> str:
     )
 
 
+def relative_luminance(hex_color: str) -> float:
+    """Return the WCAG relative luminance of a hex color."""
+
+    channels = _hex_to_rgb(hex_color)
+
+    def linear(channel: int) -> float:
+        value = channel / 255
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+    red, green, blue = (linear(channel) for channel in channels)
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
 def derived_variables(palette: Palette) -> dict[str, str]:
     """CSS custom-property names (hyphenated) to values for one palette."""
 
+    dark_chrome = relative_luminance(palette.chrome) < 0.4
     return {
         "accent": palette.accent,
         "accent-secondary": palette.accent_secondary,
@@ -138,6 +151,8 @@ def derived_variables(palette: Palette) -> dict[str, str]:
         "muted": palette.muted,
         "text": palette.text,
         "chrome": palette.chrome,
+        "chrome-text": "#fffdf9" if dark_chrome else palette.text,
+        "chrome-text-soft": "#dce5ed" if dark_chrome else darken(palette.text, 0.18),
         "accent-dark": darken(palette.accent, ACCENT_DARK_AMOUNT),
         "bg-alt": tint(palette.accent, BG_ALT_TINT_AMOUNT),
     }

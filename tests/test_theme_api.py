@@ -44,13 +44,14 @@ def _make_reader(app) -> User:
         return user
 
 
-def test_default_theme_is_the_future_green_preset(app_env, client):
+def test_default_theme_is_the_heritage_orange_preset(app_env, client):
     _app, _settings, _admin, token = app_env
     response = client.get("/api/admin/theme", headers=bearer(token))
     assert response.status_code == 200
     body = response.json()
     assert body["mode"] == "preset"
     assert body["preset"] == theme.DEFAULT_PRESET
+    assert body["presets"][0]["label"] == "Heritage Orange"
     assert len(body["presets"]) == 4
     assert {p["key"] for p in body["presets"]} == set(theme.PRESETS)
 
@@ -64,6 +65,7 @@ def test_theme_css_applies_palette_to_the_existing_ui_variables():
     assert f"--burgundy:{palette.text};" in css
     assert f"--green:{palette.accent_secondary};" in css
     assert "--chrome:" in css
+    assert "--chrome-text:" in css
     assert "--selection:" in css
 
 

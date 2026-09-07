@@ -69,8 +69,13 @@ def test_every_preset_is_internally_consistent():
             assert theme.normalize_hex(value) == value
 
 
-def test_presets_keep_the_original_light_navigation_surface():
-    assert {palette.chrome for palette in theme.PRESETS.values()} == {"#fffdf9"}
+def test_presets_represent_the_reviewed_navigation_treatments():
+    assert {key: palette.chrome for key, palette in theme.PRESETS.items()} == {
+        "future-green": "#fffdf9",
+        "ocean-blue": "#17263c",
+        "sunset-coral": "#e1ecd7",
+        "slate-mono": "#e5e9fa",
+    }
 
 
 def test_darken_moves_every_channel_toward_black():
@@ -93,6 +98,12 @@ def test_derived_variables_include_the_two_computed_shades():
     assert theme.normalize_hex(variables["bg-alt"]) == variables["bg-alt"]
 
 
+def test_dark_navigation_chrome_gets_contrasting_derived_text():
+    variables = theme.derived_variables(theme.PRESETS["ocean-blue"])
+    assert variables["chrome-text"] == "#fffdf9"
+    assert variables["chrome-text-soft"] == "#dce5ed"
+
+
 def test_css_block_is_a_single_root_rule_with_every_variable():
     palette = theme.PRESETS[theme.DEFAULT_PRESET]
     block = theme.css_block(palette)
@@ -104,6 +115,8 @@ def test_css_block_is_a_single_root_rule_with_every_variable():
         "muted",
         "text",
         "chrome",
+        "chrome-text",
+        "chrome-text-soft",
         "accent-dark",
         "bg-alt",
     ):

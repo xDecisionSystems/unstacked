@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 15:11 UTC — Codex
+Implemented the four reviewed Figma palette directions as the selectable
+built-in palettes. Navigation now uses palette-aware contrasting text, so the
+dark Harbor Ink chrome remains readable in both the top bar and Settings.
+
+Ruff and focused palette tests pass.
+- Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme.py`,
+  `tests/test_theme_api.py`, `LOG.md`
+
 ## 2026-09-07 14:55 UTC — Codex
 Restored the original light navigation surface for every built-in color
 preset. Navigation chrome remains available for custom palette changes.
@@ -127,12 +136,3 @@ backup.
 Ruff and focused export/settings tests pass.
 - Files: `app/export.py`, `app/web.py`, `app/templates/admin.html`,
   `tests/test_export.py`, `LOG.md`
-
-## 2026-09-07 13:17 UTC — Codex
-Renamed the Settings Export panel to Import / Export and added a guarded
-Import action. It restores only from the already-linked Git repository and,
-when replacement is needed, first verifies a recovery copy and requires a
-second confirmation before local content changes.
-
-Ruff, focused settings, and backup-restore tests pass.
-- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
