@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-07 13:10 UTC — Codex
+Removed the redundant Settings-page Invite user shortcut. The Users panel
+already contains the complete creation form, so the compact settings layout
+now leads directly to the relevant content without duplicating that action.
+
+Ruff and focused web tests pass.
+- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-09-07 06:10 UTC — Codex
 Captured the live Books workspace into the connected Figma file, then refined
 the shared UI rhythm from that review: controls and icon actions now have
@@ -344,53 +352,3 @@ committing.
   `tests/test_home_page.py`, `tests/test_home_widgets.py`,
   `tests/test_admin_api.py`, `plans/plan_multiple_featured_grids.md`,
   `LOG.md`
-
-## 2026-08-31 02:05 UTC — Claude Code
-Per the user's request, removed the dashboard's redundant "Home" and
-"Featured" heading text: dropped `tree.html`'s `<h1>{{ home_title }}</h1>`
-and the `<h2>{{ widget.title }}</h2>` widget heading (kept as an
-`aria-label` on the section for accessibility, and kept in the browser
-tab `<title>`). Along the way, found that "Home" was also literal
-Markdown body content -- `_home_page_starter_body()` wrote a `# Home`
-line into every bootstrapped/reset Home page -- and removed that line
-from the starter too. This only changes newly bootstrapped or explicitly
-reset Home pages, not any already-existing `index.md`, including a real
-deployed site's, which would need a hand edit or a reset to pick this up.
-
-Per the user's next request: renamed "Book Permissions" to "Permissions" in
-Settings (internal `data-admin-panel="book-permissions"`/section id
-unchanged, only the visible text and `data-title`), and added a "Publish
-the Home page publicly" toggle to that same panel. Backed by a new
-`ContentRepository.set_home_public(public, actor)` -- mirrors
-`set_page_title`'s minimal single-field write rather than
-`set_container_public`/`set_subtree_public`, since `index.md` is a fixed
-single file, never a container those two require -- exposed via
-`GET`/`PUT /api/admin/home/visibility`. Confirmed the `public` front-matter
-field survives an unrelated `update_home_page` save (it is an unknown key
-to that method, so it only round-trips correctly because
-`serialize_page` starts from `document.raw_metadata`).
-
-Also implemented the user's second, related request: an unauthenticated
-visitor hitting a non-public page/book, or `/`, or `/tree` itself, is now
-redirected to `/tree` if Home is public (a real, working destination) or
-to `/login` otherwise -- previously these were a mix of hard 401s and
-404s. `/tree` now accepts an optional user and renders a genuine
-read-only public view when anonymous and Home is public, with its
-`featured` widget filtered by the existing `_public_page`/
-`_container_public` predicates rather than an `AuthorizationContext`
-(anonymous visitors have no ACL identity to evaluate). The redirect never
-depends on whether the specific requested page/book exists -- only on
-Home's global public status -- so it preserves the existing
-existence-leak guarantee `page_view`/`book_view` already had via a
-uniform 404.
-
-Updated the one existing test this necessarily changed
-(`test_web_routes_require_a_session`: bare unauthenticated `/tree` and
-`/pages/alice-book/secret` now redirect to `/login` rather than 401/404,
-since Home defaults to private) and added new coverage in
-`tests/test_admin_api.py` and `tests/test_web.py` for the visibility
-toggle, the public-Home render, and the public-featured-widget filtering.
-Full suite and ruff clean.
-- Files: `app/admin_api.py`, `app/content.py`, `app/templates/admin.html`,
-  `app/templates/tree.html`, `app/web.py`, `tests/test_admin_api.py`,
-  `tests/test_home_page.py`, `tests/test_web.py`, `LOG.md`

@@ -109,12 +109,10 @@
 /* The panel title/description are visually-hidden (the sidebar's active link
    already shows it), so this button is the header's only visible child --
    push it to the right where the title used to leave it. */
-#invite-user { margin-left: auto; }
 /* Clears the topbar's account-menu dropdown, which otherwise overlaps this
    corner when open. Only needed above 1000px, where the topbar is a single
    80px row -- below that it grows tall enough on its own (see .topbar's
    max-width:1000px query) that the two never come close. */
-@media (min-width: 1001px) { #invite-user { margin-top: 36px; } }
 .admin-header > div { flex: 1; }.admin-header h1 { margin: 0; font: 600 38px 'Source Serif 4', serif; }.admin-header p { margin: 6px 0 0; color: var(--burgundy-soft); font-size: 15px; }
 .admin-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 20px 0 24px; }
 .admin-metrics article { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
@@ -124,7 +122,7 @@
 .admin-grid section { border-radius: 14px; }.admin-grid h2 { font-size: 22px; }.admin-grid > section > p { color: var(--burgundy-soft); font-size: 13px; }
 .password-requirements{padding-left:18px;margin:-4px 0 0;font-size:12px}.password-requirements li{margin:2px 0}.password-requirements .is-invalid{color:var(--danger)}.password-requirements .is-valid{color:var(--green)}
 .setup-steps{padding-left:20px;margin:12px 0;color:var(--burgundy-soft);font-size:14px;line-height:1.5}.setup-steps li{margin:6px 0}.setup-steps code{padding:1px 4px;border-radius:4px;background:var(--surface-subtle);font-size:13px}
-.admin-grid > section[hidden], .admin-metrics[hidden], #invite-user[hidden] { display: none; }
+.admin-grid > section[hidden], .admin-metrics[hidden] { display: none; }
 .group-matrix-wrap{overflow:auto;margin:16px 0;border:1px solid var(--border);border-radius:10px}.group-matrix{width:100%;border-collapse:collapse;font-size:14px}.group-matrix th,.group-matrix td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:center}.group-matrix thead th{background:var(--surface-subtle);color:var(--burgundy-soft);font-weight:600}.group-matrix tbody th{text-align:left;background:var(--surface);white-space:nowrap}.group-matrix tbody th small{display:block;color:var(--muted);font-weight:400}.group-matrix input{width:18px;height:18px;accent-color:var(--orange);cursor:pointer}.group-delete{display:block;margin:5px auto 0;padding:0;border:0;background:none;color:var(--danger);font-size:16px;line-height:1}.group-delete:hover{background:none;color:var(--burgundy)}
 .matrix-select-all{display:grid;gap:5px;margin:8px 0 0;font-size:12px;font-weight:400;color:var(--muted)}.permission-icon-group{display:inline-flex;gap:3px;align-items:center;justify-content:center}.permission-icon,.permission-icon:hover{display:inline-flex;width:30px;height:30px;padding:0;border:1px solid var(--border)!important;border-radius:7px;background:var(--surface)!important;color:var(--burgundy)!important}.permission-icon svg{display:block;width:16px;height:16px;fill:none!important;stroke:var(--burgundy)!important;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.permission-icon svg *{stroke:var(--burgundy)!important;fill:none!important}.permission-icon:hover{border-color:var(--orange)!important;background:var(--tag)!important}.permission-icon.is-active,.permission-icon.is-active:hover{border-color:var(--orange)!important;background:var(--orange)!important;color:#fffdf9!important}.permission-icon.is-active svg,.permission-icon.is-active svg *{stroke:#fffdf9!important}.permission-icon:disabled{cursor:wait;opacity:.55}.permission-details{margin-top:24px}.permission-details summary{cursor:pointer;color:var(--burgundy-soft);font-weight:600}
 .admin-row.is-inactive{color:var(--muted)}.admin-row button:disabled,.admin-row button.danger:disabled{border-color:var(--border);background:var(--surface-subtle);color:var(--muted);cursor:not-allowed;opacity:1}
