@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-08 13:16 UTC — Codex
+Moved SSH repository backup configuration into its own Remote backup Settings
+page. Import / Export now remains focused on moving MkDocs ZIP files and
+restoring from the named backup repository.
+
+Ruff and focused Settings markup tests pass.
+- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-07 15:40 UTC — Codex
 Replaced the Settings known-hosts-path field with an SSH server fingerprint
 check. Administrators review and confirm the discovered fingerprint; Unstacked
@@ -127,11 +135,3 @@ Ruff, focused Settings markup, and MkDocs export/import tests pass.
 - Files: `app/mkdocs_import.py`, `app/upload_limit.py`, `app/web.py`,
   `app/templates/admin.html`, `tests/test_export.py`, `tests/test_web.py`,
   `LOG.md`
-
-## 2026-09-07 14:01 UTC — Codex
-Shortened the Settings sidebar label from SMTP server to SMTP. The SMTP form
-now has more space below its guidance and between field labels and inputs.
-
-Ruff and the focused Settings page test pass.
-- Files: `app/templates/admin.html`, `app/static/style.css`,
-  `tests/test_web.py`, `LOG.md`
