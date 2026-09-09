@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # a backup target can be set up without editing the deployment.  A file
     # under `data/`, not a table -- the same precedent as the token secret.
     backup_config_path: Path = Path("data/backup_config.json")
+    # A separate optional SSH destination for complete, portable workspace
+    # archives.  This is deliberately not part of the Git-sync configuration:
+    # it uploads ZIP snapshots to a normal SSH server rather than pushing a
+    # repository.
+    ssh_archive_config_path: Path = Path("data/ssh_archive.json")
     # A backup is deliberately off the request path.  This is the shortest
     # delay before a worker coalesces a burst of local commits into one push.
     backup_sync_debounce_seconds: float = 10.0

@@ -10,6 +10,18 @@ how long any entry is.
 
 ---
 
+## 2026-09-09 03:07 UTC — Codex
+Separated SSH workspace archives from Git synchronization. Administrators can
+now pin an SSH server fingerprint, upload a portable restore-ready ZIP, and
+guardedly reconstruct content, permissions, users, featured data, and
+appearance settings without exporting operational secrets.
+
+Ruff and focused workspace-archive and Settings tests pass.
+- Files: `Dockerfile`, `app/config.py`, `app/main.py`, `app/ssh_archive.py`,
+  `app/ssh_archive_api.py`, `app/templates/admin.html`, `README.md`,
+  `plans/plan_initial.md`, `tests/conftest.py`, `tests/test_ssh_archive.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-09 02:41 UTC — Codex
 Clarified Git as synchronization in Settings and enriched every content commit
 message with changed paths, editor identity, and a UTC timestamp.
@@ -127,10 +139,3 @@ only writing unused palette aliases.
 
 Ruff and the complete theme API test suite pass.
 - Files: `app/theme.py`, `tests/test_theme_api.py`, `LOG.md`
-
-## 2026-09-07 14:20 UTC — Codex
-Changed successful Book creation to return to the Books library rather than
-sending the administrator directly into Page creation.
-
-Ruff and the focused browser content-management test pass.
-- Files: `app/web.py`, `tests/test_web.py`, `LOG.md`

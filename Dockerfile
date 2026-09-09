@@ -25,7 +25,7 @@ FROM python:3.12-slim AS runtime
 # GitPython shells out to the real `git` binary at import time; python-slim
 # does not include it, so every request would fail immediately without this.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
+    && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system unstacked && useradd --system --gid unstacked --create-home unstacked

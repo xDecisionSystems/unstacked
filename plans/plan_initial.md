@@ -398,6 +398,28 @@ uses the application lifespan; a broken persisted credential never prevents
 the optional-backup-free app from starting. Verified with 370 passing tests,
 58 focused backup/Git tests, clean ruff, and healthy production Compose.
 
+#### [~] T6.5 — SSH workspace archive destination
+
+SSH archive backup is deliberately separate from Git synchronization. An
+administrator configures an SSH host, account, absolute destination folder,
+private-key path, and a fingerprint that Unstacked discovers and pins in an
+owner-only `known_hosts` file. A manual archive is a versioned private ZIP
+uploaded with `scp`; it contains the complete `content/` MkDocs project
+(excluding `.git`) plus serialized users, groups, memberships, permissions,
+featured-home data, branding, theme, and branding logo. It intentionally
+excludes Git destination credentials, the SSH archive key, SMTP credentials,
+the API signing secret, and active sessions. Restore validates and stages the
+ZIP, creates a recovery copy, replaces the content project, reconstructs the
+four relational tables and appearance settings, and revokes pre-restore
+browser/API credentials. The web Settings page calls this a server archive,
+never an SSH Git remote.
+
+**Remaining:** persist last-check/archive state and run the selected
+hourly/daily/weekly archive schedule in a background worker. Manual upload and
+guarded round-trip restore are implemented in `app/ssh_archive.py` and
+`app/ssh_archive_api.py`; regression coverage is in
+`tests/test_ssh_archive.py`.
+
 ---
 
 ### Phase 7 — Static export

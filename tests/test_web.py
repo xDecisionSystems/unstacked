@@ -1297,7 +1297,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert 'data-admin-panel="users"' in response.text
     assert "/api/admin/users" in response.text
     assert "/api/admin/backup/config" in response.text
-    assert "/api/admin/backup/ssh-host-key" in response.text
+    assert "/api/admin/ssh-archive/host-key" in response.text
     assert "Known-hosts path" not in response.text
     assert "Check SSH server fingerprint" in response.text
     assert "/api/admin/smtp" in response.text
@@ -1307,7 +1307,8 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert 'id="git-backup-section"' in response.text
     assert 'data-admin-panel="ssh-backup"' in response.text
     assert 'id="ssh-backup-section"' in response.text
-    assert "SSH sync" in response.text
+    assert "SSH archive backup" in response.text
+    assert "/api/admin/ssh-archive/restore/prepare" in response.text
     assert "GitHub repository" not in response.text
     assert "synchronized to its <code>main</code> branch" in response.text
     assert 'data-title="Import / Export"' in response.text

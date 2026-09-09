@@ -15,6 +15,7 @@ from app.config import Settings
 from app.content import ContentRepository
 from app.default_groups import ensure_default_groups, migrate_chapter_permission_paths
 from app.models import create_db_engine, migrate_schema
+from app.ssh_archive_api import router as ssh_archive_router
 from app.upload_limit import UploadSizeLimitMiddleware
 from app.web import router as web_router
 from app.web_auth import router as web_auth_router
@@ -95,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(asset_router)
     app.include_router(web_auth_router)
     app.include_router(admin_router)
+    app.include_router(ssh_archive_router)
     app.include_router(web_router)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

@@ -158,9 +158,9 @@ invalidate affected credentials.
 
 ### Backup and guarded restore
 
-Backup is optional. The built-in target is any **private** Git remote and
-backs up the complete `content/` Git repository, including drafts and without
-per-user ACL filtering. Configure it as an administrator with
+Git synchronization is optional. The built-in Git target is any **private**
+Git remote and synchronizes the complete `content/` repository, including
+drafts and without per-user ACL filtering. Configure it as an administrator with
 `GET`/`PUT`/`DELETE /api/admin/backup/config`; saving validates remote access
 with a remote listing and a dry-run push before persisting the setting. A
 supplied inline token is stored in an owner-only file under `data/` and is not
@@ -176,6 +176,15 @@ copy outside the target and returns a one-time confirmation ID. Submit that ID
 in a second restore request to replace the checkout. Restore never silently
 overwrites local work and never force-pushes. Keep the recovery copy until the
 restored instance has been checked.
+
+For a server backup rather than repository synchronization, configure the
+separate SSH archive destination at `/api/admin/ssh-archive/config`. It sends
+a private ZIP over SSH containing the full MkDocs source tree plus users,
+groups, permissions, home features, branding, and theme settings. Import it
+through `/api/admin/ssh-archive/restore/prepare` and confirm the one-time
+restore ID to reconstruct the workspace. Archive transport credentials, SMTP
+passwords, API signing secrets, and active sessions are deliberately excluded;
+restoring also revokes prior browser/API credentials.
 
 ### Exports and disaster recovery
 
@@ -322,10 +331,12 @@ for automation and guarded restore. A saved runtime record wins over the
 initial environment variables; clearing writes a tombstone so a stale variable
 cannot silently turn backup back on after restart.
 
-A git target protects content history, not `data/app.db`. Snapshot both
-persistent volumes through Coolify—or use rsync/S3 or another trusted external
-backup mechanism—when users, groups, and permissions also need off-site
-recovery.
+A Git target synchronizes content history, not `data/app.db`. The separate
+SSH archive backup includes the permission database representation needed by
+Unstacked, while excluding operational secrets. Snapshot both persistent
+volumes through Coolify—or use rsync/S3 or another trusted external backup
+mechanism—when those secrets or full deployment configuration also need
+off-site recovery.
 
 ### What's actually live right now
 
