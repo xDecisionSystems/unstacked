@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-09 02:37 UTC — Codex
+Wired every successful content commit to wake the optional Git backup worker
+immediately. Book and page saves now trigger a prompt remote push without
+putting network work or failure on the save request.
+
+Ruff and focused backup and Git tests pass.
+- Files: `app/git_backend.py`, `app/backup_runtime.py`,
+  `tests/test_git_backend.py`, `LOG.md`
+
 ## 2026-09-09 02:19 UTC — Codex
 Split backup connection choices into separate Settings pages: Git repository
 for HTTPS/token setup and SSH backup for deploy-key and server-fingerprint
@@ -124,12 +133,4 @@ one Settings page. MkDocs ZIP downloads now use the space-free branded format
 
 Ruff and focused export/Settings tests pass.
 - Files: `app/templates/admin.html`, `app/web.py`, `tests/test_export.py`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 14:09 UTC — Codex
-Removed the Back to workspace link and arrow from the Settings sidebar, along
-with its obsolete styling, so the sidebar contains only Settings navigation.
-
-Ruff and the focused Settings page test pass.
-- Files: `app/templates/admin.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`

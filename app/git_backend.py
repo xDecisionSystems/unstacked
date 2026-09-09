@@ -4,7 +4,7 @@ import re
 import shlex
 import stat
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -193,6 +193,17 @@ class GitBackend:
         self.repo_path = repo_path.resolve()
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = FileLock(lock_path, timeout=lock_timeout_seconds)
+        self._commit_listener: Callable[[], None] | None = None
+
+    def set_commit_listener(self, listener: Callable[[], None] | None) -> None:
+        """Notify an in-process observer after a durable content commit.
+
+        The listener runs only after the repository lock is released and is
+        best-effort: saving wiki content must never fail because an optional
+        off-site backup worker is unavailable.
+        """
+
+        self._commit_listener = listener
 
     @contextmanager
     def write_lock(self):
@@ -355,10 +366,19 @@ class GitBackend:
                     repo.index.add(present)
                 actor = Actor(name, email)
                 commit = repo.index.commit(message, author=actor, committer=actor)
-                return commit.hexsha
+                committed_sha = commit.hexsha
             except Exception:
                 self._restore_index(index_snapshot)
                 raise
+        listener = self._commit_listener
+        if listener is not None:
+            try:
+                listener()
+            except Exception:
+                # Content storage is complete and locally recoverable at this
+                # point. A failed optional notification must not alter that.
+                pass
+        return committed_sha
 
     def blob_sha(self, path: Path | str) -> str:
         """Return the current HEAD blob SHA for one tracked content file."""

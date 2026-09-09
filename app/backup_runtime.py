@@ -97,6 +97,10 @@ def activate(app: FastAPI) -> bool:
         debounce_seconds=settings.backup_sync_debounce_seconds,
         max_backoff_seconds=settings.backup_sync_max_backoff_seconds,
     )
+    # Every successful book/page save commits through GitBackend.commit_paths.
+    # Waking this worker makes the following push immediate while retaining
+    # the worker's retry/backoff behavior and keeping network I/O off requests.
+    content.git.set_commit_listener(worker.request_sync)
     app.state.manual_backup = service
     app.state.backup_sync_worker = worker
     if app.state.backup_serving:
@@ -116,6 +120,7 @@ def deactivate(app: FastAPI) -> None:
     worker = _worker(app)
     if worker is not None:
         worker.stop()
+    app.state.content.git.set_commit_listener(None)
     for name in ("backup_sync_worker", "manual_backup"):
         if hasattr(app.state, name):
             delattr(app.state, name)

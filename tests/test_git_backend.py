@@ -67,6 +67,17 @@ def test_commit_leaves_the_index_consistent_with_head(client, app_env):
     assert not repo.is_dirty()
 
 
+def test_content_commit_notifies_the_configured_backup_listener(client, app_env):
+    app, settings, _admin, token = app_env
+    notifications: list[str] = []
+    app.state.content.git.set_commit_listener(lambda: notifications.append("saved"))
+
+    _admin_page(client, bearer(token))
+
+    assert notifications == ["saved", "saved"]
+    assert Repo(settings.content_repo_path).head.is_valid()
+
+
 def test_history_follows_a_rename(client, app_env):
     """`git log --follow` is what keeps history across a slug rename."""
 
