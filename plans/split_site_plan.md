@@ -32,8 +32,30 @@ or access to operational settings.
 The public static build must include only content explicitly marked public.
 It must exclude all private and draft material, including page titles,
 navigation entries, card images, other assets, links, and search-index
-records. The existing public visibility setting is the sole source of truth;
-default visibility remains private.
+records. Default visibility remains private.
+
+**Source of truth (do not substitute the Permissions matrix here).** This
+codebase has two independent visibility mechanisms; only the first governs
+anonymous access and is the one eligibility must use:
+
+- Each book's `.pages` navigation file carries a `public` boolean (toggled
+  from the book card's public/private control), read via
+  `_container_public()` in `app/web.py`. A page inherits its book's flag —
+  there is no per-page override at this layer. The Home page (`index.md`)
+  has its own separate `public` flag in its frontmatter
+  (`/api/admin/home/visibility`).
+- Settings → Permissions (the group/ACL matrix, including the built-in
+  "Public" group and "Featured page overrides") is a **different system**
+  for authenticated multi-group access control. `AccessPolicy`/
+  `AuthorizationContext` is never consulted on the anonymous code path
+  (`app/web.py`'s `_public_page`/`_container_public`/`_public_home_widgets`
+  use only the flags above), and the "Public" group's own rows are merely a
+  template copied onto newly-created groups
+  (`copy_public_book_defaults` in `app/default_groups.py`). It must play no
+  part in eligibility for this build.
+- Assets live at `docs/assets/<book-slug>/...`, so an asset is eligible iff
+  its book slug is eligible. Home's own images are not under a book slug and
+  need their own rule, gated on Home's `public` flag.
 
 This must be a new, filtered public build. It cannot reuse the current full
 MkDocs export because that export intentionally includes every non-draft page
@@ -44,13 +66,27 @@ and therefore remains private.
 ### 1. Public-build service
 
 1. Define a single reusable eligibility check for public books, pages,
-   homepage widgets, and assets.
-2. Create an isolated staging copy containing only eligible content.
-3. Run `mkdocs build --strict` against that staging copy.
+   homepage widgets, and assets, built on the source-of-truth flags named
+   above (never the Permissions matrix).
+2. Filter at build time instead of copying the tree: add a
+   `hooks/public_only.py` MkDocs hook (same shape as the existing
+   `hooks/drafts.py`, which already drops draft files from the `Files`
+   collection via `on_files`) that drops any file whose path isn't under an
+   eligible book, isn't `index.md` when Home is public, or isn't under
+   `assets/<eligible-book>/`. Run it through a separate `mkdocs.public.yml`
+   pointed at the same `docs_dir` used today, so eligibility logic lives in
+   one place and no second copy of the content tree has to be kept in sync.
+   (A physical staging copy is an acceptable fallback if the hook approach
+   turns out to need more nav-rewriting than expected, but start here.)
+3. Run `mkdocs build --strict` with that config.
 4. Atomically publish the successful output, retaining the previous known-good
    public site when a build fails.
 5. Use the existing repository lock so a build never reads a half-saved
    workspace.
+6. Confirm `awesome-nav`'s `.pages`-driven nav generation only reflects
+   files the hook let through — it should, since nav is directory-derived
+   rather than a static list — before relying on `--strict` to catch
+   mismatches.
 
 ### 2. Public-site runtime
 
@@ -60,6 +96,8 @@ and therefore remains private.
 4. Configure safe static behavior: no directory listing, no executable
    uploads, appropriate security headers, and cache invalidation after a
    successful publication.
+5. Define behavior for the empty case (fresh install, nothing marked public
+   yet): serve a valid, minimal public site, not an error.
 
 ### 3. Management-site boundary
 
@@ -89,6 +127,9 @@ and therefore remains private.
 4. Optionally add Cloudflare Access to `manage.<domain>` as an extra gate,
    while retaining Unstacked’s current login as the application login.
 5. Configure public-cache purge or revalidation after successful publication.
+   A book or the Home page flipping from public to private must trigger a
+   full/aggressive purge rather than incremental revalidation — a lingering
+   edge cache is a disclosure window, not just a staleness issue.
 
 ### 6. Verification and documentation
 
