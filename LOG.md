@@ -10,6 +10,25 @@ how long any entry is.
 
 ---
 
+## 2026-09-09 05:57 UTC — Codex
+Implemented the split public/management deployment: a filtered, atomic
+public MkDocs build now runs independently of the authenticated FastAPI site,
+with safe Settings controls, a loopback-only Nginx service, and proxy setup
+guidance. Public builds include only explicitly public content and preserve
+the last good site on failure; archive-backup and public-build triggers now
+coexist.
+
+Tests: Ruff; public-site, admin, backup-listener, and Git backend tests pass.
+Local Compose verification: management healthy on 18094 and filtered public
+site healthy on 18095.
+- Files: `.env.example`, `Dockerfile`, `README.md`, `app/admin_api.py`,
+  `app/backup_runtime.py`, `app/config.py`, `app/export.py`,
+  `app/git_backend.py`, `app/main.py`, `app/public_site.py`,
+  `app/public_site_runtime.py`, `app/templates/admin.html`,
+  `deploy/public-nginx.conf`, `docker-compose.yaml`, `plans/plan_initial.md`,
+  `tests/conftest.py`, `tests/test_admin_api.py`, `tests/test_public_site.py`,
+  `LOG.md`
+
 ## 2026-09-09 05:22 UTC — Codex
 Added a plan for a separate public static site and management site while
 explicitly preserving the current Unstacked login process and permissions.
@@ -127,12 +146,3 @@ including Navigation chrome, so no color disappears from the palette chooser.
 Ruff and the complete theme test suite pass.
 - Files: `app/templates/admin.html`, `app/theme.py`, `tests/test_theme.py`,
   `tests/test_theme_api.py`, `LOG.md`
-
-## 2026-09-07 14:42 UTC — Codex
-Added Navigation chrome to custom palette controls, presets, API responses,
-and persisted theme records. Older custom palettes keep their prior derived
-navigation colour when loaded.
-
-Ruff and the complete theme API test suite pass.
-- Files: `app/theme.py`, `app/theme_config.py`, `app/admin_api.py`,
-  `app/templates/admin.html`, `tests/test_theme_api.py`, `LOG.md`

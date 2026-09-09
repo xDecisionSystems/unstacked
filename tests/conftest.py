@@ -18,6 +18,7 @@ def app_env(tmp_path: Path):
         db_path=tmp_path / "data" / "app.db",
         content_lock_path=tmp_path / "data" / "content.lock",
         static_export_path=tmp_path / "data" / "static-export",
+        public_site_path=tmp_path / "public-site",
         # Kept inside the test's own directory: a route that writes a backup
         # target must never reach the repository's real `data/`.
         backup_config_path=tmp_path / "data" / "backup_config.json",

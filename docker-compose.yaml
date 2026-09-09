@@ -5,7 +5,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "${UNSTACKED_HOST_PORT:-8001}:8000"
+      # Management is deliberately loopback-only. Nginx Proxy Manager can
+      # forward `manage.<domain>` here without the application port being
+      # reachable from the Internet.
+      - "127.0.0.1:${UNSTACKED_MANAGEMENT_HOST_PORT:-8001}:8000"
     environment:
       UNSTACKED_ENVIRONMENT: production
       # Required in production — the app refuses to start without it. Set
@@ -26,6 +29,7 @@ services:
       UNSTACKED_MAX_UPLOAD_PIXELS: ${UNSTACKED_MAX_UPLOAD_PIXELS:-40000000}
       UNSTACKED_CONTENT_LOCK_TIMEOUT_SECONDS: ${UNSTACKED_CONTENT_LOCK_TIMEOUT_SECONDS:-15}
       UNSTACKED_STATIC_EXPORT_PATH: /app/data/static-export
+      UNSTACKED_PUBLIC_SITE_PATH: /app/public-site/site
       UNSTACKED_STATIC_EXPORT_TIMEOUT_SECONDS: ${UNSTACKED_STATIC_EXPORT_TIMEOUT_SECONDS:-120}
       UNSTACKED_STATIC_EXPORT_OUTPUT_LIMIT_BYTES: ${UNSTACKED_STATIC_EXPORT_OUTPUT_LIMIT_BYTES:-65536}
       UNSTACKED_BACKUP_SYNC_DEBOUNCE_SECONDS: ${UNSTACKED_BACKUP_SYNC_DEBOUNCE_SECONDS:-10}
@@ -56,6 +60,9 @@ services:
       # snapshot them through Coolify or configure an optional backup target.
       - content:/app/content
       - data:/app/data
+      # The public service receives this same artifact read-only and never
+      # receives content, data, or credentials.
+      - public-site:/app/public-site
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
       interval: 30s
@@ -63,6 +70,27 @@ services:
       start_period: 20s
       retries: 3
 
+  public:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      # Nginx Proxy Manager should forward `public.<domain>` to this local
+      # port. It is not an Internet-facing application port.
+      - "127.0.0.1:${UNSTACKED_PUBLIC_HOST_PORT:-8081}:8080"
+    volumes:
+      - public-site:/usr/share/nginx/html:ro
+      - ./deploy/public-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
 volumes:
   content:
   data:
+  public-site:

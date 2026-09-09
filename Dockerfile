@@ -51,13 +51,14 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     UNSTACKED_API_TOKEN_SECRET_PATH=/app/data/api_token_secret \
     UNSTACKED_STATIC_EXPORT_PATH=/app/data/static-export
 
-# The content/ (Git-backed wiki) and data/ (SQLite + lock file + generated
+# The content/ (Git-backed wiki), data/ (SQLite + lock file + generated
 # secret) directories are the only application state and must be mounted as
 # persistent volumes. Pre-creating them here, owned by the runtime user,
 # means Docker seeds a fresh named volume with correct ownership on first
 # start instead of leaving it root-owned.
-RUN mkdir -p /app/content /app/data && chown -R unstacked:unstacked /app/content /app/data
-VOLUME ["/app/content", "/app/data"]
+RUN mkdir -p /app/content /app/data /app/public-site \
+    && chown -R unstacked:unstacked /app/content /app/data /app/public-site
+VOLUME ["/app/content", "/app/data", "/app/public-site"]
 
 USER unstacked
 EXPOSE 8000

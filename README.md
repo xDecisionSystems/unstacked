@@ -24,9 +24,9 @@ permissions — never for content.
 - **AI-ready API.** Search and page-read are exposed through a shared module
   reused by the web app and a bearer-authenticated REST/OpenAPI surface — all
   filtered by the same permissions.
-- **Static recovery is not authenticated.** A mkdocs export contains every
-  non-draft page, so content remotes and build artifacts stay private and
-  public deployment is outside the MVP.
+- **Public site is separately filtered.** The optional public webroot contains
+  only explicitly public, non-draft books and pages. It is distinct from the
+  private full MkDocs recovery export, which contains every non-draft page.
 
 ## Status
 
@@ -66,6 +66,31 @@ subsequently exchange the (changed) password at `POST /api/auth/token`.
 Re-running bootstrap is safe — if any user already exists, it leaves them
 unchanged and does nothing.
 
+## Public and management sites
+
+Compose runs two loopback-only services intended for hostname-based reverse
+proxying:
+
+| Address | Local destination | Purpose |
+|---|---:|---|
+| `public.example.org` | `127.0.0.1:8081` | read-only, filtered static site |
+| `manage.example.org` | `127.0.0.1:8001` | full Unstacked management app |
+
+Point two Nginx Proxy Manager **Proxy Hosts** at these destinations. Users
+reach both through ordinary HTTPS port 443; the different local ports are not
+internet-facing. If Nginx Proxy Manager runs in Docker rather than on the host,
+attach it and these services to a shared Docker network and proxy to the
+service names (`public:8080` and `app:8000`) instead of loopback addresses.
+
+The public service mounts only the generated `public-site` volume read-only.
+It cannot reach the database, Git checkout, API signing secret, backup
+credentials, editors, or management routes. The management app remains the
+only writer and keeps the existing Unstacked login and ACL process unchanged.
+
+Marking a book or Home public queues a filtered MkDocs build. A failed build
+keeps the previous public site live. Content linking to omitted private
+Markdown fails publication rather than leaking the target path in public HTML.
+
 ## Local Docker deployment
 
 Docker Compose runs the API with two named volumes: `data` holds the SQLite
@@ -76,6 +101,7 @@ repository. Generate a production signing secret, then start it with:
 export UNSTACKED_API_TOKEN_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 docker compose -f docker-compose.yaml up --build -d
 curl http://127.0.0.1:8001/healthz
+curl http://127.0.0.1:8081/
 docker compose -f docker-compose.yaml exec app python -m app.bootstrap
 ```
 
@@ -189,10 +215,11 @@ restoring also revokes prior browser/API credentials.
 ### Exports and disaster recovery
 
 `GET /api/ai/export` is an ACL-filtered ZIP for the authenticated caller.
-This is different from a static MkDocs export: a static build contains every
-non-draft page and has **no runtime ACL**. Treat static sites, build artifacts,
-and content Git remotes as private; they are recovery artifacts, not a
-permission-preserving web deployment.
+This is different from the administrator's static MkDocs export: that export
+contains every non-draft page and has **no runtime ACL**. Treat that full
+export, its build artifacts, and content Git remotes as private recovery
+artifacts. The separately deployed public site is filtered from explicit
+public flags before it is built, but it is still deliberately read-only.
 
 If the application or database is lost, recover the wiki by restoring the
 **entire** `content/` directory (not only `content/docs/`) and running its own
@@ -283,9 +310,9 @@ or a redeploy wipes the wiki.
      hop of `X-Forwarded-For`, or every client will share one bucket.
    - Any other tuning from [.env.example](.env.example) you want to override.
 4. Set the exposed port to `8000` and the health check path to `/healthz`.
-   The Compose file maps host port `UNSTACKED_HOST_PORT` (default `8001`) to
-   that internal port, so set `UNSTACKED_HOST_PORT` to an unused server port
-   in Coolify when you need direct host-port access.
+   The Compose file maps management host port
+   `UNSTACKED_MANAGEMENT_HOST_PORT` (default `8001`) to that internal port.
+   Set it to an unused server port only when using a host-level reverse proxy.
    (the `Dockerfile` already declares a `HEALTHCHECK` against it).
 5. Deploy. `create_app()` runs the database migration and content-repo
    bootstrap automatically on startup — no separate init step is needed.

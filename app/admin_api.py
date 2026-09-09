@@ -58,6 +58,7 @@ from app.paths import (
     path_depth,
     safe_join,
 )
+from app.public_site import PublicSiteError
 from app.theme import Palette
 from app.web_auth import get_current_web_user, invalidate_web_sessions, require_csrf
 
@@ -165,6 +166,13 @@ class HomeVisibilityResponse(BaseModel):
 
 class HomeVisibilityUpdate(BaseModel):
     public: bool
+
+
+class PublicSiteResponse(BaseModel):
+    """Sanitized filtered-publication state for the Settings page."""
+
+    last_success_at: str | None
+    last_error: str | None
 
 
 class OrphanedPermissionResponse(PermissionResponse):
@@ -1517,3 +1525,32 @@ def update_home_visibility(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     _audit("admin.home.visibility", actor, public=payload.public, commit=commit)
     return HomeVisibilityResponse(public=payload.public)
+
+
+@router.get("/public-site", response_model=PublicSiteResponse)
+def read_public_site_status(request: Request, actor: AdminActor) -> PublicSiteResponse:
+    builder = request.app.state.public_site_builder
+    status_value = builder.status()
+    return PublicSiteResponse(
+        last_success_at=status_value.last_success_at,
+        last_error=status_value.last_error,
+    )
+
+
+@router.post("/public-site/build", response_model=PublicSiteResponse, dependencies=CsrfGuard)
+def build_public_site(request: Request, actor: AdminActor) -> PublicSiteResponse:
+    """Explicitly rebuild the filtered anonymous site after an operator repair."""
+
+    builder = request.app.state.public_site_builder
+    try:
+        builder.build()
+    except PublicSiteError as exc:
+        # The builder intentionally retains the last successful public output.
+        builder.record_failure(exc)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    status_value = builder.status()
+    _audit("admin.public_site.build", actor, published_at=status_value.last_success_at)
+    return PublicSiteResponse(
+        last_success_at=status_value.last_success_at,
+        last_error=status_value.last_error,
+    )

@@ -10,7 +10,7 @@ Confirmed scope (from user):
 - Search: no dedicated search index — grep-style filesystem search plus mkdocs' own generated static search.
 - Planned from day one: **AI read and write integration for Claude, ChatGPT, and other agents**, so search/download and create-book/chapter/page operations use a clean, permission-aware service behind one REST/OpenAPI surface. **REST-only, no MCP server** — removed from scope by the user (2026-08-28): an MCP server costs materially more tokens per call than a plain bearer-authenticated API for the same read/write operations, and this project doesn't need a second transport to get that value.
 - Auth: **local passwords only** — no SSO/LDAP. Keep the auth layer behind a small `authenticate(email, password) -> user` seam anyway, so adding an external provider later is a new backend rather than a rewrite of every route.
-- Static output: the built mkdocs site has **no runtime ACL**. It is a recovery/export artifact containing every non-draft page, not a permission-preserving replacement for the app. Any configured backup destination and build artifacts are private; public deployment is outside MVP scope.
+- Static output: the administrator export remains a **private** recovery artifact containing every non-draft page and no runtime ACL. A separate public static service is built only from explicitly public books and Home content; it fails closed and cannot stand in for the authenticated app.
 - Runtime deployment: package the FastAPI application in a Docker image for
   Coolify (or any Docker host) deployments. The single application replica
   receives persistent mounts for both `/app/data` (SQLite/lock) and
@@ -424,7 +424,7 @@ guarded round-trip restore are implemented in `app/ssh_archive.py` and
 
 ### Phase 7 — Static export
 
-Static export is a full non-draft recovery copy and has no per-user ACL. The app must display this warning before download actions. Public deployment is out of MVP scope.
+Static export is a full non-draft recovery copy and has no per-user ACL. The app must display this warning before download actions. The deployment also provides a separate filtered public site built only from explicit public flags; it does not reuse the full export.
 
 #### [x] T7.1 — Build/export runner
 `sonnet` / `terra` · **M** · **high** · depends: T3.2
@@ -535,7 +535,7 @@ aren't relitigated mid-implementation:
 | Auth | Local passwords only | No SSO/LDAP, but kept behind an `authenticate()` seam. |
 | Shelves | Not built — books at `docs/` root | Adds a level nobody asked for; addable later as a folder move with no migration. |
 | Drafts | `draft: true` excluded from the build | Via a `hooks/drafts.py` inside the content repo, so exclusion survives the worst-case drill. |
-| Static output | Private full-wiki recovery/export artifact | MkDocs cannot reproduce database ACLs; every non-draft page is included. Public deployment is not implemented in MVP. |
+| Static output | Private full-wiki export plus filtered public site | The export contains every non-draft page and stays private. The public service stages only explicit public content and publishes atomically after a strict build. |
 | Backup | Optional and pluggable — not required to run the app | Local disk (`content/` + `data/`) is durable and complete on its own. A git remote (GitHub or any git host) is one built-in target; `rsync`/S3 sync are equally valid and need no app code. Zero backup targets configured is a fully supported, fully functional state. |
 | Nav tooling | `mkdocs-awesome-nav` v3 with `filename: .pages` | Uses the maintained successor while retaining the repo's small `.pages` convention. |
 | Search | Grep, no app index | Nothing to keep in sync or rebuild; mkdocs supplies a separate search index inside static exports. |

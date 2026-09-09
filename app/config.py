@@ -125,6 +125,10 @@ class Settings(BaseSettings):
     # output must never make the nested repository dirty, and the last good
     # artifact needs to survive a later failed build.
     static_export_path: Path = Path("data/static-export")
+    # A filtered, anonymous-read build.  It is deliberately separate from the
+    # administrator-only full export above: mounting the latter as a public
+    # webroot would disclose every non-draft page.
+    public_site_path: Path = Path("data/public-site")
     mkdocs_executable: str = "mkdocs"
     static_export_timeout_seconds: int = 120
     static_export_output_limit_bytes: int = 65_536

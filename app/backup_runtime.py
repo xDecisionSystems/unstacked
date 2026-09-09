@@ -100,7 +100,7 @@ def activate(app: FastAPI) -> bool:
     # Every successful book/page save commits through GitBackend.commit_paths.
     # Waking this worker makes the following push immediate while retaining
     # the worker's retry/backoff behavior and keeping network I/O off requests.
-    content.git.set_commit_listener(worker.request_sync)
+    content.git.add_commit_listener(worker.request_sync)
     app.state.manual_backup = service
     app.state.backup_sync_worker = worker
     if app.state.backup_serving:
@@ -120,7 +120,10 @@ def deactivate(app: FastAPI) -> None:
     worker = _worker(app)
     if worker is not None:
         worker.stop()
-    app.state.content.git.set_commit_listener(None)
+    # The public-site builder also observes content commits.  Removing only
+    # this worker preserves its independent, local publication trigger.
+    if worker is not None:
+        app.state.content.git.remove_commit_listener(worker.request_sync)
     for name in ("backup_sync_worker", "manual_backup"):
         if hasattr(app.state, name):
             delattr(app.state, name)

@@ -126,7 +126,7 @@ class StaticExportRunner:
                 raise ExportError("MkDocs source could not be packaged") from exc
         return output.getvalue()
 
-    def _run(self, command: list[str]) -> tuple[str, str | None]:
+    def _run(self, command: list[str], *, cwd: Path | None = None) -> tuple[str, str | None]:
         """Run MkDocs with a bounded pipe, timeout, and deliberately small env."""
 
         # Do not pass database URLs, credentials, deploy-platform variables,
@@ -141,7 +141,7 @@ class StaticExportRunner:
         try:
             process = subprocess.Popen(
                 command,
-                cwd=self.content.root,
+                cwd=cwd or self.content.root,
                 env=environment,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,

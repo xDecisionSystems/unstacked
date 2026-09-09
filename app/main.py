@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from app import backup_runtime
+from app import backup_runtime, public_site_runtime
 from app.admin_api import router as admin_router
 from app.ai_api import asset_router
 from app.ai_api import router as ai_router
@@ -69,7 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="Unstacked AI Content API",
         version="0.1.0",
         description="Permission-aware read and create access to a Git-backed Markdown wiki.",
-        lifespan=backup_runtime.lifespan,
+        lifespan=public_site_runtime.lifespan,
     )
     # Registered before any router so it wraps the whole application: an
     # oversized upload has to be refused above the framework, not inside a
@@ -92,6 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # worker, service or route exists until one is -- local disk remains the
     # complete application state on its own.
     backup_runtime.install(app)
+    public_site_runtime.install(app)
     app.include_router(ai_router)
     app.include_router(asset_router)
     app.include_router(web_auth_router)

@@ -194,7 +194,7 @@ class GitBackend:
         self.repo_path = repo_path.resolve()
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = FileLock(lock_path, timeout=lock_timeout_seconds)
-        self._commit_listener: Callable[[], None] | None = None
+        self._commit_listeners: set[Callable[[], None]] = set()
 
     def set_commit_listener(self, listener: Callable[[], None] | None) -> None:
         """Notify an in-process observer after a durable content commit.
@@ -204,7 +204,17 @@ class GitBackend:
         off-site backup worker is unavailable.
         """
 
-        self._commit_listener = listener
+        self._commit_listeners = {listener} if listener is not None else set()
+
+    def add_commit_listener(self, listener: Callable[[], None]) -> None:
+        """Register another best-effort observer of durable content commits."""
+
+        self._commit_listeners.add(listener)
+
+    def remove_commit_listener(self, listener: Callable[[], None]) -> None:
+        """Stop one observer without disrupting other optional services."""
+
+        self._commit_listeners.discard(listener)
 
     @contextmanager
     def write_lock(self):
@@ -375,8 +385,7 @@ class GitBackend:
             except Exception:
                 self._restore_index(index_snapshot)
                 raise
-        listener = self._commit_listener
-        if listener is not None:
+        for listener in tuple(self._commit_listeners):
             try:
                 listener()
             except Exception:

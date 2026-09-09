@@ -986,3 +986,16 @@ def test_home_visibility_requires_admin(app_env, client):
         ).status_code
         == 403
     )
+
+
+def test_admin_can_build_and_inspect_the_filtered_public_site(app_env, client):
+    _app, _settings, _admin, token = app_env
+
+    before = client.get("/api/admin/public-site", headers=bearer(token))
+    assert before.status_code == 200
+    assert set(before.json()) == {"last_success_at", "last_error"}
+
+    built = client.post("/api/admin/public-site/build", json={}, headers=bearer(token))
+    assert built.status_code == 200
+    assert built.json()["last_success_at"] is not None
+    assert built.json()["last_error"] is None
