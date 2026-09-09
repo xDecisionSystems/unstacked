@@ -10,7 +10,7 @@
 <body>
   <header class="topbar">
     {% set app_brand = branding(request) %}<a class="brand" href="/tree"><img src="{{ app_brand.logo_url }}" alt="" aria-hidden="true"><span>{{ app_brand.name }}</span></a>
-    {% if current_user %}<nav class="topbar-nav" aria-label="Content"><a href="/books">Books</a><a href="/pages">Pages</a></nav>{% endif %}
+    {% if current_user is not none %}<nav class="topbar-nav" aria-label="Content"><a href="/books">Books</a><a href="/pages">Pages</a></nav>{% endif %}
     <form class="site-search" method="get" action="/search" role="search">
       <label class="visually-hidden" for="site-search-query">Search content</label>
       <input id="site-search-query" name="q" type="search" placeholder="⌕  Search every page…" value="{{ query|default('') }}">

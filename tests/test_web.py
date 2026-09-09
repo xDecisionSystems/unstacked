@@ -1401,8 +1401,19 @@ def test_public_page_and_book_are_available_without_a_session(app_env, client):
     repository.set_subtree_public("public-handbook", True, admin)
 
     client.cookies.clear()
-    assert client.get("/pages/public-handbook/welcome").status_code == 200
-    assert client.get("/books/public-handbook").status_code == 200
+    public_page = client.get("/pages/public-handbook/welcome")
+    public_book = client.get("/books/public-handbook")
+    assert public_page.status_code == 200
+    assert public_book.status_code == 200
+    for response in (public_page, public_book):
+        assert '<nav class="topbar-nav"' not in response.text
+        assert 'href="/books">Books</a>' not in response.text
+        assert 'href="/pages">Pages</a>' not in response.text
+
+    _login(client, "admin")
+    signed_in = client.get("/pages/public-handbook/welcome")
+    assert 'href="/books">Books</a>' in signed_in.text
+    assert 'href="/pages">Pages</a>' in signed_in.text
 
 
 def test_public_page_hides_the_history_link_for_an_anonymous_visitor(app_env, client):

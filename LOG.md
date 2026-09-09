@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-09 03:24 UTC — Codex
+Made top-bar content navigation explicitly session-only and added regression
+coverage proving anonymous public book and page views do not expose Books or
+Pages links, while authenticated users still receive them.
+
+Tests: focused public-view browser tests pass.
+- Files: `app/templates/base.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-09 03:07 UTC — Codex
 Separated SSH workspace archives from Git synchronization. Administrators can
 now pin an SSH server fingerprint, upload a portable restore-ready ZIP, and
@@ -131,11 +139,3 @@ backgrounds as well as the content controls.
 Ruff and the complete theme API test suite pass.
 - Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme_api.py`,
   `LOG.md`
-
-## 2026-09-07 14:25 UTC — Codex
-Fixed saved color palettes so they override the established UI variables used
-by buttons, headings, links, tags, backgrounds, and status accents instead of
-only writing unused palette aliases.
-
-Ruff and the complete theme API test suite pass.
-- Files: `app/theme.py`, `tests/test_theme_api.py`, `LOG.md`
