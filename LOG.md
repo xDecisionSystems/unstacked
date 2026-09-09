@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-09-09 05:22 UTC — Codex
+Added a plan for a separate public static site and management site while
+explicitly preserving the current Unstacked login process and permissions.
+
+- Files: `plan/split_site_plan.md`, `LOG.md`
+
 ## 2026-09-09 03:24 UTC — Codex
 Made top-bar content navigation explicitly session-only and added regression
 coverage proving anonymous public book and page views do not expose Books or
@@ -130,12 +136,3 @@ navigation colour when loaded.
 Ruff and the complete theme API test suite pass.
 - Files: `app/theme.py`, `app/theme_config.py`, `app/admin_api.py`,
   `app/templates/admin.html`, `tests/test_theme_api.py`, `LOG.md`
-
-## 2026-09-07 14:38 UTC — Codex
-Extended palette application to the navigation chrome: the top bar, Settings
-sidebar, and active Settings control now receive visible palette-derived
-backgrounds as well as the content controls.
-
-Ruff and the complete theme API test suite pass.
-- Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme_api.py`,
-  `LOG.md`
