@@ -1307,7 +1307,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert 'id="git-backup-section"' in response.text
     assert 'data-admin-panel="ssh-backup"' in response.text
     assert 'id="ssh-backup-section"' in response.text
-    assert "SSH backup" in response.text
+    assert "SSH sync" in response.text
     assert "GitHub repository" not in response.text
     assert "synchronized to its <code>main</code> branch" in response.text
     assert 'data-title="Import / Export"' in response.text

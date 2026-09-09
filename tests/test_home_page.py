@@ -94,7 +94,9 @@ def test_existing_untouched_placeholder_is_migrated_once(tmp_path: Path):
     assert metadata["widgets"] == HOME_STARTER_WIDGETS
     assert metadata["title"] == "Home"
     assert "Your featured books and pages." in body
-    assert repo.head.commit.message == "Migrate default home page to the widget-aware starter"
+    assert repo.head.commit.message.startswith(
+        "Migrate default home page to the widget-aware starter"
+    )
 
     # Re-running startup is a no-op once the migration already ran.
     seeded_head = repo.head.commit.hexsha

@@ -130,7 +130,11 @@ def test_update_replaces_the_body_without_losing_page_identity(seeded, docs, act
     assert after["author"] == before["author"]
     assert not repo.is_dirty()
     assert repo.head.commit.author.email == actor.email
-    assert repo.head.commit.message.startswith("Update page: ops/overview.md")
+    message = repo.head.commit.message
+    assert message.startswith("Update page: ops/overview.md")
+    assert "Changed paths:\n- docs/ops/overview.md" in message
+    assert f"User: {actor.display_name} <{actor.email}>" in message
+    assert "Timestamp (UTC):" in message
 
 
 def test_update_rejects_a_page_that_is_not_in_the_tree(seeded, actor):

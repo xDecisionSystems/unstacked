@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-09 02:41 UTC — Codex
+Clarified Git as synchronization in Settings and enriched every content commit
+message with changed paths, editor identity, and a UTC timestamp.
+
+Ruff and focused content, Git, Home, and Settings tests pass.
+- Files: `app/git_backend.py`, `app/templates/admin.html`,
+  `tests/test_content_lifecycle.py`, `tests/test_home_page.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-09 02:37 UTC — Codex
 Wired every successful content commit to wake the optional Git backup worker
 immediately. Book and page saves now trigger a prompt remote push without
@@ -125,12 +134,3 @@ sending the administrator directly into Page creation.
 
 Ruff and the focused browser content-management test pass.
 - Files: `app/web.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 14:12 UTC — Codex
-Merged Branding into Appearance so color and header identity are managed in
-one Settings page. MkDocs ZIP downloads now use the space-free branded format
-`keybadger_<name><DDMMYYYY>-<HHMM>.zip`.
-
-Ruff and focused export/Settings tests pass.
-- Files: `app/templates/admin.html`, `app/web.py`, `tests/test_export.py`,
-  `tests/test_web.py`, `LOG.md`

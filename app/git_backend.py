@@ -7,6 +7,7 @@ import tempfile
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -365,7 +366,11 @@ class GitBackend:
                 if present:
                     repo.index.add(present)
                 actor = Actor(name, email)
-                commit = repo.index.commit(message, author=actor, committer=actor)
+                commit = repo.index.commit(
+                    _content_commit_message(message, relative, name, email),
+                    author=actor,
+                    committer=actor,
+                )
                 committed_sha = commit.hexsha
             except Exception:
                 self._restore_index(index_snapshot)
@@ -860,6 +865,27 @@ printf 'password=%s\\n' "$token"
         except Exception:
             Path(temporary).unlink(missing_ok=True)
             raise
+
+
+def _content_commit_message(message: str, paths: Sequence[str], name: str, email: str) -> str:
+    """Make the durable history self-describing without trusting user text.
+
+    Git already records author and time as commit metadata; repeating those
+    facts in the message makes them visible in concise log views and exported
+    repository history. Whitespace normalization prevents a display name from
+    introducing misleading extra trailers.
+    """
+
+    editor = " ".join(name.split()) or "Unknown user"
+    address = " ".join(email.split())
+    changed_paths = "\n".join(f"- {path}" for path in paths)
+    timestamp = datetime.now(timezone.utc).isoformat()
+    return (
+        f"{message.rstrip()}\n\n"
+        f"Changed paths:\n{changed_paths}\n"
+        f"User: {editor} <{address}>\n"
+        f"Timestamp (UTC): {timestamp}"
+    )
 
 
 def _push_refspec(branch: str) -> str:
