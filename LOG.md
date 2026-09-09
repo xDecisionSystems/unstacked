@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-09 02:19 UTC — Codex
+Split backup connection choices into separate Settings pages: Git repository
+for HTTPS/token setup and SSH backup for deploy-key and server-fingerprint
+confirmation. Each still configures the one active backup destination.
+
+Ruff and focused backup and Settings tests pass.
+- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-08 13:16 UTC — Codex
 Moved SSH repository backup configuration into its own Remote backup Settings
 page. Import / Export now remains focused on moving MkDocs ZIP files and
@@ -125,13 +133,3 @@ with its obsolete styling, so the sidebar contains only Settings navigation.
 Ruff and the focused Settings page test pass.
 - Files: `app/templates/admin.html`, `app/static/style.css`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 14:06 UTC — Codex
-Added a guarded MkDocs ZIP import to Import / Export. Archives are screened
-for unsafe paths and links, staged as a fresh content Git repository, and can
-replace the workspace only after a verified recovery copy and confirmation.
-
-Ruff, focused Settings markup, and MkDocs export/import tests pass.
-- Files: `app/mkdocs_import.py`, `app/upload_limit.py`, `app/web.py`,
-  `app/templates/admin.html`, `tests/test_export.py`, `tests/test_web.py`,
-  `LOG.md`

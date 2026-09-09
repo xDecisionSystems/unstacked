@@ -1303,11 +1303,13 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert "/api/admin/smtp" in response.text
     assert "data-smtp" in response.text
     assert 'data-title="SMTP"' in response.text
-    assert 'data-admin-panel="remote-backup"' in response.text
-    assert "Remote backup" in response.text
-    assert 'id="remote-backup-section"' in response.text
+    assert 'data-admin-panel="git-backup"' in response.text
+    assert 'id="git-backup-section"' in response.text
+    assert 'data-admin-panel="ssh-backup"' in response.text
+    assert 'id="ssh-backup-section"' in response.text
+    assert "SSH backup" in response.text
     assert "GitHub repository" not in response.text
-    assert "automatically synchronized to its <code>main</code> branch" in response.text
+    assert "synchronized to its <code>main</code> branch" in response.text
     assert 'data-title="Import / Export"' in response.text
     assert 'data-admin-panel="branding"' not in response.text
     assert 'id="branding-section"' not in response.text
