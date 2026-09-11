@@ -24,7 +24,7 @@
         <span class="widget-grip" aria-hidden="true">⠿</span>
         <span class="widget-label">{{ widget.type | capitalize }}</span>
         <span class="widget-id">{{ widget.id }}</span>
-        {% if widget.type not in ['data-cards', 'switching-cards', 'text'] %}<label class="widget-title-label">Title<input type="text" class="widget-title-input" value="{{ widget.get('config', {}).get('title', '') }}" aria-label="Title for the {{ widget.id }} widget"></label>{% endif %}
+        {% if widget.type not in ['data-cards', 'switching-cards', 'text', 'horizontal-rule'] %}<label class="widget-title-label">Title<input type="text" class="widget-title-input" value="{{ widget.get('config', {}).get('title', '') }}" aria-label="Title for the {{ widget.id }} widget"></label>{% endif %}
         {% if widget.type in ['data-cards', 'switching-cards', 'text'] %}<label class="widget-source-label">Source page<input type="text" class="widget-source-input" value="{{ widget.get('config', {}).get('source', '') }}" placeholder="research/about.md" aria-label="Source page for the {{ widget.id }} widget"></label>{% if widget.type == 'text' %}<span class="tag-help widget-data-help">This Markdown page is rendered below Home.</span>{% else %}<span class="tag-help widget-data-help">Its title, intro, filters, and cards come from this Markdown file.</span>{% endif %}{% endif %}
         <div class="widget-move-controls">
           <button type="button" class="widget-move-up" aria-label="Move the {{ widget.type }} widget up">↑</button>
@@ -36,7 +36,7 @@
     </ul>
     <div id="add-widget-form" class="widget-add-form">
       <label>Widget id<input type="text" id="add-widget-id" placeholder="e.g. projects"></label>
-      <label>Type<select id="add-widget-type"><option value="featured">Featured content</option><option value="text">Text</option><option value="data-cards">Data cards</option><option value="switching-cards">Switching cards</option></select></label>
+      <label>Type<select id="add-widget-type"><option value="featured">Featured content</option><option value="text">Text</option><option value="data-cards">Data cards</option><option value="switching-cards">Switching cards</option><option value="horizontal-rule">Horizontal separator</option></select></label>
       <label id="add-widget-title-label">Title (optional)<input type="text" id="add-widget-title" placeholder="e.g. Featured"></label>
       <label id="add-widget-source-label" hidden>Source page<input type="text" id="add-widget-source" placeholder="research/grants.md"></label>
       <button type="button" id="add-widget-submit">Add widget</button>
@@ -130,7 +130,7 @@
     row.draggable = true;
     row.dataset.id = id;
     row.dataset.type = type;
-    row.dataset.config = JSON.stringify(['data-cards', 'switching-cards', 'text'].includes(type) ? { source } : { title: title || '' });
+    row.dataset.config = JSON.stringify(type === 'horizontal-rule' ? {} : ['data-cards', 'switching-cards', 'text'].includes(type) ? { source } : { title: title || '' });
 
     const grip = document.createElement('span');
     grip.className = 'widget-grip';
@@ -146,7 +146,7 @@
     idSpan.textContent = id;
 
     let titleLabel = null;
-    if (!['data-cards', 'switching-cards', 'text'].includes(type)) {
+    if (!['data-cards', 'switching-cards', 'text', 'horizontal-rule'].includes(type)) {
       titleLabel = document.createElement('label');
       titleLabel.className = 'widget-title-label';
       titleLabel.append('Title');

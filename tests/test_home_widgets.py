@@ -292,6 +292,19 @@ def test_switching_cards_uses_the_data_card_source_format(app_env):
     assert result.rendered[0].data["filters"] == [{"id": "graduate", "label": "Graduate"}]
 
 
+def test_horizontal_rule_widget_needs_no_source_page(app_env):
+    app, _settings, admin, _token = app_env
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        result = build_home_widgets(
+            [{"id": "break", "type": "horizontal-rule", "config": {}}],
+            authorization,
+            app.state.content,
+        )
+    assert result.errors == []
+    assert result.rendered[0].type == "horizontal-rule"
+
+
 # --------------------------------------------------------------------------
 # Multiple independent ``featured`` widget instances (per-widget grids).
 # --------------------------------------------------------------------------

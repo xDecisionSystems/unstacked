@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 04:30 UTC — Codex
+Added a Horizontal separator widget to the Home, Book, and Page pickers. It
+renders a palette-aware divider and requires no Markdown source file.
+
+Tests: Ruff and focused separator/widget-picker tests pass.
+- Files: `app/home_widgets.py`, `app/static/style.css`,
+  `app/static/widget_editor.js`, `app/templates/_content_widgets.html`,
+  `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
+  `tests/test_home_widgets.py`, `LOG.md`
+
 ## 2026-09-11 04:27 UTC — Codex
 Added the missing Text choice to Home's widget picker. Selecting it now
 reveals the same required Markdown source-page field available in Book and
@@ -147,13 +157,3 @@ tests pass.
 - Files: `app/ai_service.py`, `app/content.py`, `app/nav.py`,
   `app/templates/book.html`, `app/templates/book_editor.html`, `app/web.py`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 02:45 UTC — Codex
-Completed the public/management separation at the browser-route boundary.
-Anonymous management visits to Home, Books, Pages, individual books, and
-individual pages now redirect to login; public content is served only by the
-filtered public static service.
-
-Tests: Ruff, focused management-route browser tests, and public-site tests
-pass.
-- Files: `app/web.py`, `tests/test_web.py`, `LOG.md`

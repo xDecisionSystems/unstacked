@@ -356,6 +356,14 @@ def _render_text(
     )
 
 
+def _render_horizontal_rule(
+    entry: WidgetEntry, authorization: AuthorizationContext, content: ContentRepository
+) -> RenderedWidget:
+    """Render a layout-only separator without adding any content state."""
+
+    return RenderedWidget(id=entry.id, type=entry.type, title="", data={})
+
+
 WIDGET_REGISTRY: dict[str, WidgetRenderer] = {
     "featured": _render_featured,
     "data-cards": _render_data_cards,
@@ -364,6 +372,7 @@ WIDGET_REGISTRY: dict[str, WidgetRenderer] = {
     # category switches, while it shares the same portable source schema.
     "switching-cards": _render_data_cards,
     "text": _render_text,
+    "horizontal-rule": _render_horizontal_rule,
 }
 
 

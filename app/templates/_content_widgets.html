@@ -3,6 +3,8 @@
 <section class="main-pages home-widget" aria-label="{{ widget.title or (widget.type|capitalize ~ ' widget') }}">
   {% if widget.type == 'text' %}
     {% if widget.data.html %}<article class="page-body widget-text">{{ widget.data.html | safe }}</article>{% endif %}
+  {% elif widget.type == 'horizontal-rule' %}
+    <hr class="widget-divider">
   {% elif widget.type in ['data-cards', 'switching-cards'] %}
     {% set cards = widget.data['items'] %}
     <div class="data-cards-widget">
