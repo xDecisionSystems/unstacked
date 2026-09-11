@@ -72,6 +72,13 @@ class Navigation:
     def public(self) -> bool:
         return self.values.get("public") is True
 
+    @property
+    def description(self) -> str:
+        """Optional portable Markdown introduction for a book."""
+
+        value = self.values.get("description")
+        return value if isinstance(value, str) else ""
+
 
 def new_navigation(title: str) -> Navigation:
     """Return the default explicit container navigation used by Unstacked."""
@@ -207,6 +214,11 @@ def _validate_values(source: str, values: dict[str, Any]) -> None:
     public = values.get("public")
     if public is not None and not isinstance(public, bool):
         raise NavigationError(f"malformed navigation file {source}: public must be true or false")
+    description = values.get("description")
+    if description is not None and not isinstance(description, str):
+        raise NavigationError(
+            f"malformed navigation file {source}: description must be Markdown text"
+        )
 
 
 def _atomic_write(path: Path, text: str) -> None:

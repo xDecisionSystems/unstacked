@@ -10,6 +10,17 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 02:56 UTC — Codex
+Added an editable Markdown introduction to every book. The section is stored
+portably in each book's `.pages` file, rendered above its page grid, and can
+be edited with the Toast UI book editor by users with book write access.
+
+Tests: Ruff, focused book-editor browser tests, content-build tests, and nav
+tests pass.
+- Files: `app/ai_service.py`, `app/content.py`, `app/nav.py`,
+  `app/templates/book.html`, `app/templates/book_editor.html`, `app/web.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 02:45 UTC — Codex
 Completed the public/management separation at the browser-route boundary.
 Anonymous management visits to Home, Books, Pages, individual books, and
@@ -136,15 +147,6 @@ Ruff and focused palette tests pass.
 Added a selectable UCF Black & Gold palette based on UCF's official digital
 black and bright gold. Bright action colors now receive an automatically
 contrasting dark label, preserving readable controls.
-
-Ruff and focused palette tests pass.
-- Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme.py`,
-  `tests/test_theme_api.py`, `LOG.md`
-
-## 2026-09-07 15:11 UTC — Codex
-Implemented the four reviewed Figma palette directions as the selectable
-built-in palettes. Navigation now uses palette-aware contrasting text, so the
-dark Harbor Ink chrome remains readable in both the top bar and Settings.
 
 Ruff and focused palette tests pass.
 - Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme.py`,

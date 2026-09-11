@@ -210,6 +210,15 @@ def _container_public(docs: Path, *parts: str) -> bool:
         return False
 
 
+def _container_description(docs: Path, *parts: str) -> str:
+    """Return a book's optional portable Markdown introduction."""
+
+    try:
+        return read_navigation(docs.joinpath(*parts, ".pages")).description
+    except NavigationError:
+        return ""
+
+
 def _optional_normal_web_user(request: Request) -> User | None:
     try:
         return require_normal_web_user(get_current_web_user(request))
@@ -859,7 +868,84 @@ def book_view(
     if book is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
     context["book"] = book
+    description = _container_description(request.app.state.content.docs, book_slug)
+    try:
+        description_html = MarkdownRenderer(request.app.state.content.root).render(
+            f"{book_slug}/description.md", description
+        )
+    except RenderConfigurationError:
+        description_html = ""
+    context["book"]["description"] = description
+    context["book"]["description_html"] = description_html
     return templates.TemplateResponse(request, "book.html", context)
+
+
+def _book_editor_context(
+    request: Request,
+    session: Session,
+    user: User,
+    book_slug: str,
+    *,
+    markdown: str | None = None,
+    error: str | None = None,
+    status_code: int = 200,
+) -> Response:
+    try:
+        navigation = read_navigation(request.app.state.content.docs / book_slug / ".pages")
+    except NavigationError:
+        context = _base_context(request, session, user)
+        return templates.TemplateResponse(request, "404.html", context, status_code=404)
+    context = _base_context(request, session, user)
+    context.update(
+        {
+            "book": {"slug": book_slug, "title": navigation.title or _slug_title(book_slug)},
+            "form": {"markdown": navigation.description if markdown is None else markdown},
+            "error": error,
+        }
+    )
+    return templates.TemplateResponse(request, "book_editor.html", context, status_code=status_code)
+
+
+@router.get("/books/{book_slug}/edit", response_class=HTMLResponse, include_in_schema=False)
+def edit_book_description(
+    request: Request,
+    book_slug: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    with Session(request.app.state.engine) as session:
+        try:
+            _authorization(session, user).require_write(book_slug)
+        except AccessDenied:
+            context = _base_context(request, session, user)
+            return templates.TemplateResponse(request, "404.html", context, status_code=404)
+        return _book_editor_context(request, session, user, book_slug)
+
+
+@router.post(
+    "/books/{book_slug}/edit", include_in_schema=False, dependencies=[Depends(require_csrf)]
+)
+async def save_book_description(
+    request: Request,
+    book_slug: str,
+    user: Annotated[User, Depends(require_normal_web_user)],
+) -> Response:
+    form = await _read_form(request, max_bytes=request.app.state.settings.max_page_bytes + 16_384)
+    with Session(request.app.state.engine) as session:
+        try:
+            request.app.state.ai_service.set_book_description(
+                _authorization(session, user), path=book_slug, markdown=form.get("markdown", "")
+            )
+        except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
+            return _book_editor_context(
+                request,
+                session,
+                user,
+                book_slug,
+                markdown=form.get("markdown", ""),
+                error=_web_error(exc),
+                status_code=422,
+            )
+    return RedirectResponse(f"/books/{book_slug}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/search", response_class=HTMLResponse, include_in_schema=False)

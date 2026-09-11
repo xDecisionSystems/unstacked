@@ -1363,6 +1363,35 @@ class ContentRepository:
                 tree.write_internal_text(relative, original, overwrite=True)
                 raise
 
+    def set_container_description(self, relative: str, markdown: str, actor: User) -> str:
+        """Persist a book's portable Markdown introduction in ``.pages``."""
+
+        if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
+            raise ContentError("book description exceeds configured size limit")
+        with self.git.write_lock():
+            relative = normalize_relative_path(relative)
+            if path_depth(relative) != 1 or relative in RESERVED_ROOT_NAMES:
+                raise ContentError("only books can have descriptions")
+            tree = ConfinedTree(self.docs)
+            try:
+                original = tree.read_internal_text(relative)
+                navigation = parse_navigation(original, source=".pages")
+                values = dict(navigation.values)
+                values["description"] = markdown
+                serialized = serialize_navigation(Navigation(values), source=".pages")
+                tree.write_internal_text(relative, serialized, overwrite=True)
+                return self.git.commit_paths(
+                    [f"docs/{relative}/.pages"],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Update book description: {relative}",
+                )
+            except NavigationError as exc:
+                raise ContentError("navigation file is malformed") from exc
+            except Exception:
+                tree.write_internal_text(relative, original, overwrite=True)
+                raise
+
     def set_container_public(self, relative: str, public: bool, actor: User) -> str:
         """Persist anonymous-read visibility in portable container metadata."""
 

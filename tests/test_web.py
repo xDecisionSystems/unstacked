@@ -1423,6 +1423,32 @@ def test_public_content_routes_redirect_to_login_on_management_site(app_env, cli
         assert response.headers["location"] == "/login"
 
 
+def test_book_has_an_editable_markdown_introduction(app_env, client):
+    app, _settings, admin, _token = app_env
+    app.state.content.create_book("Handbook", "handbook", admin)
+    _login(client, "admin")
+
+    editor = client.get("/books/handbook/edit")
+    assert editor.status_code == 200
+    assert "Edit Handbook" in editor.text
+    assert "toastui-editor-all.min.js" in editor.text
+
+    saved = client.post(
+        "/books/handbook/edit",
+        data={"csrf_token": _csrf_from(editor.text), "markdown": "Welcome to **Handbook**."},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/books/handbook"
+    assert "description: Welcome to **Handbook**." in (
+        app.state.content.docs / "handbook" / ".pages"
+    ).read_text(encoding="utf-8")
+
+    book = client.get("/books/handbook")
+    assert 'class="page-body book-description"' in book.text
+    assert "Welcome to <strong>Handbook</strong>." in book.text
+
+
 def test_home_not_public_keeps_tree_behind_login(client):
     client.cookies.clear()
     response = client.get("/tree", follow_redirects=False)

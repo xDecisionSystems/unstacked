@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ book.title }} · Unstacked{% endblock %}
+{% block content %}
+<h1>Edit {{ book.title }}</h1>
+<p>Write the introductory section displayed above this book's page cards.</p>
+{% if error %}<p class="error-message">{{ error }}</p>{% endif %}
+<form class="editor-form home-editor-form" method="post" action="/books/{{ book.slug }}/edit" id="book-edit-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="markdown-editor">Markdown</label>
+  <textarea id="markdown-editor" name="markdown">{{ form.markdown }}</textarea>
+  <div class="form-actions"><button type="submit">Save</button><a class="button" href="/books/{{ book.slug }}">Cancel</a></div>
+</form>
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
+<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+<script>
+(() => {
+  const source = document.getElementById('markdown-editor');
+  const form = document.getElementById('book-edit-form');
+  if (!source || !form || !window.toastui?.Editor) return;
+  const mount = document.createElement('div'); mount.id = 'toast-editor'; source.before(mount); source.hidden = true;
+  const editor = new window.toastui.Editor({ el: mount, height: '480px', initialEditType: 'markdown', previewStyle: 'vertical', initialValue: source.value, usageStatistics: false });
+  form.addEventListener('submit', () => { source.value = editor.getMarkdown(); });
+})();
+</script>
+{% endblock %}

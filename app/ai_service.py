@@ -117,6 +117,13 @@ class AIContentService:
         writable_path = authorization.require_write(path)
         return self.content.set_container_tags(writable_path, tags, authorization.user)
 
+    def set_book_description(
+        self, authorization: AuthorizationContext, *, path: str, markdown: str
+    ) -> str:
+        return self.content.set_container_description(
+            authorization.require_write(path), markdown, authorization.user
+        )
+
     def set_container_public(
         self, authorization: AuthorizationContext, *, path: str, public: bool
     ) -> str:

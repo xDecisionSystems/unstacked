@@ -5,6 +5,7 @@
 <div class="screen-heading dashboard-header">
   <div><p class="eyebrow">BOOK</p><h1>{{ book.title }}</h1><p>{{ book.page_count }} page{{ '' if book.page_count == 1 else 's' }}.</p></div>
   {% if book.can_write %}
+  <a class="button" href="/books/{{ book.slug }}/edit">Edit book</a>
   <details class="container-tags"><summary>Tags{% if book.tags %} · {{ book.tags|join(', ') }}{% endif %}</summary><form method="post" action="/containers/{{ book.slug }}/tags"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Book tags<input name="tags" value="{{ book.tags|join(', ') }}" placeholder="Policy, handbook"></label><button type="submit">Save tags</button></form></details>
   <details class="new-book-popover">
     <summary class="add-content-button" title="Add a new page" aria-label="Add a new page">+ Add page</summary>
@@ -17,6 +18,7 @@
   </details>
   {% endif %}
 </div>
+{% if book.description_html %}<article class="page-body book-description">{{ book.description_html | safe }}</article>{% endif %}
 <section class="library-filters book-page-filters" aria-label="Filter pages"><label class="visually-hidden" for="page-filter">Search pages</label><input id="page-filter" type="search" placeholder="⌕  Filter pages by title…"></section>
 {% if book.pages %}
 <ul class="page-cards book-page-grid" id="book-page-cards" data-parent="{{ book.slug }}">
