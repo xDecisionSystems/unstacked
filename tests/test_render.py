@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -106,3 +107,36 @@ markdown_extensions:
     )
     with pytest.raises(RenderConfigurationError, match="Markdown extension"):
         renderer.render("book/page.md", "hello")
+
+
+def test_repeated_renders_reuse_the_cached_mkdocs_config(tmp_path: Path, monkeypatch) -> None:
+    """A page with several source-backed widgets calls render() once per
+    widget/card in one request. Before caching, each call independently
+    re-ran MkDocs' full config loader against the same unchanged file.
+    """
+
+    import app.render as render_module
+
+    renderer = _renderer(tmp_path)
+    calls = []
+    real_load_config = render_module.load_config
+
+    def counting_load_config(*args, **kwargs):
+        calls.append(1)
+        return real_load_config(*args, **kwargs)
+
+    monkeypatch.setattr(render_module, "load_config", counting_load_config)
+
+    renderer.render("book/page.md", "one")
+    renderer.render("book/page.md", "two")
+    assert len(calls) == 1, "second render() must reuse the cached config, not reload it"
+
+    # Touching the file (even with unchanged content, to guarantee a new
+    # mtime on any filesystem's timestamp resolution) must invalidate the
+    # cache -- editing mkdocs.yml must not require restarting the app.
+    config_path = tmp_path / "content" / "mkdocs.yml"
+    new_mtime = config_path.stat().st_mtime + 1
+    config_path.write_text(config_path.read_text(encoding="utf-8"), encoding="utf-8")
+    os.utime(config_path, (new_mtime, new_mtime))
+    renderer.render("book/page.md", "three")
+    assert len(calls) == 2, "a changed config file must trigger a fresh load"

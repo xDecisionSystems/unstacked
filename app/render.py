@@ -127,9 +127,27 @@ def _configured_plugin_names(config_path: Path) -> set[str]:
     return names
 
 
+# Keyed by config_path, holding (mtime at load time, extensions, configs).
+# A page with several source-backed widgets calls render() -- and so this --
+# once per widget/card in one request; MkDocs' own config loader does full
+# schema validation (plus _configured_plugin_names' own separate parse pass
+# first), which is too expensive to redo that many times for a file that,
+# in practice, is never rewritten at runtime. Extension_configs is a dict,
+# so callers get a copy, never the cached one, in case anything downstream
+# were to mutate it.
+_markdown_settings_cache: dict[Path, tuple[float, list[str], dict[str, Any]]] = {}
+
+
 def _load_markdown_settings(config_path: Path) -> tuple[list[str], dict[str, Any]]:
     """Use MkDocs' loader so preview follows its extension/default semantics."""
 
+    try:
+        mtime = config_path.stat().st_mtime
+    except OSError as exc:
+        raise RenderConfigurationError("Cannot read MkDocs configuration for preview") from exc
+    cached = _markdown_settings_cache.get(config_path)
+    if cached is not None and cached[0] == mtime:
+        return cached[1], dict(cached[2])
     _configured_plugin_names(config_path)
     try:
         config = load_config(config_file=str(config_path))
@@ -143,6 +161,7 @@ def _load_markdown_settings(config_path: Path) -> tuple[list[str], dict[str, Any
     extension_configs = config["mdx_configs"]
     if not isinstance(extensions, list) or not isinstance(extension_configs, dict):
         raise RenderConfigurationError("MkDocs Markdown configuration is malformed")
+    _markdown_settings_cache[config_path] = (mtime, extensions, extension_configs)
     return extensions, extension_configs
 
 

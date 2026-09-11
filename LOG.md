@@ -10,6 +10,28 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 15:27 UTC — Claude Code
+Phase 5 (efficiency) of `plans/plan_widget_regression_fixes.md`, the last
+phase of that plan: cached `_load_markdown_settings`'s result in
+`app/render.py`, keyed by the `mkdocs.yml` path and mtime. MkDocs' config
+loader does full schema validation (plus its own separate plugin-name
+parse pass first), and a page with several source-backed widgets was
+redoing that once per card/widget on every render. Verified a changed
+config still invalidates the cache correctly (no app restart needed to
+pick up an edited `mkdocs.yml`). Left two other items alone deliberately:
+the `book_view` redundancy (item 15) was already bundled into Phase 3;
+threading pre-validated widget state through `ContentRepository`'s public
+write methods to avoid a third, cheap, in-memory re-validation (item 17)
+would mean real API changes to security/data-integrity-sensitive write
+paths for a gain in the microseconds -- not worth the risk.
+
+This closes out plan_widget_regression_fixes.md: all 5 phases done.
+
+Tests: Ruff and full pytest pass (same two pre-existing, unrelated
+failures as before).
+- Files: `app/render.py`, `plans/plan_widget_regression_fixes.md`,
+  `tests/test_render.py`, `LOG.md`
+
 ## 2026-09-11 15:16 UTC — Claude Code
 Phase 4 (cleanup, no behavior change) of `plans/plan_widget_regression_fixes.md`:
 deleted six functions left fully dead in `app/web.py` since the anonymous-
@@ -205,17 +227,6 @@ palette rather than retaining fixed original-theme colors.
 
 Tests: Ruff plus focused palette and Home-widget tests pass.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-09-11 03:36 UTC — Codex
-Made generic data-card widgets Markdown-driven and added ADC Lab-style
-switchable category filters. The source page now supplies the widget title,
-introductory text, filter labels, card memberships, and all card details.
-
-Tests: Ruff and focused Home-widget/editor tests pass.
-- Files: `app/home_widgets.py`, `app/static/style.css`,
-  `app/templates/home_editor.html`, `app/templates/tree.html`,
-  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
-
 
 
 

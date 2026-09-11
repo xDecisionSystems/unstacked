@@ -169,19 +169,32 @@ touching the database, so it never exercised the buggy path).
 
 ## Phase 5 — Efficiency (only after Phases 1-4 are done and tested)
 
+**Status: done** (15 bundled into Phase 3; 16 fixed; 17 deliberately
+skipped, see below).
+
 15. ~~**Redundant per-request work in `book_view`.**~~ Done already, bundled
     into Phase 3 (see its status note) rather than deferred here.
 16. **Redundant `MarkdownRenderer` construction and mkdocs-config reload.**
-    `_render_content_widgets` builds a new `MarkdownRenderer` and calls
-    `render()` once per card; `render()` itself reloads `mkdocs.yml` and
-    rebuilds the extension pipeline on every call with no caching. Build one
-    renderer per request at minimum; consider caching the loaded mkdocs
-    config across requests if profiling shows it matters.
-17. **Triple widget-list validation on save.** `_generated_widget_entries`
-    (web.py) validates and canonicalizes the widget list; `update_page`/
-    `update_home_page`/`set_container_description` validate it again
-    internally; `ensure_widget_sources` re-derives source paths a third time.
-    Thread the already-validated result through instead of re-validating.
+    Fixed by caching `_load_markdown_settings`'s result in `app/render.py`,
+    keyed by the config file's path and mtime -- MkDocs' loader does full
+    schema validation (plus a separate plugin-name parse pass first), and a
+    page with several source-backed widgets was redoing that once per
+    card. Verified a changed config still invalidates the cache (no restart
+    needed to pick up an edited `mkdocs.yml`). Left `MarkdownRenderer`
+    object construction itself untouched -- its `__init__` is cheap (just
+    stores two paths); the expensive work was always inside `render()`,
+    not in how many renderer instances exist.
+17. ~~**Triple widget-list validation on save.**~~ Skipped deliberately.
+    `_validate_widget_entries` is a cheap, pure, in-memory check over a
+    short list (typically single digits of widgets) -- unlike item 16's
+    genuine I/O- and schema-validation-bound cost, this redundancy is
+    microseconds, not milliseconds. Removing it would mean threading a
+    "trust me, already validated" state through `ContentRepository`'s
+    public write methods (`update_page`, `update_home_page`,
+    `set_container_description`, `ensure_widget_sources`) -- real API
+    surface changes to security/data-integrity-sensitive write paths,
+    risking a validation-bypass bug for a gain nobody would ever measure.
+    Not worth it.
 
 ## Verification
 
