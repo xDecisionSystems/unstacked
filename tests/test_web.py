@@ -363,13 +363,13 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
             "title: Card data\n",
             "title: Card data\nwidget:\n"
             "  title: Funded Projects & Grants\n"
-            "  text: Current and recent work.\n"
+            "  text: Current and **recent** work.\n"
             "  filters:\n"
             "    - id: research\n"
             "      label: Research\n"
             "cards:\n"
             "  - title: Human-AI Collaboration\n"
-            "    text: Safer autonomous systems.\n"
+            "    text: Safer *autonomous* systems.\n"
             "    label: Office of Naval Research\n"
             "    date: Aug 2021\n"
             "    target: research\n"
@@ -397,7 +397,8 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
     assert "Office of Naval Research" in home.text
     assert 'href="/books/research"' in home.text
     assert 'class="data-cards-widget"' in home.text
-    assert "Current and recent work." in home.text
+    assert "Current and <strong>recent</strong> work." in home.text
+    assert "Safer <em>autonomous</em> systems." in home.text
     assert 'data-card-filter="research"' in home.text
     assert 'data-card-filters="research"' in home.text
 

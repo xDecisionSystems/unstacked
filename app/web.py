@@ -542,17 +542,33 @@ def _home_context(request: Request, session: Session, user: User) -> dict:
 def _render_content_widgets(
     content: ContentRepository, authorization: AuthorizationContext, raw_widgets: object
 ) -> tuple[list, list[str]]:
-    """Render portable widgets and turn text-widget Markdown into safe HTML."""
+    """Render portable widgets and turn Markdown-bearing fields into safe HTML."""
 
     result = build_home_widgets(raw_widgets, authorization, content)
     renderer = MarkdownRenderer(content.root)
     for widget in result.rendered:
-        if widget.type != "text" or not widget.data.get("markdown"):
-            continue
-        try:
-            widget.data["html"] = renderer.render(widget.data["source"], widget.data["markdown"])
-        except RenderConfigurationError:
-            widget.data["html"] = ""
+        if widget.type == "text" and widget.data.get("markdown"):
+            try:
+                widget.data["html"] = renderer.render(
+                    widget.data["source"], widget.data["markdown"]
+                )
+            except RenderConfigurationError:
+                widget.data["html"] = ""
+        elif widget.type == "data-cards":
+            try:
+                if widget.data.get("text"):
+                    widget.data["text_html"] = renderer.render(
+                        widget.data["source"], widget.data["text"]
+                    )
+                for card in widget.data["items"]:
+                    if card.get("text"):
+                        card["text_html"] = renderer.render(
+                            widget.data["source"], card["text"]
+                        )
+            except RenderConfigurationError:
+                widget.data["text_html"] = ""
+                for card in widget.data["items"]:
+                    card["text_html"] = ""
     return result.rendered, [error.message for error in result.errors]
 
 

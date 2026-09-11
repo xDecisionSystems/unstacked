@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:49 UTC — Codex
+Enabled safe Markdown formatting for data-card widget introductions and card
+text. These fields now render through the same Markdown pipeline as Text
+widgets, while titles, labels, dates, and filter controls remain plain text.
+
+Tests: Ruff and focused text/data-card widget tests pass.
+- Files: `app/static/style.css`, `app/templates/_content_widgets.html`,
+  `app/web.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 03:46 UTC — Codex
 Extended portable widgets from Home to book and page views. Authors can now
 add Markdown-backed text or data-card widgets in Book and Page editors; text
@@ -157,9 +166,3 @@ site healthy on 18095.
   `deploy/public-nginx.conf`, `docker-compose.yaml`, `plans/plan_initial.md`,
   `tests/conftest.py`, `tests/test_admin_api.py`, `tests/test_public_site.py`,
   `LOG.md`
-
-## 2026-09-09 05:22 UTC — Codex
-Added a plan for a separate public static site and management site while
-explicitly preserving the current Unstacked login process and permissions.
-
-- Files: `plan/split_site_plan.md`, `LOG.md`
