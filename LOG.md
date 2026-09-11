@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 04:22 UTC — Codex
+Added an explicit Switching cards widget choice for the ADC Lab Hiring-style
+filter controls. It uses the existing Markdown source format for title,
+intro, filter labels, card memberships, and card content.
+
+Tests: Ruff and focused text/data-card/switching-card tests pass.
+- Files: `app/home_widgets.py`, `app/templates/_content_widgets.html`,
+  `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
+  `tests/test_home_widgets.py`, `LOG.md`
+
 ## 2026-09-11 03:49 UTC — Codex
 Enabled safe Markdown formatting for data-card widget introductions and card
 text. These fields now render through the same Markdown pipeline as Text
@@ -147,22 +157,3 @@ the separately served public Home is enabled.
 
 Tests: Ruff and focused management-login browser tests pass.
 - Files: `app/web.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-09 05:57 UTC — Codex
-Implemented the split public/management deployment: a filtered, atomic
-public MkDocs build now runs independently of the authenticated FastAPI site,
-with safe Settings controls, a loopback-only Nginx service, and proxy setup
-guidance. Public builds include only explicitly public content and preserve
-the last good site on failure; archive-backup and public-build triggers now
-coexist.
-
-Tests: Ruff; public-site, admin, backup-listener, and Git backend tests pass.
-Local Compose verification: management healthy on 18094 and filtered public
-site healthy on 18095.
-- Files: `.env.example`, `Dockerfile`, `README.md`, `app/admin_api.py`,
-  `app/backup_runtime.py`, `app/config.py`, `app/export.py`,
-  `app/git_backend.py`, `app/main.py`, `app/public_site.py`,
-  `app/public_site_runtime.py`, `app/templates/admin.html`,
-  `deploy/public-nginx.conf`, `docker-compose.yaml`, `plans/plan_initial.md`,
-  `tests/conftest.py`, `tests/test_admin_api.py`, `tests/test_public_site.py`,
-  `LOG.md`

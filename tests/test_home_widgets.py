@@ -260,6 +260,38 @@ def test_text_widget_loads_an_authorized_markdown_page(app_env):
     }
 
 
+def test_switching_cards_uses_the_data_card_source_format(app_env):
+    app, _settings, admin, _token = app_env
+    content: ContentRepository = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Cards", "cards", "", [], False, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "title: Cards\n",
+            "title: Cards\nwidget:\n  filters:\n    - id: graduate\n      label: Graduate\n"
+            "cards:\n  - title: Research role\n    filters: [graduate]\n",
+        ),
+        encoding="utf-8",
+    )
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        result = build_home_widgets(
+            [
+                {
+                    "id": "hiring",
+                    "type": "switching-cards",
+                    "config": {"source": "research/cards.md"},
+                }
+            ],
+            authorization,
+            content,
+        )
+    assert result.errors == []
+    assert result.rendered[0].type == "switching-cards"
+    assert result.rendered[0].data["filters"] == [{"id": "graduate", "label": "Graduate"}]
+
+
 # --------------------------------------------------------------------------
 # Multiple independent ``featured`` widget instances (per-widget grids).
 # --------------------------------------------------------------------------

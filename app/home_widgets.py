@@ -359,6 +359,10 @@ def _render_text(
 WIDGET_REGISTRY: dict[str, WidgetRenderer] = {
     "featured": _render_featured,
     "data-cards": _render_data_cards,
+    # This is intentionally a named variant rather than a front-end-only
+    # label: authors can select it directly when they want ADC Lab-style
+    # category switches, while it shares the same portable source schema.
+    "switching-cards": _render_data_cards,
     "text": _render_text,
 }
 
