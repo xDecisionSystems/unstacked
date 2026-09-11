@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:10 UTC — Codex
+Replaced always-visible library search fields with compact funnel controls.
+Books, Pages, and book page grids now reveal their existing search input only
+when requested, preserving live filtering and keyboard focus behavior.
+
+Tests: Ruff and focused Books/Pages/browser tests pass.
+- Files: `app/static/filter_toggle.js`, `app/static/style.css`,
+  `app/templates/book.html`, `app/templates/books.html`,
+  `app/templates/pages.html`, `LOG.md`
+
 ## 2026-09-11 03:01 UTC — Codex
 Improved password-manager compatibility on the login form with stable
 username/password IDs, explicit label bindings, and standard autocomplete
@@ -139,14 +149,6 @@ Settings navigation assertion fails because it expects an obsolete Home entry.
 ## 2026-09-07 15:24 UTC — Codex
 Corrected the palette display name to Pegasus nights, preserving the approved
 UCF colors and all palette behavior.
-
-Ruff and focused palette tests pass.
-- Files: `app/theme.py`, `tests/test_theme_api.py`, `LOG.md`
-
-## 2026-09-07 15:21 UTC — Codex
-Renamed the UCF preset to Pegasus Nights. The Figma comparison now verifies
-the exact UCF black, bright gold, and white treatment across Home, Books, and
-Settings while retaining readable dark labels on gold actions.
 
 Ruff and focused palette tests pass.
 - Files: `app/theme.py`, `tests/test_theme_api.py`, `LOG.md`

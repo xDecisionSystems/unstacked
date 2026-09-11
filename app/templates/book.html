@@ -19,7 +19,7 @@
   {% endif %}
 </div>
 {% if book.description_html %}<article class="page-body book-description">{{ book.description_html | safe }}</article>{% endif %}
-<section class="library-filters book-page-filters" aria-label="Filter pages"><label class="visually-hidden" for="page-filter">Search pages</label><input id="page-filter" type="search" placeholder="⌕  Filter pages by title…"></section>
+<section class="library-filters book-page-filters" aria-label="Filter pages"><div class="filter-search-control"><button class="filter-toggle" type="button" data-filter-toggle aria-controls="page-filter" aria-expanded="false" aria-label="Show page search" title="Filter pages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4"/></svg></button><label class="visually-hidden" for="page-filter">Search pages</label><input id="page-filter" type="search" placeholder="Search pages…" hidden></div></section>
 {% if book.pages %}
 <ul class="page-cards book-page-grid" id="book-page-cards" data-parent="{{ book.slug }}">
   {% for page in book.pages %}
@@ -34,6 +34,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/reorder.js"></script>
+<script src="/static/filter_toggle.js"></script>
 <script>
 initDragReorder(document.querySelector('#book-page-cards'), {
   itemSelector: '.page-card',
