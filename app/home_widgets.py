@@ -27,6 +27,21 @@ from app.nav import NavigationError, read_navigation
 from app.paths import UnsafePath, normalize_relative_path, path_depth
 
 
+def is_home_widget_source(path: str) -> bool:
+    """Home widget sources inherit Home's permission, not a fake book ACL.
+
+    ``ensure_widget_sources`` generates these under ``widget-sources/home-``
+    when a Home widget has no author-chosen source page; they are Home's own
+    content in every sense except path shape, so both the write path
+    (``app.web``'s ``is_home_widget_source`` callers) and this read path
+    must decide access against ``index.md`` rather than the literal path --
+    which has no ACL rows of its own and would otherwise default-deny even a
+    viewer who can read Home itself.
+    """
+
+    return path.startswith("widget-sources/home-") and path.endswith(".md")
+
+
 @dataclass(frozen=True)
 class WidgetEntry:
     """One validated, well-shaped ``widgets`` front-matter entry."""
@@ -202,7 +217,8 @@ def _render_data_cards(
         raise ValueError("has an invalid source page") from exc
     if not source.endswith(".md") or path_depth(source) not in {2, 3}:
         raise ValueError("source must be a Markdown page")
-    if not authorization.policy.decide(source).can_read:
+    read_target = "index.md" if is_home_widget_source(source) else source
+    if not authorization.policy.decide(read_target).can_read:
         return RenderedWidget(id=entry.id, type=entry.type, title="", data={"items": []})
     try:
         metadata, _body, _raw = content.read_page(source)
@@ -342,7 +358,8 @@ def _render_text(
         raise ValueError("has an invalid source page") from exc
     if not source.endswith(".md") or path_depth(source) not in {2, 3}:
         raise ValueError("source must be a Markdown page")
-    if not authorization.policy.decide(source).can_read:
+    read_target = "index.md" if is_home_widget_source(source) else source
+    if not authorization.policy.decide(read_target).can_read:
         return RenderedWidget(id=entry.id, type=entry.type, title="", data={"html": ""})
     try:
         _metadata, markdown, _raw = content.read_page(source)

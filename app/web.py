@@ -50,7 +50,7 @@ from app.content import (
     widget_entries_for_location,
 )
 from app.export import ExportError, StaticExportRunner
-from app.home_widgets import build_home_widgets, parse_widget_entries
+from app.home_widgets import build_home_widgets, is_home_widget_source, parse_widget_entries
 from app.mkdocs_import import MkDocsImportError, MkDocsImportService
 from app.models import User
 from app.nav import NavigationError, read_navigation
@@ -555,7 +555,7 @@ def _render_content_widgets(
                 )
             except RenderConfigurationError:
                 widget.data["html"] = ""
-        elif widget.type == "data-cards":
+        elif widget.type in ("data-cards", "switching-cards"):
             try:
                 if widget.data.get("text"):
                     widget.data["text_html"] = renderer.render(
@@ -589,12 +589,6 @@ def _generated_widget_entries(location: str, form: dict[str, str]) -> list[dict]
     """Ignore client-selected source paths in favor of stable generated ones."""
 
     return widget_entries_for_location(location, _widgets_from_form(form))
-
-
-def _is_home_widget_source(path: str) -> bool:
-    """Home widget sources inherit Home's edit permission, not a fake book ACL."""
-
-    return path.startswith("widget-sources/home-") and path.endswith(".md")
 
 
 def _home_editor_context(
@@ -1123,7 +1117,7 @@ def _editor_context(
     content = request.app.state.content
     if path is not None and form is None:
         authorization = _authorization(session, user)
-        if _is_home_widget_source(path):
+        if is_home_widget_source(path):
             authorization.require_write("index.md")
             metadata, markdown, _raw = content.read_page(path)
         else:
@@ -1364,7 +1358,7 @@ def edit_page(
     with Session(request.app.state.engine) as session:
         try:
             authorization = _authorization(session, user)
-            authorization.require_write("index.md" if _is_home_widget_source(target) else target)
+            authorization.require_write("index.md" if is_home_widget_source(target) else target)
             return _editor_context(request, session, user, path=target)
         except (AccessDenied, ContentError, UnsafePath):
             context = _base_context(request, session, user)
@@ -1387,7 +1381,7 @@ async def save_page(
         try:
             widgets = _generated_widget_entries(target, form)
             authorization = _authorization(session, user)
-            if _is_home_widget_source(target):
+            if is_home_widget_source(target):
                 authorization.require_write("index.md")
                 request.app.state.content.update_page(
                     target,

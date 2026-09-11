@@ -403,6 +403,86 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
     assert 'data-card-filters="research"' in home.text
 
 
+def test_home_renders_switching_cards_text_as_markdown_like_data_cards(app_env, client):
+    """``switching-cards`` shares ``data-cards``'s renderer and template.
+
+    Before this fix, ``_render_content_widgets`` only Markdown-rendered text
+    for the literal type ``"data-cards"``, so a ``switching-cards`` widget's
+    intro and card text were passed through raw instead of as HTML, and the
+    template's ``text_html`` guard silently dropped them entirely.
+    """
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Card data", "cards", "Internal data", [], True, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "title: Card data\n",
+            "title: Card data\nwidget:\n"
+            "  text: Current and **recent** work.\n"
+            "cards:\n"
+            "  - title: Human-AI Collaboration\n"
+            "    text: Safer *autonomous* systems.\n",
+        ),
+        encoding="utf-8",
+    )
+    content.update_home_page(
+        "",
+        [
+            {
+                "id": "projects",
+                "type": "switching-cards",
+                "config": {"source": "research/cards.md"},
+            }
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+
+    _login(client, "admin")
+    home = client.get("/tree")
+    assert "Current and <strong>recent</strong> work." in home.text
+    assert "Safer <em>autonomous</em> systems." in home.text
+
+
+def test_a_non_admin_reader_sees_a_home_widgets_generated_source_content(app_env, client):
+    """A generated Home widget source must inherit Home's own read permission.
+
+    ``widget-sources/home-<id>.md`` has no ACL rows of its own -- before this
+    fix, checking its literal path against the ACL (rather than substituting
+    ``index.md``, the same substitution the write path already made) meant
+    every non-admin viewer saw an empty widget on a page they could otherwise
+    read in full, including the default-open Home page every active user can
+    read regardless of group membership.
+    """
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    entries = content.ensure_widget_sources(
+        "index.md", [{"id": "notice", "type": "text", "config": {}}], admin
+    )
+    source = content.docs / entries[0]
+    source.write_text(
+        "---\ntitle: Home notice\ndraft: true\nwidget_source: true\n---\n\n"
+        "Reachable by every reader.\n",
+        encoding="utf-8",
+    )
+    content.update_home_page(
+        "",
+        [{"id": "notice", "type": "text", "config": {"source": entries[0]}}],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+    _make_user(app, "reader")
+
+    _login(client, "reader")
+    home = client.get("/tree")
+    assert home.status_code == 200
+    assert "Reachable by every reader." in home.text
+
+
 def test_page_renders_a_text_widget_from_an_authorized_markdown_source(app_env, client):
     app, _settings, admin, _token = app_env
     content = app.state.content

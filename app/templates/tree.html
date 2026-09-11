@@ -8,5 +8,5 @@
 </div>
 {% if home_widget_errors and can_write_home %}<p class="error-message">Some widgets could not be displayed: {{ home_widget_errors|join('; ') }}</p>{% endif %}
 <article class="page-body home-body">{{ home_body | safe }}</article>
-{{ content_widget.render(home_widgets) }}
+{{ content_widget.render(home_widgets, is_admin, csrf_token, '/tree') }}
 {% endblock %}

@@ -46,7 +46,7 @@
   {{ body | safe }}
 </article>
 {% if widget_errors and can_write %}<p class="error-message">Some widgets could not be displayed: {{ widget_errors|join('; ') }}</p>{% endif %}
-{{ content_widget.render(content_widgets) }}
+{{ content_widget.render(content_widgets, is_admin, csrf_token, '/pages/' ~ current_path) }}
 {% endblock %}
 {% block scripts %}
 {% if can_write %}

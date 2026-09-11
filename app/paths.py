@@ -11,7 +11,7 @@ from uuid import uuid4
 from slugify import slugify
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-RESERVED_ROOT_NAMES = {"assets"}
+RESERVED_ROOT_NAMES = {"assets", "widget-sources"}
 RESERVED_PART_NAMES = {".pages", ".git", "site"}
 # Names Windows refuses regardless of extension.  The content repository is
 # meant to be copied between machines, so a page that cannot be checked out on

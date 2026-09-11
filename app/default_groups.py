@@ -24,14 +24,17 @@ HOME_PAGE_PATH = "index.md"
 
 
 def _book_paths(docs: Path) -> list[str]:
-    """Return real book directories, never the asset folder or dot directories."""
+    """Return real book directories, never the asset folder, generated Home
+    widget sources, or dot directories."""
 
     if not docs.is_dir():
         return []
     return [
         book.name
         for book in sorted(docs.iterdir())
-        if book.is_dir() and book.name != "assets" and not book.name.startswith(".")
+        if book.is_dir()
+        and book.name not in {"assets", "widget-sources"}
+        and not book.name.startswith(".")
     ]
 
 

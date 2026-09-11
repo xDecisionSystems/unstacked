@@ -75,7 +75,18 @@ def test_reserved_device_names_cannot_become_slugs(value: str):
 
 
 @pytest.mark.parametrize(
-    "value", ["assets", "site", "..", "-leading", "trailing-", "a--b", "with space", "sl/ash"]
+    "value",
+    [
+        "assets",
+        "widget-sources",
+        "site",
+        "..",
+        "-leading",
+        "trailing-",
+        "a--b",
+        "with space",
+        "sl/ash",
+    ],
 )
 def test_invalid_or_reserved_slugs_are_rejected(value: str):
     with pytest.raises(UnsafePath):

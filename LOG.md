@@ -10,6 +10,28 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 05:38 UTC — Claude Code
+Fixed four regressions from the recent widget-feature commits (see
+`plans/plan_widget_regression_fixes.md`, Phase 1): non-admin readers saw
+empty data-cards/text widgets on Home because their generated source path
+had no ACL rows of its own (now decided against `index.md`, matching the
+write path); the shared widget macro had silently dropped the admin
+"remove from Home" control (restored); `switching-cards` widgets never
+rendered their Markdown text (the check only matched the literal
+`"data-cards"` type); and a book could be created named `widget-sources`,
+colliding with the reserved generated-widget-source directory and vanishing
+from listings once any Home widget existed (now a reserved root name, and
+excluded from the Admin group's book-permission mirroring).
+
+Tests: Ruff and full pytest pass (only the two pre-existing, unrelated
+failures remain: `test_existing_content_repo_receives_missing_ci_once_and_preserves_custom_workflow`,
+`test_settings_nav_has_a_dedicated_home_page_entry_pointing_to_home`).
+- Files: `app/default_groups.py`, `app/home_widgets.py`, `app/paths.py`,
+  `app/templates/_content_widgets.html`, `app/templates/book.html`,
+  `app/templates/page.html`, `app/templates/tree.html`, `app/web.py`,
+  `plans/plan_widget_regression_fixes.md`, `tests/test_paths.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 04:54 UTC — Codex
 Added immediate red duplicate-ID feedback beneath the Book/Page Widget ID
 input. IDs are also validated server-side, including names that would create
@@ -144,14 +166,3 @@ Tests: Ruff and focused data-card tests pass.
   `app/templates/tree.html`, `tests/test_home_widgets.py`,
   `tests/test_web.py`, `LOG.md`
 
-## 2026-09-11 03:21 UTC — Codex
-Added the generic Markdown-backed `data-cards` Home widget. Any authorized
-book page can supply one front-matter `cards` list; Home editors choose its
-source and label, and the widget renders responsive linked cards without a
-new database table or grants-specific code.
-
-Tests: Ruff, focused widget/browser tests, strict content-build tests, and
-nav tests pass.
-- Files: `app/home_widgets.py`, `app/static/style.css`,
-  `app/templates/home_editor.html`, `app/templates/tree.html`,
-  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`

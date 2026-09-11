@@ -21,7 +21,7 @@
 </div>
 {% if book.description_html %}<article class="page-body book-description">{{ book.description_html | safe }}</article>{% endif %}
 {% if widget_errors and can_write_widgets %}<p class="error-message">Some widgets could not be displayed: {{ widget_errors|join('; ') }}</p>{% endif %}
-{{ content_widget.render(content_widgets) }}
+{{ content_widget.render(content_widgets, is_admin, csrf_token, '/books/' ~ book.slug) }}
 <section class="library-filters book-page-filters" aria-label="Filter pages"><div class="filter-search-control"><button class="filter-toggle" type="button" data-filter-toggle aria-controls="page-filter" aria-expanded="false" aria-label="Show page search" title="Filter pages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4"/></svg></button><label class="visually-hidden" for="page-filter">Search pages</label><input id="page-filter" type="search" placeholder="Search pages…" hidden></div></section>
 {% if book.pages %}
 <ul class="page-cards book-page-grid" id="book-page-cards" data-parent="{{ book.slug }}">
