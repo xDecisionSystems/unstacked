@@ -15,6 +15,7 @@ from app.config import Settings
 from app.content import ContentRepository
 from app.default_groups import ensure_default_groups, migrate_chapter_permission_paths
 from app.models import create_db_engine, migrate_schema
+from app.security_headers import SecurityHeadersMiddleware
 from app.ssh_archive_api import router as ssh_archive_router
 from app.upload_limit import UploadSizeLimitMiddleware
 from app.web import router as web_router
@@ -75,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # oversized upload has to be refused above the framework, not inside a
     # handler the framework only reaches after buffering the body.
     app.add_middleware(UploadSizeLimitMiddleware, max_bytes=settings.max_upload_bytes)
+    app.add_middleware(SecurityHeadersMiddleware, hsts=settings.environment == "production")
     app.state.settings = settings
     app.state.engine = engine
     app.state.content = content
