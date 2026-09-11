@@ -376,7 +376,11 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
             {
                 "id": "projects",
                 "type": "data-cards",
-                "config": {"title": "Funded Projects & Grants", "source": "research/cards.md"},
+                "config": {
+                    "title": "Funded Projects & Grants",
+                    "text": "Current and recent work.",
+                    "source": "research/cards.md",
+                },
             }
         ],
         admin,
@@ -389,6 +393,8 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
     assert "Human-AI Collaboration" in home.text
     assert "Office of Naval Research" in home.text
     assert 'href="/books/research"' in home.text
+    assert 'class="data-cards-widget"' in home.text
+    assert "Current and recent work." in home.text
 
 
 def test_home_renders_multiple_featured_widgets_with_disjoint_grids_and_titles(app_env, client):
@@ -610,10 +616,12 @@ def test_home_editor_widget_tray_includes_add_edit_remove_markup(app_env, client
     assert 'id="add-widget-type"' in text
     assert 'id="add-widget-title"' in text
     assert 'id="add-widget-source"' in text
+    assert 'id="add-widget-text"' in text
     assert '<p class="error-message" id="add-widget-error" hidden></p>' in text
 
     # Every rendered row carries a title input and a remove button.
     assert 'class="widget-title-input"' in text
+    assert 'widget-text-input' in text
     assert 'class="widget-remove danger"' in text
     assert 'aria-label="Delete the featured widget"' in text
 

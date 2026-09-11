@@ -195,6 +195,9 @@ def _render_data_cards(
     source = entry.config.get("source")
     if not isinstance(source, str):
         raise ValueError("requires a Markdown source page")
+    intro_text = entry.config.get("text")
+    if intro_text is not None and not isinstance(intro_text, str):
+        raise ValueError("intro text must be text")
     try:
         source = normalize_relative_path(source)
     except UnsafePath as exc:
@@ -270,7 +273,11 @@ def _render_data_cards(
         id=entry.id,
         type=entry.type,
         title=title.strip() if isinstance(title, str) else "",
-        data={"items": items, "source": source},
+        data={
+            "items": items,
+            "source": source,
+            "text": intro_text.strip() if isinstance(intro_text, str) else None,
+        },
     )
 
 

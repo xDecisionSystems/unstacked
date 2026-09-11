@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:31 UTC — Codex
+Expanded generic Home data-card widgets with optional introductory text. The
+widget title now occupies a left-hand heading column, while its introduction
+appears above the card grid; the layout stacks cleanly on narrow screens.
+
+Tests: Ruff and focused Home-widget tests pass.
+- Files: `app/home_widgets.py`, `app/static/style.css`,
+  `app/templates/home_editor.html`, `app/templates/tree.html`,
+  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 03:27 UTC — Codex
 Simplified the generic data-card schema: each card requires a title and can
 optionally include text, a label, and a date. Authorized internal title links
@@ -150,12 +160,3 @@ Ruff and focused content, Git, Home, and Settings tests pass.
 - Files: `app/git_backend.py`, `app/templates/admin.html`,
   `tests/test_content_lifecycle.py`, `tests/test_home_page.py`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-09-09 02:37 UTC — Codex
-Wired every successful content commit to wake the optional Git backup worker
-immediately. Book and page saves now trigger a prompt remote push without
-putting network work or failure on the save request.
-
-Ruff and focused backup and Git tests pass.
-- Files: `app/git_backend.py`, `app/backup_runtime.py`,
-  `tests/test_git_backend.py`, `LOG.md`

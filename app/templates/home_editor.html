@@ -25,7 +25,7 @@
         <span class="widget-label">{{ widget.type | capitalize }}</span>
         <span class="widget-id">{{ widget.id }}</span>
         <label class="widget-title-label">Title<input type="text" class="widget-title-input" value="{{ widget.get('config', {}).get('title', '') }}" aria-label="Title for the {{ widget.id }} widget"></label>
-        {% if widget.type == 'data-cards' %}<label class="widget-source-label">Source page<input type="text" class="widget-source-input" value="{{ widget.get('config', {}).get('source', '') }}" placeholder="research/grants.md" aria-label="Source page for the {{ widget.id }} widget"></label>{% endif %}
+        {% if widget.type == 'data-cards' %}<label class="widget-source-label">Source page<input type="text" class="widget-source-input" value="{{ widget.get('config', {}).get('source', '') }}" placeholder="research/grants.md" aria-label="Source page for the {{ widget.id }} widget"></label><label class="widget-text-label">Intro text<input type="text" class="widget-text-input" value="{{ widget.get('config', {}).get('text', '') }}" aria-label="Intro text for the {{ widget.id }} widget"></label>{% endif %}
         <div class="widget-move-controls">
           <button type="button" class="widget-move-up" aria-label="Move the {{ widget.type }} widget up">↑</button>
           <button type="button" class="widget-move-down" aria-label="Move the {{ widget.type }} widget down">↓</button>
@@ -39,6 +39,7 @@
       <label>Type<select id="add-widget-type"><option value="featured">Featured content</option><option value="data-cards">Data cards</option></select></label>
       <label>Title (optional)<input type="text" id="add-widget-title" placeholder="e.g. Funded Projects & Grants"></label>
       <label id="add-widget-source-label" hidden>Source page<input type="text" id="add-widget-source" placeholder="research/grants.md"></label>
+      <label id="add-widget-text-label" hidden>Intro text (optional)<input type="text" id="add-widget-text" placeholder="A short introduction beside the cards"></label>
       <button type="button" id="add-widget-submit">Add widget</button>
     </div>
     <p class="error-message" id="add-widget-error" hidden></p>
@@ -124,13 +125,13 @@
       .replace(/^-+|-+$/g, '');
   }
 
-  function buildWidgetRow(id, type, title, source = '') {
+  function buildWidgetRow(id, type, title, source = '', text = '') {
     const row = document.createElement('li');
     row.className = 'widget-row';
     row.draggable = true;
     row.dataset.id = id;
     row.dataset.type = type;
-    row.dataset.config = JSON.stringify({ title: title || '', ...(type === 'data-cards' ? { source } : {}) });
+    row.dataset.config = JSON.stringify({ title: title || '', ...(type === 'data-cards' ? { source, text } : {}) });
 
     const grip = document.createElement('span');
     grip.className = 'widget-grip';
@@ -156,6 +157,7 @@
     titleLabel.append(titleInput);
 
     let sourceLabel = null;
+    let textLabel = null;
     if (type === 'data-cards') {
       sourceLabel = document.createElement('label');
       sourceLabel.className = 'widget-source-label';
@@ -165,6 +167,14 @@
       sourceInput.placeholder = 'research/grants.md';
       sourceInput.setAttribute('aria-label', `Source page for the ${id} widget`);
       sourceLabel.append(sourceInput);
+
+      textLabel = document.createElement('label');
+      textLabel.className = 'widget-text-label';
+      textLabel.append('Intro text');
+      const textInput = document.createElement('input');
+      textInput.type = 'text'; textInput.className = 'widget-text-input'; textInput.value = text;
+      textInput.setAttribute('aria-label', `Intro text for the ${id} widget`);
+      textLabel.append(textInput);
     }
 
     const moveControls = document.createElement('div');
@@ -189,6 +199,7 @@
 
     row.append(grip, label, idSpan, titleLabel);
     if (sourceLabel) row.append(sourceLabel);
+    if (textLabel) row.append(textLabel);
     row.append(moveControls, removeButton);
     return row;
   }
@@ -199,6 +210,8 @@
   const addTitleInput = document.getElementById('add-widget-title');
   const addSourceInput = document.getElementById('add-widget-source');
   const addSourceLabel = document.getElementById('add-widget-source-label');
+  const addTextInput = document.getElementById('add-widget-text');
+  const addTextLabel = document.getElementById('add-widget-text-label');
   const addError = document.getElementById('add-widget-error');
 
   function showAddError(message) {
@@ -227,22 +240,25 @@
     const title = addTitleInput ? addTitleInput.value.trim() : '';
     const type = addTypeInput?.value || 'featured';
     const source = addSourceInput ? addSourceInput.value.trim() : '';
+    const text = addTextInput ? addTextInput.value.trim() : '';
     if (type === 'data-cards' && !source) {
       showAddError('Data cards need the Markdown source page, such as research/grants.md.');
       return;
     }
-    list.append(buildWidgetRow(slug, type, title, source));
+    list.append(buildWidgetRow(slug, type, title, source, text));
     if (addIdInput) addIdInput.value = '';
     if (addTitleInput) addTitleInput.value = '';
     if (addSourceInput) addSourceInput.value = '';
+    if (addTextInput) addTextInput.value = '';
   }
 
   if (addForm && list) {
     document.getElementById('add-widget-submit')?.addEventListener('click', addWidget);
     addTypeInput?.addEventListener('change', () => {
       addSourceLabel.hidden = addTypeInput.value !== 'data-cards';
+      addTextLabel.hidden = addTypeInput.value !== 'data-cards';
     });
-    [addIdInput, addTitleInput, addSourceInput].forEach((input) => {
+    [addIdInput, addTitleInput, addSourceInput, addTextInput].forEach((input) => {
       input?.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter') return;
         event.preventDefault();
@@ -253,14 +269,15 @@
 
   if (list) {
     list.addEventListener('input', (event) => {
-      const input = event.target.closest('.widget-title-input,.widget-source-input');
+      const input = event.target.closest('.widget-title-input,.widget-source-input,.widget-text-input');
       if (!input) return;
       const row = input.closest('.widget-row');
       if (!row) return;
       let config = {};
       try { config = JSON.parse(row.dataset.config || '{}'); } catch (e) { config = {}; }
       if (input.classList.contains('widget-title-input')) config.title = input.value.trim();
-      else config.source = input.value.trim();
+      else if (input.classList.contains('widget-source-input')) config.source = input.value.trim();
+      else config.text = input.value.trim();
       row.dataset.config = JSON.stringify(config);
     });
 

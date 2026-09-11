@@ -208,7 +208,11 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
                 {
                     "id": "projects",
                     "type": "data-cards",
-                    "config": {"title": "Funded Projects & Grants", "source": "research/cards.md"},
+                    "config": {
+                        "title": "Funded Projects & Grants",
+                        "text": "Current and recent work.",
+                        "source": "research/cards.md",
+                    },
                 }
             ],
             authorization,
@@ -226,6 +230,7 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
             "target_url": "/books/research",
         }
     ]
+    assert result.rendered[0].data["text"] == "Current and recent work."
 
 
 # --------------------------------------------------------------------------
