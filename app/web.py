@@ -43,6 +43,7 @@ from app.acl import AccessDenied, AuthorizationContext
 from app.assets import AssetTooLarge, UnsupportedAsset, detect_image
 from app.auth import client_identifier, hash_password
 from app.content import (
+    SOURCE_WIDGET_TYPES,
     ContentConflict,
     ContentError,
     ContentExists,
@@ -226,136 +227,6 @@ def _optional_normal_web_user(request: Request) -> User | None:
         if exc.status_code == status.HTTP_401_UNAUTHORIZED:
             return None
         raise
-
-
-def _public_page(content, target: str) -> bool:
-    try:
-        metadata, _markdown, _raw = content.read_page(target)
-    except (ContentError, UnsafePath):
-        return False
-    parts = target.removesuffix(".md").split("/")
-    if metadata.get("draft"):
-        return False
-    # Pages inherit the visibility of their book.  The book/page model has
-    # no intermediate container whose visibility could override this.
-    return len(parts) == 2 and _container_public(content.docs, parts[0])
-
-
-def _public_context(request: Request) -> dict:
-    return {
-        "request": request,
-        "current_user": None,
-        "csrf_token": "",
-        "tree": [],
-        "is_admin": False,
-    }
-
-
-def _home_public(content) -> bool:
-    try:
-        metadata, _markdown, _raw = content.read_home_page()
-    except (ContentError, UnsafePath):
-        return False
-    return bool(metadata.get("public"))
-
-
-def _unauthenticated_destination(content) -> str:
-    """Where an unauthenticated visitor lands after a login-gated dead end.
-
-    Home when it is public (a real, working page), ``/login`` otherwise --
-    used both for ``/`` and for any protected page/book an anonymous
-    visitor cannot read, so the response never depends on whether the
-    specific target exists (see the callers' own docstrings on why that
-    matters).
-    """
-
-    return "/tree" if _home_public(content) else "/login"
-
-
-def _public_home_widgets(content) -> list[dict]:
-    """Render each ``featured`` widget instance for an anonymous visitor.
-
-    Mirrors ``app.home_widgets._render_featured``, but filters by public
-    visibility (:func:`_public_page`/:func:`_container_public`) rather than
-    an :class:`AuthorizationContext`, since an anonymous visitor has no ACL
-    identity to evaluate. Unknown widget types and malformed entries are
-    silently skipped -- an anonymous visitor is never shown an editor-only
-    error message. Each widget instance curates its own grid, keyed by its
-    own ``entry.id``, and its title comes from its own ``config['title']``
-    (default ``""``, meaning no visible header).
-    """
-
-    try:
-        metadata, _markdown, _raw = content.read_home_page()
-    except (ContentError, UnsafePath):
-        return []
-    entries, _errors = parse_widget_entries(metadata.get("widgets"))
-    rendered = []
-    for entry in entries:
-        if entry.type != "featured":
-            continue
-        items = []
-        for target in content.home_items(entry.id):
-            if target.endswith(".md"):
-                if not _public_page(content, target):
-                    continue
-                page_metadata, _body, _raw = content.read_page(target)
-                slug = target.rsplit("/", 1)[-1].removesuffix(".md")
-                title = page_metadata.get("title") or _slug_title(slug)
-                card_image = page_metadata.get("card_image")
-                items.append(
-                    {
-                        "kind": "page",
-                        "target": target.removesuffix(".md"),
-                        "title": title,
-                        "card_image": card_image if isinstance(card_image, str) else None,
-                    }
-                )
-            else:
-                if not _container_public(content.docs, target):
-                    continue
-                items.append(
-                    {
-                        "kind": "book",
-                        "target": target,
-                        "title": _container_title(content.docs, target),
-                        "card_image": None,
-                    }
-                )
-        title = entry.config.get("title")
-        rendered.append(
-            {
-                "id": entry.id,
-                "type": entry.type,
-                "title": title.strip() if isinstance(title, str) else "",
-                "data": {"items": items},
-            }
-        )
-    return rendered
-
-
-def _public_home_context(request: Request, content) -> dict:
-    """Mirror ``_home_context`` for an anonymous visitor to a public Home."""
-
-    context = _public_context(request)
-    try:
-        metadata, markdown, _raw = content.read_home_page()
-    except (ContentError, UnsafePath):
-        metadata, markdown = {}, ""
-    try:
-        body_html = MarkdownRenderer(content.root).render("index.md", markdown)
-    except RenderConfigurationError:
-        body_html = ""
-    context.update(
-        {
-            "home_title": metadata.get("title") or "Home",
-            "home_body": body_html,
-            "home_widgets": _public_home_widgets(content),
-            "home_widget_errors": [],
-            "can_write_home": False,
-        }
-    )
-    return context
 
 
 def _page_view(content, path: str) -> dict[str, str | bool]:
@@ -659,7 +530,16 @@ def _home_editor_context(
             "base_blob_sha": content.home_page_blob_sha(),
             "widgets": widgets,
         }
-    context.update({"form": form, "error": error})
+    context.update(
+        {
+            "form": form,
+            "error": error,
+            # Single source of truth for which widget types need a generated
+            # Markdown source, so the template doesn't hardcode this list
+            # (in Jinja and again, separately, in its inline script).
+            "source_widget_types": sorted(SOURCE_WIDGET_TYPES),
+        }
+    )
     return templates.TemplateResponse(request, "home_editor.html", context, status_code=status_code)
 
 

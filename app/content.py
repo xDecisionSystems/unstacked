@@ -476,6 +476,12 @@ def _validate_widget_entries(widgets: list) -> list[dict]:
         config = entry.get("config", {})
         if not isinstance(entry_id, str) or not entry_id.strip():
             raise ContentError("each widget entry needs a non-empty string id")
+        # Case-insensitive identity, not slug equivalence: this is the
+        # general "no two widgets share a name" rule for every widget, not
+        # only source-backed ones. Two ids that differ by punctuation alone
+        # (e.g. "my_widget" vs "my-widget") pass here but still collide once
+        # slugified -- widget_entries_for_location's "unique source
+        # filenames" check catches that, for the widget types it applies to.
         normalized_id = entry_id.strip().casefold()
         if normalized_id in seen_ids:
             raise ContentError("widget IDs must be unique")
@@ -488,7 +494,27 @@ def _validate_widget_entries(widgets: list) -> list[dict]:
     return validated
 
 
-_SOURCE_WIDGET_TYPES = frozenset({"text", "data-cards", "switching-cards"})
+SOURCE_WIDGET_TYPES = frozenset({"text", "data-cards", "switching-cards"})
+
+
+def is_widget_source_path(relative: str) -> bool:
+    """Whether ``relative`` is itself a generated widget-source page.
+
+    True for Home's sources (``widget-sources/home-<id>.md``, depth 2) and a
+    book's or one of its pages' sources (``book/widget-sources/<name>.md``,
+    depth 3) -- the two shapes ``_widget_source_dir_and_prefix`` produces.
+    The single check used everywhere this needs asking: page-save validation
+    (a widget source is a valid save target despite not being an ordinary
+    depth-2 page), and excluding generated sources from page listings and
+    search results.
+    """
+
+    depth = path_depth(relative)
+    if depth == 2:
+        return relative.startswith("widget-sources/")
+    if depth == 3:
+        return relative.split("/", 2)[1] == "widget-sources"
+    return False
 
 
 def _widget_source_dir_and_prefix(location: str) -> tuple[str, str]:
@@ -535,7 +561,7 @@ def widget_entries_for_location(location: str, widgets: list) -> list[dict]:
     source_paths: set[str] = set()
     for entry in entries:
         config = dict(entry["config"])
-        if entry["type"] in _SOURCE_WIDGET_TYPES:
+        if entry["type"] in SOURCE_WIDGET_TYPES:
             source = widget_source_path(location, entry["id"])
             if source in source_paths:
                 raise ContentError("widget IDs must create unique source filenames")
@@ -1077,11 +1103,11 @@ class ContentRepository:
         removed: list[str] = []
         now = datetime.now(timezone.utc).isoformat()
         expected_sources = {
-            entry["config"]["source"] for entry in entries if entry["type"] in _SOURCE_WIDGET_TYPES
+            entry["config"]["source"] for entry in entries if entry["type"] in SOURCE_WIDGET_TYPES
         }
         with self.git.write_lock():
             for entry in entries:
-                if entry["type"] not in _SOURCE_WIDGET_TYPES:
+                if entry["type"] not in SOURCE_WIDGET_TYPES:
                     continue
                 source = entry["config"]["source"]
                 path = safe_join(self.docs, source)
@@ -1168,15 +1194,8 @@ class ContentRepository:
         try:
             with self.git.write_lock():
                 page_relative = normalize_relative_path(relative)
-                is_widget_source = (
-                    path_depth(page_relative) == 3
-                    and page_relative.split("/", 2)[1] == "widget-sources"
-                ) or (
-                    path_depth(page_relative) == 2
-                    and page_relative.startswith("widget-sources/")
-                )
                 if not page_relative.endswith(".md") or (
-                    path_depth(page_relative) != 2 and not is_widget_source
+                    path_depth(page_relative) != 2 and not is_widget_source_path(page_relative)
                 ):
                     raise ContentMissing("page not found")
                 tree = ConfinedTree(self.docs)
@@ -1992,7 +2011,7 @@ class ContentRepository:
             relative = page.relative_to(self.docs).as_posix()
             if path_depth(relative) != 2:
                 continue
-            if relative.startswith("widget-sources/") or "/widget-sources/" in relative:
+            if is_widget_source_path(relative):
                 continue
             if policy.decide(relative).can_read:
                 pages.append(relative)
@@ -2010,7 +2029,7 @@ class ContentRepository:
         for book_path in sorted(self.docs.iterdir()):
             if (
                 not book_path.is_dir()
-                or book_path.name in {ASSETS_ROOT, "widget-sources"}
+                or book_path.name in RESERVED_ROOT_NAMES
                 or book_path.name.startswith(".")
             ):
                 continue

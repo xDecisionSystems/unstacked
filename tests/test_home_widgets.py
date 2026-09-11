@@ -11,7 +11,13 @@ from sqlmodel import Session
 
 from app.acl import AuthorizationContext
 from app.auth import hash_password
-from app.content import ContentError, ContentRepository, widget_entries_for_location
+from app.content import (
+    ContentError,
+    ContentRepository,
+    is_widget_source_path,
+    widget_entries_for_location,
+    widget_source_path,
+)
 from app.home_widgets import (
     WidgetEntry,
     _render_featured,
@@ -317,6 +323,25 @@ def test_source_widget_paths_are_generated_from_host_location():
 
     assert entries[0]["config"]["source"] == "research/widget-sources/about-project-cards.md"
     assert entries[1]["config"] == {}
+
+
+def test_is_widget_source_path_recognizes_every_shape_widget_source_path_generates():
+    """The one predicate used to save-validate, list-exclude, and search-exclude
+    generated widget sources must agree with the one function that generates
+    their paths (widget_source_path) -- previously three independent,
+    slightly different checks existed instead of this single pair."""
+
+    home_source = widget_source_path("index.md", "notice")
+    book_source = widget_source_path("research", "team")
+    page_source = widget_source_path("research/about.md", "project-cards")
+    assert is_widget_source_path(home_source)
+    assert is_widget_source_path(book_source)
+    assert is_widget_source_path(page_source)
+
+    # Ordinary content at the same depths must not be mistaken for one.
+    assert not is_widget_source_path("research/about.md")
+    assert not is_widget_source_path("research/widget-sources-extra/x.md")
+    assert not is_widget_source_path("widget-sources.md")
 
 
 def test_source_widget_ids_must_produce_unique_filenames():

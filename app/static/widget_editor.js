@@ -8,6 +8,13 @@ document.querySelectorAll('[data-widget-tray]').forEach((tray) => {
   const entries = () => [...list.children].map((row) => JSON.parse(row.dataset.widget));
   const sync = () => { field.value = JSON.stringify(entries()); };
   const showError = (message) => { error.textContent = message; error.hidden = false; };
+  // Mirrors app.paths.make_slug's normalization (the same function
+  // widget_source_path uses to name a generated source file), not the
+  // looser casefold-only comparison app.content._validate_widget_entries
+  // uses for its own, more general "no two widgets share an id" rule.
+  // This check exists specifically to catch the narrower case that rule
+  // wouldn't: two ids that differ only in punctuation would both pass it,
+  // then collide once slugified into the same filename server-side.
   const widgetKey = (value) => value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const validateWidgetId = () => {
     const id = widgetId.value.trim();

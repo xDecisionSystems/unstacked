@@ -1514,9 +1514,12 @@ def update_home_visibility(
 ) -> HomeVisibilityResponse:
     """Publish or unpublish the Home page for anonymous, unauthenticated visitors.
 
-    An unauthenticated visitor who lands on a non-public page is routed to
-    Home when it is public (a real, working destination) and to ``/login``
-    otherwise -- see ``app.web``'s ``_unauthenticated_destination``.
+    The management app itself never serves Home (or anything else) to an
+    anonymous visitor regardless of this flag -- every management route
+    redirects a signed-out visitor straight to ``/login``. This flag's only
+    effect is on the separate filtered public site build
+    (``app.public_site.PublicSiteBuilder``): Home's body and widgets are
+    included there only when this is true.
     """
 
     try:

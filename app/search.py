@@ -18,7 +18,7 @@ from sqlmodel import Session
 
 from app.acl import AccessPolicy, load_policy
 from app.config import Settings
-from app.content import ContentRepository
+from app.content import ContentRepository, is_widget_source_path
 from app.frontmatter_io import PageDocument, parse_page
 from app.models import User
 from app.paths import ConfinedFileTooLarge, UnsafePath, path_depth, read_confined_text
@@ -123,7 +123,7 @@ class ContentSearch:
             relative = file_path.relative_to(self.content.docs).as_posix()
             if path_depth(relative) not in {2, 3}:
                 continue
-            if relative.startswith("widget-sources/") or "/widget-sources/" in relative:
+            if is_widget_source_path(relative):
                 continue
             # This permission check intentionally happens before a backend can
             # open the file.  ``read_confined_text`` later protects its actual

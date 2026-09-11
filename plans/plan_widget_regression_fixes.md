@@ -115,6 +115,29 @@ touching the database, so it never exercised the buggy path).
 
 ## Phase 4 — Cleanup (safe, no behavior change)
 
+**Status: done**, with two notes:
+
+- Item 11's two Jinja checks are expressed as `source_widget_types` (the
+  3-type "needs a generated source" set) and
+  `source_widget_types + ['horizontal-rule']` (the 4-type "doesn't get a
+  free-text Title field" set) rather than one shared list -- they're
+  genuinely different concepts that happened to overlap by 3 of 4 types,
+  and collapsing them to one list would have been incorrect, not simpler.
+  While verifying this in a real browser, found and fixed a real,
+  pre-existing bug (predates this plan) in the same area: the "Add widget"
+  form's Title-field visibility toggle never accounted for
+  `horizontal-rule` at all, unlike the already-added row's own logic --
+  confirmed via `git log -p` that this has been wrong since before
+  `horizontal-rule` existed as a type.
+- Item 13 turned out not to have a live bug once traced fully: the client's
+  slug-based check and the server's deeper `widget_entries_for_location`
+  check already agree (both slug-based); only the shallower
+  `_validate_widget_entries` casefold check is weaker, and tightening it to
+  match would reject currently-valid ids on non-source-backed widget types
+  (e.g. `horizontal-rule`) that don't need to slugify cleanly at all --  a
+  real behavior change, not safe for this phase. Clarified the relationship
+  with comments at all three sites instead of changing validation logic.
+
 10. **Dead code from the anonymous-access removal.** `app/web.py`'s
     `_public_page`, `_public_context`, `_home_public`,
     `_unauthenticated_destination`, `_public_home_widgets`, and

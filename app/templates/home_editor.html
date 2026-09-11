@@ -24,8 +24,8 @@
         <span class="widget-grip" aria-hidden="true">⠿</span>
         <span class="widget-label">{{ widget.type | capitalize }}</span>
         <span class="widget-id">{{ widget.id }}</span>
-        {% if widget.type not in ['data-cards', 'switching-cards', 'text', 'horizontal-rule'] %}<label class="widget-title-label">Title<input type="text" class="widget-title-input" value="{{ widget.get('config', {}).get('title', '') }}" aria-label="Title for the {{ widget.id }} widget"></label>{% endif %}
-        {% if widget.type in ['data-cards', 'switching-cards', 'text'] %}<span class="widget-id">{{ widget.get('config', {}).get('source', '') }}</span>{% if widget.get('config', {}).get('source') %}<a class="button" href="/pages/{{ widget.get('config', {}).get('source', '').removesuffix('.md') }}/edit">Edit</a>{% endif %}{% if widget.type == 'text' %}<span class="tag-help widget-data-help">This Markdown page is rendered below Home.</span>{% else %}<span class="tag-help widget-data-help">Its title, intro, filters, and cards come from this Markdown file.</span>{% endif %}{% endif %}
+        {% if widget.type not in source_widget_types + ['horizontal-rule'] %}<label class="widget-title-label">Title<input type="text" class="widget-title-input" value="{{ widget.get('config', {}).get('title', '') }}" aria-label="Title for the {{ widget.id }} widget"></label>{% endif %}
+        {% if widget.type in source_widget_types %}<span class="widget-id">{{ widget.get('config', {}).get('source', '') }}</span>{% if widget.get('config', {}).get('source') %}<a class="button" href="/pages/{{ widget.get('config', {}).get('source', '').removesuffix('.md') }}/edit">Edit</a>{% endif %}{% if widget.type == 'text' %}<span class="tag-help widget-data-help">This Markdown page is rendered below Home.</span>{% else %}<span class="tag-help widget-data-help">Its title, intro, filters, and cards come from this Markdown file.</span>{% endif %}{% endif %}
         <div class="widget-move-controls">
           <button type="button" class="widget-move-up" aria-label="Move the {{ widget.type }} widget up">↑</button>
           <button type="button" class="widget-move-down" aria-label="Move the {{ widget.type }} widget down">↓</button>
@@ -73,6 +73,10 @@
 <script src="https://uicdn.toast.com/editor-plugin-uml/latest/toastui-editor-plugin-uml.min.js"></script>
 <script>
 (() => {
+  // Same list the server passed into source_widget_types for the Jinja
+  // checks above -- one source of truth (app.content.SOURCE_WIDGET_TYPES)
+  // instead of a second, separately-maintained JS literal.
+  const SOURCE_BACKED_TYPES = {{ source_widget_types | tojson }};
   const element = document.getElementById('markdown-editor');
   const form = document.getElementById('home-edit-form');
   if (element && window.toastui?.Editor) {
@@ -116,6 +120,11 @@
   }
 
   // Add/edit/remove the small explicit set of supported Home widget types.
+  // Mirrors app.paths.make_slug (the same normalization widget_source_path
+  // uses server-side), not app.content._validate_widget_entries' looser
+  // casefold-only "no two widgets share an id" rule -- this exists to catch
+  // ids that differ only in punctuation, which pass that rule but would
+  // still collide once slugified into the same generated filename.
   function slugify(raw) {
     return String(raw || '')
       .toLowerCase()
@@ -129,7 +138,7 @@
     row.draggable = true;
     row.dataset.id = id;
     row.dataset.type = type;
-    row.dataset.config = JSON.stringify(type === 'horizontal-rule' ? {} : ['data-cards', 'switching-cards', 'text'].includes(type) ? { source } : { title: title || '' });
+    row.dataset.config = JSON.stringify(type === 'horizontal-rule' ? {} : SOURCE_BACKED_TYPES.includes(type) ? { source } : { title: title || '' });
 
     const grip = document.createElement('span');
     grip.className = 'widget-grip';
@@ -145,7 +154,7 @@
     idSpan.textContent = id;
 
     let titleLabel = null;
-    if (!['data-cards', 'switching-cards', 'text', 'horizontal-rule'].includes(type)) {
+    if (!SOURCE_BACKED_TYPES.includes(type) && type !== 'horizontal-rule') {
       titleLabel = document.createElement('label');
       titleLabel.className = 'widget-title-label';
       titleLabel.append('Title');
@@ -157,7 +166,7 @@
       titleLabel.append(titleInput);
     }
 
-    if (['data-cards', 'switching-cards', 'text'].includes(type)) {
+    if (SOURCE_BACKED_TYPES.includes(type)) {
       const sourceNote = document.createElement('span');
       sourceNote.className = 'widget-id';
       sourceNote.textContent = source || 'Source created when saved';
@@ -230,7 +239,8 @@
   if (addForm && list) {
     document.getElementById('add-widget-submit')?.addEventListener('click', addWidget);
     addTypeInput?.addEventListener('change', () => {
-      addTitleLabel.hidden = ['data-cards', 'switching-cards', 'text'].includes(addTypeInput.value);
+      addTitleLabel.hidden =
+        SOURCE_BACKED_TYPES.includes(addTypeInput.value) || addTypeInput.value === 'horizontal-rule';
     });
     [addIdInput, addTitleInput].forEach((input) => {
       input?.addEventListener('keydown', (event) => {
