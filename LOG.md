@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 04:46 UTC — Codex
+Kept the compact filter button at a fixed 42px width when its search field is
+opened, preventing flexbox resizing during the interaction.
+
+Tests: Ruff and whitespace checks pass.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-09-11 04:42 UTC — Codex
 Made source-backed widgets create their own deterministic Markdown files on
 save. Source paths derive from the host and widget ID; each new file contains
@@ -148,11 +155,3 @@ Tests: Ruff and focused Books/Pages/browser tests pass.
 - Files: `app/static/filter_toggle.js`, `app/static/style.css`,
   `app/templates/book.html`, `app/templates/books.html`,
   `app/templates/pages.html`, `LOG.md`
-
-## 2026-09-11 03:01 UTC — Codex
-Improved password-manager compatibility on the login form with stable
-username/password IDs, explicit label bindings, and standard autocomplete
-hints so Bitwarden can reliably fill both credentials.
-
-Tests: Ruff and focused login browser tests pass.
-- Files: `app/templates/login.html`, `tests/test_web.py`, `LOG.md`
