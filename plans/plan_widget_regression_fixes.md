@@ -95,6 +95,15 @@ the next render.
 
 ## Phase 3 — Resource correctness
 
+**Status: done.** Bundled in Phase 5 item 15's `book_view` efficiency fix
+(reusing one `AuthorizationContext` and one `read_navigation()` result)
+since it's the same lines already being widened into the `with` block --
+splitting it into a separate pass later would have touched the same code
+twice for no benefit. Verified with a session that raises the moment it's
+queried after `close()`, using a non-admin reader (an admin's
+`AuthorizationContext` short-circuits in `load_policy()` before ever
+touching the database, so it never exercised the buggy path).
+
 9. **`book_view` uses a closed DB session.** `app/web.py:950,958` call
    `_authorization(session, user)` twice after the `with Session(...) as
    session:` block that owns `session` has already exited. Widen the `with`
@@ -137,10 +146,8 @@ the next render.
 
 ## Phase 5 — Efficiency (only after Phases 1-4 are done and tested)
 
-15. **Redundant per-request work in `book_view`.** Fix alongside Phase 3's
-    session-scope change: reuse one `AuthorizationContext` for the whole
-    request instead of constructing it three times, and reuse one
-    `read_navigation()` result instead of parsing `.pages` twice.
+15. ~~**Redundant per-request work in `book_view`.**~~ Done already, bundled
+    into Phase 3 (see its status note) rather than deferred here.
 16. **Redundant `MarkdownRenderer` construction and mkdocs-config reload.**
     `_render_content_widgets` builds a new `MarkdownRenderer` and calls
     `render()` once per card; `render()` itself reloads `mkdocs.yml` and

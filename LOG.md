@@ -10,6 +10,28 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 13:59 UTC — Claude Code
+Fixed a closed-session reuse bug in `book_view` (see
+`plans/plan_widget_regression_fixes.md`, Phase 3): its `with Session(...) as
+session:` block only wrapped `_base_context`, and two later calls to
+`_authorization(session, user)` ran against the already-closed session --
+SQLAlchemy silently reopens a connection for the reuse rather than raising,
+so it survived every normal request as long as the response still
+rendered, and would leak a checked-out connection under sustained traffic.
+Widened the `with` block to cover the whole function, and (bundled in
+since it's the same lines) reused one `AuthorizationContext` and one
+`read_navigation()` result instead of building/parsing each twice --
+removing `_container_description`, whose only remaining caller this
+consolidation replaced. Verified with a session that asserts if queried
+after `close()`; had to switch it to a non-admin reader after finding an
+admin's `AuthorizationContext` short-circuits before ever touching the
+database, which let the bug hide from the first version of the test too.
+
+Tests: Ruff and full pytest pass (same two pre-existing, unrelated
+failures as before).
+- Files: `app/web.py`, `plans/plan_widget_regression_fixes.md`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 06:06 UTC — Claude Code
 Fixed three data-loss risks from the widget-feature commits (see
 `plans/plan_widget_regression_fixes.md`, Phase 2): a page/Home save that
@@ -169,13 +191,5 @@ Tests: Ruff and focused Home-widget tests pass.
   `app/templates/home_editor.html`, `app/templates/tree.html`,
   `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
 
-## 2026-09-11 03:27 UTC — Codex
-Simplified the generic data-card schema: each card requires a title and can
-optionally include text, a label, and a date. Authorized internal title links
-remain available through the optional target field.
-
-Tests: Ruff and focused data-card tests pass.
-- Files: `app/home_widgets.py`, `app/templates/tree.html`,
-  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
 
 

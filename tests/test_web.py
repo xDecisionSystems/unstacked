@@ -1304,6 +1304,47 @@ def test_book_page_empty_state_for_a_book_with_nothing_in_it(app_env, client):
     assert "Nothing here yet" in page.text
 
 
+def test_book_view_never_queries_the_database_after_closing_its_session(
+    app_env, client, monkeypatch, content
+):
+    """``book_view`` must not run a query on a session outside its own ``with`` block.
+
+    Before this fix, ``_authorization(session, user)`` was called twice
+    after the ``with Session(...) as session:`` block that owned ``session``
+    had already exited -- SQLAlchemy silently reopens a connection for the
+    reuse rather than raising, so this survives a normal request as long as
+    the response still renders. A session that raises the moment it's
+    queried post-close is the only way to actually catch that.
+    """
+
+    # An admin's AuthorizationContext short-circuits in load_policy() before
+    # ever touching the database (app.acl.load_policy: `if ... user.is_admin:
+    # return ...`), so a non-admin reader is required to actually exercise
+    # the query this bug reused a closed session for.
+    app, _settings, _admin, _token = app_env
+    reader = _make_user(app, "reader")
+    _grant(app, reader.id, "alice-book", group_name="reader-group")
+
+    closed_sessions: set[Session] = set()
+    real_exec = Session.exec
+    real_close = Session.close
+
+    def guarded_close(self):
+        closed_sessions.add(self)
+        return real_close(self)
+
+    def guarded_exec(self, *args, **kwargs):
+        assert self not in closed_sessions, "queried a session after it was closed"
+        return real_exec(self, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "close", guarded_close)
+    monkeypatch.setattr(Session, "exec", guarded_exec)
+    _login(client, "reader")
+
+    response = client.get("/books/alice-book")
+    assert response.status_code == 200
+
+
 def test_page_view_renders_sanitized_html_with_the_front_matter_title(app_env, client):
     app, _settings, admin, _token = app_env
     app.state.content.create_book("Handbook", "handbook", admin)

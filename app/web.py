@@ -219,15 +219,6 @@ def _container_public(docs: Path, *parts: str) -> bool:
         return False
 
 
-def _container_description(docs: Path, *parts: str) -> str:
-    """Return a book's optional portable Markdown introduction."""
-
-    try:
-        return read_navigation(docs.joinpath(*parts, ".pages")).description
-    except NavigationError:
-        return ""
-
-
 def _optional_normal_web_user(request: Request) -> User | None:
     try:
         return require_normal_web_user(get_current_web_user(request))
@@ -972,33 +963,43 @@ def book_view(
     content = request.app.state.content
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
-    book = next((entry for entry in context["tree"] if entry["slug"] == book_slug), None)
-    if book is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
-    context["book"] = book
-    description = _container_description(request.app.state.content.docs, book_slug)
-    try:
-        description_html = MarkdownRenderer(request.app.state.content.root).render(
-            f"{book_slug}/description.md", description
+        book = next((entry for entry in context["tree"] if entry["slug"] == book_slug), None)
+        if book is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
+        context["book"] = book
+        # One read_navigation() covers both the description and the widget
+        # layout below -- they live in the same .pages file, so a second,
+        # independent parse moments later gained nothing but a chance for
+        # the two to disagree if the file changed in between.
+        try:
+            navigation = read_navigation(content.docs / book_slug / ".pages")
+        except NavigationError:
+            navigation = None
+        description = navigation.description if navigation else ""
+        try:
+            description_html = MarkdownRenderer(content.root).render(
+                f"{book_slug}/description.md", description
+            )
+        except RenderConfigurationError:
+            description_html = ""
+        context["book"]["description"] = description
+        context["book"]["description_html"] = description_html
+        # Built once and reused below rather than re-querying the database
+        # for the same user's ACL rules a second time in one request.
+        authorization = _authorization(session, user)
+        if navigation is not None:
+            book_widgets, widget_errors = _render_content_widgets(
+                content, authorization, navigation.values.get("widgets")
+            )
+        else:
+            book_widgets, widget_errors = [], []
+        context.update(
+            {
+                "content_widgets": book_widgets,
+                "widget_errors": widget_errors,
+                "can_write_widgets": authorization.policy.decide(book_slug).can_write,
+            }
         )
-    except RenderConfigurationError:
-        description_html = ""
-    context["book"]["description"] = description
-    context["book"]["description_html"] = description_html
-    try:
-        navigation = read_navigation(content.docs / book_slug / ".pages")
-        book_widgets, widget_errors = _render_content_widgets(
-            content, _authorization(session, user), navigation.values.get("widgets")
-        )
-    except NavigationError:
-        book_widgets, widget_errors = [], []
-    context.update(
-        {
-            "content_widgets": book_widgets,
-            "widget_errors": widget_errors,
-            "can_write_widgets": _authorization(session, user).policy.decide(book_slug).can_write,
-        }
-    )
     return templates.TemplateResponse(request, "book.html", context)
 
 
