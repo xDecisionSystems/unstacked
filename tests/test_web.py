@@ -108,6 +108,10 @@ def test_login_page_renders_a_form_for_an_unauthenticated_visitor(client):
     assert response.status_code == 200
     assert 'name="username"' in response.text
     assert 'name="password"' in response.text
+    assert 'id="username"' in response.text
+    assert 'autocomplete="username"' in response.text
+    assert 'id="password"' in response.text
+    assert 'autocomplete="current-password"' in response.text
 
 
 def test_successful_login_reaches_the_tree(client):

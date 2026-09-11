@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:01 UTC — Codex
+Improved password-manager compatibility on the login form with stable
+username/password IDs, explicit label bindings, and standard autocomplete
+hints so Bitwarden can reliably fill both credentials.
+
+Tests: Ruff and focused login browser tests pass.
+- Files: `app/templates/login.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 02:56 UTC — Codex
 Added an editable Markdown introduction to every book. The section is stored
 portably in each book's `.pages` file, rendered above its page grid, and can
@@ -142,12 +150,3 @@ Settings while retaining readable dark labels on gold actions.
 
 Ruff and focused palette tests pass.
 - Files: `app/theme.py`, `tests/test_theme_api.py`, `LOG.md`
-
-## 2026-09-07 15:18 UTC — Codex
-Added a selectable UCF Black & Gold palette based on UCF's official digital
-black and bright gold. Bright action colors now receive an automatically
-contrasting dark label, preserving readable controls.
-
-Ruff and focused palette tests pass.
-- Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme.py`,
-  `tests/test_theme_api.py`, `LOG.md`

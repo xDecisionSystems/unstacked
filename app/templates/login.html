@@ -12,15 +12,15 @@
   <section class="auth-panel"><div class="auth-card">
     <h1>Welcome back</h1><p>Sign in to your private workspace.</p>
     {% if error %}<p class="error-message">{{ error }}</p>{% endif %}
-    <form method="post" action="/login">
-      <label>
+    <form method="post" action="/login" autocomplete="on">
+      <label for="username">
         Username or email
-        <input type="text" name="username" autocomplete="username" required autofocus>
       </label>
-      <label>
+      <input id="username" type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+      <label for="password">
         Password
-        <input type="password" name="password" autocomplete="current-password" required>
       </label>
+      <input id="password" type="password" name="password" autocomplete="current-password" required>
       <button type="submit">Sign in</button><p><a href="/forgot-password">Forgot password?</a></p><p class="auth-note">Access is filtered by your path-based permissions.</p>
     </form>
   </div></section>
