@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 04:42 UTC — Codex
+Made source-backed widgets create their own deterministic Markdown files on
+save. Source paths derive from the host and widget ID; each new file contains
+a commented example, and widget rows now link directly to its editor.
+
+Tests: Ruff and focused widget/editor tests pass.
+- Files: `app/content.py`, `app/home_widgets.py`, `app/search.py`, `app/static/widget_editor.js`,
+  `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
+  `app/web.py`, `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 04:30 UTC — Codex
 Added a Horizontal separator widget to the Home, Book, and Page pickers. It
 renders a palette-aware divider and requires no Markdown source file.
@@ -146,14 +156,3 @@ hints so Bitwarden can reliably fill both credentials.
 
 Tests: Ruff and focused login browser tests pass.
 - Files: `app/templates/login.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 02:56 UTC — Codex
-Added an editable Markdown introduction to every book. The section is stored
-portably in each book's `.pages` file, rendered above its page grid, and can
-be edited with the Toast UI book editor by users with book write access.
-
-Tests: Ruff, focused book-editor browser tests, content-build tests, and nav
-tests pass.
-- Files: `app/ai_service.py`, `app/content.py`, `app/nav.py`,
-  `app/templates/book.html`, `app/templates/book_editor.html`, `app/web.py`,
-  `tests/test_web.py`, `LOG.md`

@@ -483,6 +483,72 @@ def _validate_widget_entries(widgets: list) -> list[dict]:
     return validated
 
 
+_SOURCE_WIDGET_TYPES = frozenset({"text", "data-cards", "switching-cards"})
+
+
+def widget_source_path(location: str, widget_id: str) -> str:
+    """Return the private, deterministic Markdown file for one widget.
+
+    Widget source pages sit inside a dedicated source directory. A book's ACL
+    still naturally covers its sources; Home gets its own hidden-from-app
+    directory at the docs root.
+    """
+
+    location = normalize_relative_path(location)
+    safe_id = make_slug(widget_id, widget_id)
+    if not safe_id:
+        raise ContentError("widget id must contain letters or numbers")
+    if location == "index.md":
+        return f"widget-sources/home-{safe_id}.md"
+    if location.endswith(".md") and path_depth(location) == 2:
+        parent, page_name = location.rsplit("/", 1)
+        return f"{parent}/widget-sources/{Path(page_name).stem}-{safe_id}.md"
+    if path_depth(location) == 1:
+        return f"{location}/widget-sources/book-{safe_id}.md"
+    raise ContentError("widget host location is not valid")
+
+
+def widget_entries_for_location(location: str, widgets: list) -> list[dict]:
+    """Canonicalize source-backed widgets to their generated Markdown paths."""
+
+    entries = _validate_widget_entries(widgets)
+    result: list[dict] = []
+    for entry in entries:
+        config = dict(entry["config"])
+        if entry["type"] in _SOURCE_WIDGET_TYPES:
+            config["source"] = widget_source_path(location, entry["id"])
+        result.append({"id": entry["id"], "type": entry["type"], "config": config})
+    return result
+
+
+def _widget_source_starter(widget_type: str, widget_id: str) -> str:
+    """Commented examples make a fresh widget safe to save before authoring."""
+
+    if widget_type == "text":
+        return (
+            "<!--\n"
+            f"# {widget_id.replace('-', ' ').title()}\n\n"
+            "Write formatted Markdown here. Remove these comment markers when ready.\n"
+            "-->\n"
+        )
+    return (
+        "<!--\n"
+        "widget:\n"
+        f"  title: {widget_id.replace('-', ' ').title()}\n"
+        "  text: A short formatted introduction.\n"
+        "  filters:\n"
+        "    - id: example\n"
+        "      label: Example\n"
+        "cards:\n"
+        "  - title: Example card\n"
+        "    text: Optional **formatted** supporting text.\n"
+        "    label: Optional label\n"
+        "    date: 2026\n"
+        "    filters: [example]\n"
+        "-->\n"
+    )
+
+
 class ContentRepository:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -966,6 +1032,52 @@ class ContentRepository:
                 raise
         return CreatedContent("page", page_relative, slug, commit)
 
+    def ensure_widget_sources(self, location: str, widgets: list[dict], actor: User) -> list[str]:
+        """Create missing generated Markdown sources for a widget layout.
+
+        Sources are intentionally ordinary draft Markdown files. The app
+        excludes their directory from normal navigation while preserving the
+        complete file-based, portable content model.
+        """
+
+        entries = widget_entries_for_location(location, widgets)
+        created: list[str] = []
+        now = datetime.now(timezone.utc).isoformat()
+        with self.git.write_lock():
+            for entry in entries:
+                if entry["type"] not in _SOURCE_WIDGET_TYPES:
+                    continue
+                source = entry["config"]["source"]
+                path = safe_join(self.docs, source)
+                if path.exists():
+                    continue
+                path.parent.mkdir(parents=True, exist_ok=True)
+                metadata = {
+                    "id": str(uuid4()),
+                    "title": f"Widget: {entry['id']}",
+                    "created_at": now,
+                    "updated_at": now,
+                    "author": actor.email,
+                    "tags": [],
+                    "draft": True,
+                    "widget_source": True,
+                }
+                atomic_write_confined(
+                    self.docs,
+                    source,
+                    new_page(_widget_source_starter(entry["type"], entry["id"]), metadata),
+                    overwrite=False,
+                )
+                created.append(source)
+            if created:
+                self.git.commit_paths(
+                    [f"docs/{source}" for source in created],
+                    name=actor.display_name,
+                    email=actor.email,
+                    message=f"Create widget sources for {location}",
+                )
+        return created
+
     def read_page(self, relative: str) -> tuple[dict, str, str]:
         page = self._page_path(relative)
         try:
@@ -1010,7 +1122,16 @@ class ContentRepository:
         try:
             with self.git.write_lock():
                 page_relative = normalize_relative_path(relative)
-                if not page_relative.endswith(".md") or path_depth(page_relative) != 2:
+                is_widget_source = (
+                    path_depth(page_relative) == 3
+                    and page_relative.split("/", 2)[1] == "widget-sources"
+                ) or (
+                    path_depth(page_relative) == 2
+                    and page_relative.startswith("widget-sources/")
+                )
+                if not page_relative.endswith(".md") or (
+                    path_depth(page_relative) != 2 and not is_widget_source
+                ):
                     raise ContentMissing("page not found")
                 tree = ConfinedTree(self.docs)
                 try:
@@ -1825,6 +1946,8 @@ class ContentRepository:
             relative = page.relative_to(self.docs).as_posix()
             if path_depth(relative) != 2:
                 continue
+            if relative.startswith("widget-sources/") or "/widget-sources/" in relative:
+                continue
             if policy.decide(relative).can_read:
                 pages.append(relative)
         return pages
@@ -1841,7 +1964,7 @@ class ContentRepository:
         for book_path in sorted(self.docs.iterdir()):
             if (
                 not book_path.is_dir()
-                or book_path.name == ASSETS_ROOT
+                or book_path.name in {ASSETS_ROOT, "widget-sources"}
                 or book_path.name.startswith(".")
             ):
                 continue

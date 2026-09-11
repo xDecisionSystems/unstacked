@@ -10,7 +10,7 @@ from sqlmodel import Session
 
 from app.acl import AuthorizationContext
 from app.auth import hash_password
-from app.content import ContentRepository
+from app.content import ContentRepository, widget_entries_for_location
 from app.home_widgets import (
     WidgetEntry,
     _render_featured,
@@ -303,6 +303,36 @@ def test_horizontal_rule_widget_needs_no_source_page(app_env):
         )
     assert result.errors == []
     assert result.rendered[0].type == "horizontal-rule"
+
+
+def test_source_widget_paths_are_generated_from_host_location():
+    entries = widget_entries_for_location(
+        "research/about.md",
+        [
+            {"id": "project-cards", "type": "data-cards", "config": {"source": "ignored.md"}},
+            {"id": "divider", "type": "horizontal-rule", "config": {}},
+        ],
+    )
+
+    assert entries[0]["config"]["source"] == "research/widget-sources/about-project-cards.md"
+    assert entries[1]["config"] == {}
+
+
+def test_generated_widget_source_is_created_with_a_commented_example(app_env):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    widgets = widget_entries_for_location(
+        "research",
+        [{"id": "projects", "type": "data-cards", "config": {}}],
+    )
+
+    created = content.ensure_widget_sources("research", widgets, admin)
+
+    assert created == ["research/widget-sources/book-projects.md"]
+    metadata, markdown, _raw = content.read_page(created[0])
+    assert metadata["draft"] is True
+    assert metadata["widget_source"] is True
+    assert markdown.startswith("<!--")
 
 
 # --------------------------------------------------------------------------

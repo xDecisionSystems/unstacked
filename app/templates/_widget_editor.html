@@ -1,12 +1,12 @@
 <fieldset class="widget-tray" data-widget-tray>
   <legend>Widgets</legend>
-  <p class="tag-help">Widgets render below this content. Their source files remain ordinary Markdown pages.</p>
+  <p class="tag-help">Widgets render below this content. Source files are created automatically when you save.</p>
   <input type="hidden" name="widgets_json" data-widgets-json value="">
   <ul class="widget-list" data-widget-list>
     {% for widget in widget_form.widgets %}
-    <li class="widget-row" data-widget='{{ widget | tojson }}'><span class="widget-label">{{ widget.type|capitalize }}</span><span class="widget-id">{{ widget.get('config', {}).get('source', '') }}</span><button type="button" class="widget-remove danger" data-widget-remove aria-label="Remove this widget">✕</button></li>
+    <li class="widget-row" data-widget='{{ widget | tojson }}'><span class="widget-label">{{ widget.type|capitalize }}</span><span class="widget-id">{{ widget.get('config', {}).get('source', '') }}</span>{% if widget.get('config', {}).get('source') %}<a class="button" href="/pages/{{ widget.get('config', {}).get('source', '').removesuffix('.md') }}/edit">Edit</a>{% endif %}<button type="button" class="widget-remove danger" data-widget-remove aria-label="Remove this widget">✕</button></li>
     {% endfor %}
   </ul>
-  <div class="widget-add-form"><label>Type<select data-widget-type><option value="text">Text</option><option value="data-cards">Data cards</option><option value="switching-cards">Switching cards</option><option value="horizontal-rule">Horizontal separator</option></select></label><label data-widget-source-label>Markdown source page<input data-widget-source placeholder="research/about.md"></label><button type="button" data-widget-add>Add widget</button></div>
+  <div class="widget-add-form"><label>Type<select data-widget-type><option value="text">Text</option><option value="data-cards">Data cards</option><option value="switching-cards">Switching cards</option><option value="horizontal-rule">Horizontal separator</option></select></label><button type="button" data-widget-add>Add widget</button></div>
   <p class="error-message" data-widget-error hidden></p>
 </fieldset>

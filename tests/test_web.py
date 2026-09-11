@@ -650,7 +650,7 @@ def test_home_editor_widget_tray_includes_add_edit_remove_markup(app_env, client
     assert 'id="add-widget-type"' in text
     assert '<option value="text">Text</option>' in text
     assert 'id="add-widget-title"' in text
-    assert 'id="add-widget-source"' in text
+    assert 'Source created when saved' in text
     assert '<p class="error-message" id="add-widget-error" hidden></p>' in text
 
     # Every rendered row carries a title input and a remove button.

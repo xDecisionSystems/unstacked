@@ -200,8 +200,8 @@ def _render_data_cards(
         source = normalize_relative_path(source)
     except UnsafePath as exc:
         raise ValueError("has an invalid source page") from exc
-    if not source.endswith(".md") or path_depth(source) != 2:
-        raise ValueError("source must be a book page such as research/grants.md")
+    if not source.endswith(".md") or path_depth(source) not in {2, 3}:
+        raise ValueError("source must be a Markdown page")
     if not authorization.policy.decide(source).can_read:
         return RenderedWidget(id=entry.id, type=entry.type, title="", data={"items": []})
     try:
@@ -340,8 +340,8 @@ def _render_text(
         source = normalize_relative_path(source)
     except UnsafePath as exc:
         raise ValueError("has an invalid source page") from exc
-    if not source.endswith(".md") or path_depth(source) != 2:
-        raise ValueError("source must be a book page such as research/about.md")
+    if not source.endswith(".md") or path_depth(source) not in {2, 3}:
+        raise ValueError("source must be a Markdown page")
     if not authorization.policy.decide(source).can_read:
         return RenderedWidget(id=entry.id, type=entry.type, title="", data={"html": ""})
     try:

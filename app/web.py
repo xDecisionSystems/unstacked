@@ -47,6 +47,7 @@ from app.content import (
     ContentExists,
     ContentMissing,
     ContentRepository,
+    widget_entries_for_location,
 )
 from app.export import ExportError, StaticExportRunner
 from app.home_widgets import build_home_widgets, parse_widget_entries
@@ -584,6 +585,18 @@ def _widgets_from_form(form: dict[str, str]) -> list[dict]:
     return widgets
 
 
+def _generated_widget_entries(location: str, form: dict[str, str]) -> list[dict]:
+    """Ignore client-selected source paths in favor of stable generated ones."""
+
+    return widget_entries_for_location(location, _widgets_from_form(form))
+
+
+def _is_home_widget_source(path: str) -> bool:
+    """Home widget sources inherit Home's edit permission, not a fake book ACL."""
+
+    return path.startswith("widget-sources/home-") and path.endswith(".md")
+
+
 def _home_editor_context(
     request: Request,
     session: Session,
@@ -1007,12 +1020,14 @@ async def save_book_description(
     form = await _read_form(request, max_bytes=request.app.state.settings.max_page_bytes + 16_384)
     with Session(request.app.state.engine) as session:
         try:
+            widgets = _generated_widget_entries(book_slug, form)
             request.app.state.ai_service.set_book_description(
                 _authorization(session, user),
                 path=book_slug,
                 markdown=form.get("markdown", ""),
-                widgets=_widgets_from_form(form),
+                widgets=widgets,
             )
+            request.app.state.content.ensure_widget_sources(book_slug, widgets, user)
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             return _book_editor_context(
                 request,
@@ -1108,7 +1123,11 @@ def _editor_context(
     content = request.app.state.content
     if path is not None and form is None:
         authorization = _authorization(session, user)
-        metadata, markdown, _raw = request.app.state.ai_service.get_page(authorization, path)
+        if _is_home_widget_source(path):
+            authorization.require_write("index.md")
+            metadata, markdown, _raw = content.read_page(path)
+        else:
+            metadata, markdown, _raw = request.app.state.ai_service.get_page(authorization, path)
         form = {
             "title": str(metadata.get("title") or _slug_title(path.rsplit("/", 1)[-1])),
             "markdown": markdown,
@@ -1344,7 +1363,8 @@ def edit_page(
     target = page_path if page_path.endswith(".md") else f"{page_path}.md"
     with Session(request.app.state.engine) as session:
         try:
-            _authorization(session, user).require_write(target)
+            authorization = _authorization(session, user)
+            authorization.require_write("index.md" if _is_home_widget_source(target) else target)
             return _editor_context(request, session, user, path=target)
         except (AccessDenied, ContentError, UnsafePath):
             context = _base_context(request, session, user)
@@ -1365,16 +1385,32 @@ async def save_page(
     target = page_path if page_path.endswith(".md") else f"{page_path}.md"
     with Session(request.app.state.engine) as session:
         try:
-            request.app.state.ai_service.update_page(
-                _authorization(session, user),
-                target,
-                form.get("markdown", ""),
-                _tags(form.get("tags", "")),
-                form.get("draft") == "on",
-                base_blob_sha=form.get("base_blob_sha", ""),
-                card_image=form.get("card_image") or None,
-                widgets=_widgets_from_form(form),
-            )
+            widgets = _generated_widget_entries(target, form)
+            authorization = _authorization(session, user)
+            if _is_home_widget_source(target):
+                authorization.require_write("index.md")
+                request.app.state.content.update_page(
+                    target,
+                    form.get("markdown", ""),
+                    _tags(form.get("tags", "")),
+                    form.get("draft") == "on",
+                    user,
+                    base_blob_sha=form.get("base_blob_sha", ""),
+                    card_image=form.get("card_image") or None,
+                    widgets=widgets,
+                )
+            else:
+                request.app.state.ai_service.update_page(
+                    authorization,
+                    target,
+                    form.get("markdown", ""),
+                    _tags(form.get("tags", "")),
+                    form.get("draft") == "on",
+                    base_blob_sha=form.get("base_blob_sha", ""),
+                    card_image=form.get("card_image") or None,
+                    widgets=widgets,
+                )
+            request.app.state.content.ensure_widget_sources(target, widgets, user)
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             return _editor_context(
                 request,
@@ -1430,12 +1466,9 @@ async def save_home(
         try:
             _authorization(session, user).require_write("index.md")
             try:
-                parsed = json.loads(form.get("widgets_json") or "[]")
-            except json.JSONDecodeError as exc:
+                widgets = _generated_widget_entries("index.md", form)
+            except ValueError as exc:
                 raise ContentError("widget order could not be read") from exc
-            if not isinstance(parsed, list):
-                raise ContentError("widget order could not be read")
-            widgets = parsed
             request.app.state.content.update_home_page(
                 form.get("markdown", ""),
                 widgets,
@@ -1443,6 +1476,7 @@ async def save_home(
                 base_blob_sha=form.get("base_blob_sha", ""),
                 title=form.get("title") or None,
             )
+            request.app.state.content.ensure_widget_sources("index.md", widgets, user)
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             display_form = {
                 "title": form.get("title", ""),

@@ -123,6 +123,8 @@ class ContentSearch:
             relative = file_path.relative_to(self.content.docs).as_posix()
             if path_depth(relative) not in {2, 3}:
                 continue
+            if relative.startswith("widget-sources/") or "/widget-sources/" in relative:
+                continue
             # This permission check intentionally happens before a backend can
             # open the file.  ``read_confined_text`` later protects its actual
             # open against a symlink replacement race.
