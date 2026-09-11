@@ -66,6 +66,36 @@ def test_public_build_fails_closed_on_link_to_private_content_and_keeps_last_sit
     assert (destination / "public-handbook" / "welcome" / "index.html").read_bytes() == previous
 
 
+def test_public_build_fails_closed_on_raw_html_link_to_a_management_path(app_env):
+    """Guards the ``href=``/``src=`` branch of ``_reject_private_links``.
+
+    Markdown passes raw inline HTML through unchanged, so an editor writing
+    ``<a href="/pages/...">`` rather than Markdown-link syntax must be caught
+    the same way -- this exercises that branch specifically, since the other
+    fail-closed test above only covers the Markdown-syntax regex.
+    """
+
+    app, settings, admin, _token = app_env
+    content = app.state.content
+    _make_public_book(app_env)
+    builder = PublicSiteBuilder(settings, content)
+    destination = builder.build()
+    previous = (destination / "public-handbook" / "welcome" / "index.html").read_bytes()
+
+    content.update_page(
+        "public-handbook/welcome.md",
+        '# Welcome\n\n<a href="/pages/private-notes/secret">management link</a>',
+        [],
+        False,
+        admin,
+        base_blob_sha=content.page_blob_sha("public-handbook/welcome.md"),
+    )
+
+    with pytest.raises(PublicSiteError, match="management-only"):
+        builder.build()
+    assert (destination / "public-handbook" / "welcome" / "index.html").read_bytes() == previous
+
+
 def test_empty_public_site_has_a_safe_home_page(app_env):
     app, settings, _admin, _token = app_env
 

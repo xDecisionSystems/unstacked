@@ -209,7 +209,7 @@ class PublicSiteBuilder:
             if page.is_symlink():
                 raise PublicSiteError("Public content source contains an unsupported link")
             text = page.read_text(encoding="utf-8")
-            if re.search(r"(?:href|src)\\s*=\\s*['\"]/(?:pages|books|admin|api)(?:/|['\"])", text):
+            if re.search(r"(?:href|src)\s*=\s*['\"]/(?:pages|books|admin|api)(?:/|['\"])", text):
                 raise PublicSiteError("Public content links to a management-only path")
             for match in _MARKDOWN_LINK.finditer(text):
                 target = match.group(1)
