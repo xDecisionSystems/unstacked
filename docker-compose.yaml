@@ -5,10 +5,13 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      # Management is deliberately loopback-only. Nginx Proxy Manager can
-      # forward `manage.<domain>` here without the application port being
-      # reachable from the Internet.
-      - "127.0.0.1:${UNSTACKED_MANAGEMENT_HOST_PORT:-8001}:8000"
+      # Loopback-only by default so the management port is never reachable
+      # from the Internet. If your reverse proxy runs on a different host
+      # (e.g. reached over Tailscale rather than sharing this Docker
+      # network), override UNSTACKED_MANAGEMENT_BIND_ADDRESS to that host's
+      # address on the private network the proxy actually uses -- never to
+      # 0.0.0.0, which would also bind the public internet-facing interface.
+      - "${UNSTACKED_MANAGEMENT_BIND_ADDRESS:-127.0.0.1}:${UNSTACKED_MANAGEMENT_HOST_PORT:-8001}:8000"
     environment:
       UNSTACKED_ENVIRONMENT: production
       # Required in production — the app refuses to start without it. Set
@@ -79,9 +82,12 @@ services:
       app:
         condition: service_started
     ports:
-      # Nginx Proxy Manager should forward `public.<domain>` to this local
-      # port. It is not an Internet-facing application port.
-      - "127.0.0.1:${UNSTACKED_PUBLIC_HOST_PORT:-8081}:8080"
+      # Loopback-only by default; see UNSTACKED_MANAGEMENT_BIND_ADDRESS above
+      # for when the reverse proxy is not on this Docker network. This port
+      # serves only the filtered public build, so exposing it more broadly
+      # carries far less risk than the management port does -- but a proxy
+      # still belongs in front of it (TLS, and a stable hostname).
+      - "${UNSTACKED_PUBLIC_BIND_ADDRESS:-127.0.0.1}:${UNSTACKED_PUBLIC_HOST_PORT:-8081}:8080"
     volumes:
       - public-site:/usr/share/nginx/html:ro
     healthcheck:

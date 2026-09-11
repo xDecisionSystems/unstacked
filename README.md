@@ -82,6 +82,15 @@ internet-facing. If Nginx Proxy Manager runs in Docker rather than on the host,
 attach it and these services to a shared Docker network and proxy to the
 service names (`public:8080` and `app:8000`) instead of loopback addresses.
 
+If the reverse proxy instead runs on a *different* machine — for example,
+reached only over a private mesh network like Tailscale rather than sharing
+this Docker host — `127.0.0.1` is unreachable from it and every request will
+502. Set `UNSTACKED_PUBLIC_BIND_ADDRESS` and/or `UNSTACKED_MANAGEMENT_BIND_ADDRESS`
+to this host's address on that private network (e.g. its Tailscale IP) so the
+port is published there instead. Never set either to `0.0.0.0`: that binds
+every interface, including any public one this host has, undoing the "not
+reachable from the Internet" protection loopback binding exists for.
+
 The public service mounts only the generated `public-site` volume read-only.
 It cannot reach the database, Git checkout, API signing secret, backup
 credentials, editors, or management routes. The management app remains the
