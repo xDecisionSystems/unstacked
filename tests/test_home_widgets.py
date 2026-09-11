@@ -6,11 +6,12 @@ must match ``home_items()``'s stored order and hide anything the viewing
 user cannot read.
 """
 
+import pytest
 from sqlmodel import Session
 
 from app.acl import AuthorizationContext
 from app.auth import hash_password
-from app.content import ContentRepository, widget_entries_for_location
+from app.content import ContentError, ContentRepository, widget_entries_for_location
 from app.home_widgets import (
     WidgetEntry,
     _render_featured,
@@ -316,6 +317,17 @@ def test_source_widget_paths_are_generated_from_host_location():
 
     assert entries[0]["config"]["source"] == "research/widget-sources/about-project-cards.md"
     assert entries[1]["config"] == {}
+
+
+def test_source_widget_ids_must_produce_unique_filenames():
+    with pytest.raises(ContentError, match="unique source filenames"):
+        widget_entries_for_location(
+            "research",
+            [
+                {"id": "Student opportunities", "type": "text", "config": {}},
+                {"id": "student-opportunities", "type": "text", "config": {}},
+            ],
+        )
 
 
 def test_generated_widget_source_is_created_with_a_commented_example(app_env):

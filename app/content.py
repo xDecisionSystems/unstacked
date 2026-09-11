@@ -468,6 +468,7 @@ def _validate_widget_entries(widgets: list) -> list[dict]:
     if not isinstance(widgets, list):
         raise ContentError("widgets must be a list")
     validated: list[dict] = []
+    seen_ids: set[str] = set()
     for entry in widgets:
         if not isinstance(entry, dict):
             raise ContentError("each widget entry must be a mapping")
@@ -475,6 +476,10 @@ def _validate_widget_entries(widgets: list) -> list[dict]:
         config = entry.get("config", {})
         if not isinstance(entry_id, str) or not entry_id.strip():
             raise ContentError("each widget entry needs a non-empty string id")
+        normalized_id = entry_id.strip().casefold()
+        if normalized_id in seen_ids:
+            raise ContentError("widget IDs must be unique")
+        seen_ids.add(normalized_id)
         if not isinstance(entry_type, str) or not entry_type.strip():
             raise ContentError("each widget entry needs a non-empty string type")
         if not isinstance(config, dict):
@@ -495,7 +500,7 @@ def widget_source_path(location: str, widget_id: str) -> str:
     """
 
     location = normalize_relative_path(location)
-    safe_id = make_slug(widget_id, widget_id)
+    safe_id = make_slug(widget_id)
     if not safe_id:
         raise ContentError("widget id must contain letters or numbers")
     if location == "index.md":
@@ -513,10 +518,15 @@ def widget_entries_for_location(location: str, widgets: list) -> list[dict]:
 
     entries = _validate_widget_entries(widgets)
     result: list[dict] = []
+    source_paths: set[str] = set()
     for entry in entries:
         config = dict(entry["config"])
         if entry["type"] in _SOURCE_WIDGET_TYPES:
-            config["source"] = widget_source_path(location, entry["id"])
+            source = widget_source_path(location, entry["id"])
+            if source in source_paths:
+                raise ContentError("widget IDs must create unique source filenames")
+            source_paths.add(source)
+            config["source"] = source
         result.append({"id": entry["id"], "type": entry["type"], "config": config})
     return result
 

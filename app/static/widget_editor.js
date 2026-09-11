@@ -3,10 +3,19 @@ document.querySelectorAll('[data-widget-tray]').forEach((tray) => {
   const field = tray.querySelector('[data-widgets-json]');
   const type = tray.querySelector('[data-widget-type]');
   const widgetId = tray.querySelector('[data-widget-id]');
+  const widgetIdError = tray.querySelector('[data-widget-id-error]');
   const error = tray.querySelector('[data-widget-error]');
   const entries = () => [...list.children].map((row) => JSON.parse(row.dataset.widget));
   const sync = () => { field.value = JSON.stringify(entries()); };
   const showError = (message) => { error.textContent = message; error.hidden = false; };
+  const widgetKey = (value) => value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const validateWidgetId = () => {
+    const id = widgetId.value.trim();
+    const duplicate = id && entries().some((entry) => widgetKey(entry.id) === widgetKey(id));
+    widgetIdError.hidden = !duplicate;
+    widgetIdError.textContent = duplicate ? 'Choose a unique Widget ID for this book or page.' : '';
+    return !duplicate;
+  };
   const addRow = (entry) => {
     const row = document.createElement('li'); row.className = 'widget-row'; row.dataset.widget = JSON.stringify(entry);
     row.innerHTML = `<span class="widget-label"></span><span class="widget-id"></span><span class="widget-source"></span><button type="button" class="widget-remove danger" data-widget-remove aria-label="Remove this widget">✕</button>`;
@@ -19,10 +28,12 @@ document.querySelectorAll('[data-widget-tray]').forEach((tray) => {
     error.hidden = true;
     const id = widgetId.value.trim();
     if (!id) { showError('Enter a Widget ID so this widget and its source file are easy to identify.'); return; }
-    if (entries().some((entry) => entry.id === id)) { showError('Widget IDs must be unique on this page.'); return; }
+    if (!validateWidgetId()) return;
     addRow({ id, type: type.value, config: {} });
     widgetId.value = '';
+    widgetIdError.hidden = true;
   });
+  widgetId.addEventListener('input', validateWidgetId);
   list.addEventListener('click', (event) => {
     const button = event.target.closest('[data-widget-remove]');
     if (!button) return;

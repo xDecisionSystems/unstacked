@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 04:54 UTC — Codex
+Added immediate red duplicate-ID feedback beneath the Book/Page Widget ID
+input. IDs are also validated server-side, including names that would create
+the same generated Markdown filename.
+
+Tests: Ruff and focused duplicate-ID test pass.
+- Files: `app/content.py`, `app/static/widget_editor.js`,
+  `app/templates/_widget_editor.html`, `tests/test_home_widgets.py`, `LOG.md`
+
 ## 2026-09-11 04:52 UTC — Codex
 Made Book and Page widget IDs user-entered, visible, and unique per host so
 multiple widgets of the same kind are distinguishable. The ID continues to
@@ -146,11 +155,3 @@ nav tests pass.
 - Files: `app/home_widgets.py`, `app/static/style.css`,
   `app/templates/home_editor.html`, `app/templates/tree.html`,
   `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 03:13 UTC — Codex
-Stabilized the compact filter control's layout: its closed button and open
-search state now reserve the same row height, so cards do not jump when the
-search field is toggled.
-
-Tests: Ruff passes.
-- Files: `app/static/style.css`, `LOG.md`
