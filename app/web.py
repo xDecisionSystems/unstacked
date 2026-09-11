@@ -594,15 +594,17 @@ def _search_breadcrumbs(content, path: str) -> list[str]:
 
 @router.get("/", include_in_schema=False)
 def index(request: Request) -> RedirectResponse:
-    """Route by session state: unauthenticated, forced change, or ordinary."""
+    """Route the management site's root by session state.
+
+    Anonymous readers use the separately deployed filtered static site.  The
+    management hostname must never become a second public entrance merely
+    because Home was marked public, so it always starts with the login page.
+    """
 
     try:
         user = get_current_web_user(request)
     except HTTPException:
-        content = request.app.state.content
-        return RedirectResponse(
-            _unauthenticated_destination(content), status_code=status.HTTP_303_SEE_OTHER
-        )
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     if user.must_change_password:
         return RedirectResponse("/change-password", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/tree", status_code=status.HTTP_303_SEE_OTHER)
@@ -1043,10 +1045,12 @@ def _history_context(
 @router.get("/settings", response_class=HTMLResponse, include_in_schema=False)
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 def admin_view(
-    request: Request, user: Annotated[User, Depends(require_normal_web_user)]
+    request: Request, user: Annotated[User | None, Depends(_optional_normal_web_user)]
 ) -> Response:
     """Administrative console; mutations stay in the established admin APIs."""
 
+    if user is None:
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     if not user.is_admin:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found")
     with Session(request.app.state.engine) as session:

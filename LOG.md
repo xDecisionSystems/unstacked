@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 02:36 UTC — Codex
+Made the management site explicitly login-first: anonymous visits to its
+root or Settings page now redirect to the existing login screen even when
+the separately served public Home is enabled.
+
+Tests: Ruff and focused management-login browser tests pass.
+- Files: `app/web.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-09 05:57 UTC — Codex
 Implemented the split public/management deployment: a filtered, atomic
 public MkDocs build now runs independently of the authenticated FastAPI site,
@@ -138,11 +146,3 @@ preset. Navigation chrome remains available for custom palette changes.
 
 Ruff and the focused palette tests pass.
 - Files: `app/theme.py`, `tests/test_theme.py`, `LOG.md`
-
-## 2026-09-07 14:46 UTC — Codex
-Expanded every preset preview to show all six editable palette colors,
-including Navigation chrome, so no color disappears from the palette chooser.
-
-Ruff and the complete theme test suite pass.
-- Files: `app/templates/admin.html`, `app/theme.py`, `tests/test_theme.py`,
-  `tests/test_theme_api.py`, `LOG.md`

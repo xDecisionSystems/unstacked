@@ -95,6 +95,14 @@ def test_unauthenticated_root_redirects_to_login(client):
     assert response.headers["location"] == "/login"
 
 
+def test_unauthenticated_settings_redirects_to_login(client):
+    """The management hostname never exposes Settings to an anonymous visit."""
+
+    response = client.get("/settings", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
 def test_login_page_renders_a_form_for_an_unauthenticated_visitor(client):
     response = client.get("/login")
     assert response.status_code == 200
@@ -1553,7 +1561,7 @@ def test_home_not_public_keeps_tree_behind_login(client):
     assert response.headers["location"] == "/login"
 
 
-def test_unauthenticated_non_public_page_redirects_to_public_home(app_env, client, content):
+def test_management_root_redirects_to_login_even_when_home_is_public(app_env, client, content):
     app, _settings, admin, _token = app_env
     app.state.content.set_home_public(True, admin)
 
@@ -1565,7 +1573,7 @@ def test_unauthenticated_non_public_page_redirects_to_public_home(app_env, clien
     assert book.status_code == 303
     assert book.headers["location"] == "/tree"
     root = client.get("/", follow_redirects=False)
-    assert root.headers["location"] == "/tree"
+    assert root.headers["location"] == "/login"
 
 
 # --------------------------------------------------------------------------
