@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:13 UTC — Codex
+Stabilized the compact filter control's layout: its closed button and open
+search state now reserve the same row height, so cards do not jump when the
+search field is toggled.
+
+Tests: Ruff passes.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-09-11 03:10 UTC — Codex
 Replaced always-visible library search fields with compact funnel controls.
 Books, Pages, and book page grids now reveal their existing search input only
@@ -145,10 +153,3 @@ Ruff and focused backup tests pass. Full suite: 750 passed; one pre-existing
 Settings navigation assertion fails because it expects an obsolete Home entry.
 - Files: `app/admin_api.py`, `app/backup_config.py`, `app/templates/admin.html`,
   `tests/test_backup_config.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 15:24 UTC — Codex
-Corrected the palette display name to Pegasus nights, preserving the approved
-UCF colors and all palette behavior.
-
-Ruff and focused palette tests pass.
-- Files: `app/theme.py`, `tests/test_theme_api.py`, `LOG.md`
