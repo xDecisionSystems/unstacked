@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 19:33 UTC — Codex
+Restored the required App CI coverage threshold with targeted tests instead
+of weakening the 85% gate. Added coverage for widget-source validation,
+widget ACL behavior, malformed card-link data, and public-site staging,
+publication, and worker fail-closed paths. This protects the recently added
+widget and split public-site behavior while making CI actionable again.
+
+Tests: Ruff and the complete pytest suite pass at 85.02% coverage.
+- Files: `tests/test_home_widgets.py`, `tests/test_public_site.py`, `LOG.md`
+
 ## 2026-09-11 15:40 UTC — Claude Code
 Fixed the two tests that had been failing on `main` independent of
 `plans/plan_widget_regression_fixes.md` (both genuinely missed follow-ups
@@ -231,17 +241,3 @@ widgets, while titles, labels, dates, and filter controls remain plain text.
 Tests: Ruff and focused text/data-card widget tests pass.
 - Files: `app/static/style.css`, `app/templates/_content_widgets.html`,
   `app/web.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 03:46 UTC — Codex
-Extended portable widgets from Home to book and page views. Authors can now
-add Markdown-backed text or data-card widgets in Book and Page editors; text
-widgets render an authorized source Markdown page below the host content.
-
-Tests: Ruff and focused widget renderer, Book, and Page-view tests pass.
-- Files: `app/ai_service.py`, `app/content.py`, `app/home_widgets.py`,
-  `app/static/widget_editor.js`, `app/static/widget_filters.js`,
-  `app/templates/_content_widgets.html`, `app/templates/_widget_editor.html`,
-  `app/templates/base.html`, `app/templates/book.html`,
-  `app/templates/book_editor.html`, `app/templates/editor.html`,
-  `app/templates/page.html`, `app/templates/tree.html`, `app/web.py`,
-  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`

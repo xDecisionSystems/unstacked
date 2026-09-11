@@ -20,7 +20,10 @@ from app.content import (
 )
 from app.home_widgets import (
     WidgetEntry,
+    _describe_target,
+    _render_data_cards,
     _render_featured,
+    _render_text,
     build_home_widgets,
     parse_widget_entries,
     render_widgets,
@@ -297,6 +300,304 @@ def test_switching_cards_uses_the_data_card_source_format(app_env):
     assert result.errors == []
     assert result.rendered[0].type == "switching-cards"
     assert result.rendered[0].data["filters"] == [{"id": "graduate", "label": "Graduate"}]
+
+
+@pytest.mark.parametrize(
+    ("widget_type", "config", "message"),
+    [
+        ("text", {}, "requires a Markdown source page"),
+        ("data-cards", {}, "requires a Markdown source page"),
+        ("text", {"source": "/outside.md"}, "has an invalid source page"),
+        ("data-cards", {"source": "research"}, "source must be a Markdown page"),
+        ("text", {"source": "research/missing.md"}, "source page could not be read"),
+    ],
+)
+def test_source_backed_widgets_report_invalid_source_configuration(
+    app_env, widget_type, config, message
+):
+    """Bad widget-source configuration should be editor-visible, never fatal."""
+
+    app, _settings, admin, _token = app_env
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        result = build_home_widgets(
+            [{"id": "broken", "type": widget_type, "config": config}],
+            authorization,
+            app.state.content,
+        )
+    assert result.rendered == []
+    assert message in result.errors[0].message
+
+
+@pytest.mark.parametrize(
+    ("widget_block", "message"),
+    [
+        ("cards: not-a-list\n", "cards' front-matter list"),
+        ("cards: []\nwidget: not-a-mapping\n", "widget' must be a mapping"),
+        ("cards: []\nwidget:\n  title: 4\n", "widget title must be text"),
+        ("cards: []\nwidget:\n  filters: not-a-list\n", "widget filters must be a list"),
+        (
+            "cards: []\nwidget:\n  filters:\n    - id: valid\n      label: 4\n",
+            "widget filters need labels",
+        ),
+    ],
+)
+def test_data_card_widget_reports_invalid_source_schema(app_env, widget_block, message):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Cards", "cards", "", [], False, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "title: Cards\n", "title: Cards\n" + widget_block
+        ),
+        encoding="utf-8",
+    )
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        result = build_home_widgets(
+            [{"id": "cards", "type": "data-cards", "config": {"source": "research/cards.md"}}],
+            authorization,
+            content,
+        )
+    assert result.rendered == []
+    assert message in result.errors[0].message
+
+
+@pytest.mark.parametrize(
+    ("card_block", "message"),
+    [
+        ("- text: Missing title\n", "each card needs a title"),
+        ("- title: Example\n  text: 4\n", "card text values must be text"),
+        ("- title: Example\n  filters: bad\n", "card filters must be a list"),
+        ("- title: Example\n  filters: [missing]\n", "card uses unknown filter"),
+        ("- title: Example\n  url: ftp://example.test\n", "card links must use http or https"),
+        ("- title: Example\n  target: 4\n", "card targets must be book or page paths"),
+    ],
+)
+def test_data_card_widget_reports_invalid_card_schema(app_env, card_block, message):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Cards", "cards", "", [], False, admin)
+    source = content.docs / "research" / "cards.md"
+    block = "cards:\n" + card_block
+    source.write_text(
+        source.read_text(encoding="utf-8").replace("title: Cards\n", "title: Cards\n" + block),
+        encoding="utf-8",
+    )
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        result = build_home_widgets(
+            [{"id": "cards", "type": "data-cards", "config": {"source": "research/cards.md"}}],
+            authorization,
+            content,
+        )
+    assert result.rendered == []
+    assert message in result.errors[0].message
+
+
+def test_home_widget_source_inherits_home_read_permission(app_env):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    entries = widget_entries_for_location(
+        "index.md", [{"id": "notice", "type": "text", "config": {}}]
+    )
+    source = content.ensure_widget_sources("index.md", entries, admin)[0]
+    path = content.docs / source
+    path.write_text(path.read_text(encoding="utf-8") + "\nVisible Home notice.\n", encoding="utf-8")
+
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        result = build_home_widgets(entries, authorization, content)
+    assert result.errors == []
+    assert result.rendered[0].data["markdown"].endswith("Visible Home notice.")
+
+
+def test_featured_target_fallbacks_remain_useful_when_content_was_removed(app_env):
+    """A stale featured item should still receive a clear title while it is repaired."""
+
+    app, _settings, _admin, _token = app_env
+    content = app.state.content
+
+    assert _describe_target(content, "research/missing-page.md")["title"] == "Missing Page"
+    assert _describe_target(content, "missing-book")["title"] == "Missing Book"
+
+
+@pytest.mark.parametrize(
+    ("renderer", "source", "message"),
+    [
+        (_render_data_cards, "/outside.md", "invalid source page"),
+        (_render_data_cards, "research/missing.md", "source page could not be read"),
+        (_render_text, "/outside.md", "invalid source page"),
+        (_render_text, "research/not-a-page", "source must be a Markdown page"),
+    ],
+)
+def test_source_renderers_reject_invalid_sources_directly(app_env, renderer, source, message):
+    """Each renderer must protect callers that use the registry helpers directly."""
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    entry = WidgetEntry(id="broken", type="text", config={"source": source})
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        with pytest.raises(ValueError, match=message):
+            renderer(entry, authorization, content)
+
+
+@pytest.mark.parametrize(
+    ("source_block", "message"),
+    [
+        ("cards:\n" + "".join(f"  - title: Card {item}\n" for item in range(101)), "at most 100"),
+        (
+            "cards: []\nwidget:\n  filters:\n"
+            + "".join(f"    - id: filter-{item}\n      label: Filter\n" for item in range(21)),
+            "at most 20 filters",
+        ),
+        ("cards: []\nwidget:\n  filters:\n    - invalid\n", "filter must be a mapping"),
+        (
+            "cards: []\nwidget:\n  filters:\n    - id: duplicate\n      label: One\n"
+            "    - id: duplicate\n      label: Two\n",
+            "unique letter",
+        ),
+        ("cards:\n  - invalid\n", "card must be a mapping"),
+    ],
+)
+def test_data_card_renderer_enforces_source_size_and_mapping_limits(app_env, source_block, message):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Cards", "cards", "", [], False, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "title: Cards\n", "title: Cards\n" + source_block
+        ),
+        encoding="utf-8",
+    )
+    entry = WidgetEntry(id="cards", type="data-cards", config={"source": "research/cards.md"})
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        with pytest.raises(ValueError, match=message):
+            _render_data_cards(entry, authorization, content)
+
+
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [
+        ("research/too/deep.md", "page targets must look like"),
+        ("research/missing.md", "target page could not be read"),
+        ("research/too/deep", "book targets must be a book path"),
+        ("missing-book", "target book could not be read"),
+        ("/outside.md", "card targets must be book or page paths"),
+    ],
+)
+def test_data_card_renderer_validates_link_targets(app_env, target, message):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Cards", "cards", "", [], False, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "title: Cards\n", "title: Cards\ncards:\n  - title: Card\n    target: " + target + "\n"
+        ),
+        encoding="utf-8",
+    )
+    entry = WidgetEntry(id="cards", type="data-cards", config={"source": "research/cards.md"})
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        with pytest.raises(ValueError, match=message):
+            _render_data_cards(entry, authorization, content)
+
+
+def test_source_widgets_render_empty_when_viewer_cannot_read_the_source(app_env):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Cards", "cards", "Secret", [], False, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "title: Cards\n", "title: Cards\ncards:\n  - title: Private card\n"
+        ),
+        encoding="utf-8",
+    )
+
+    with Session(app.state.engine) as session:
+        reader = _reader(session, "unreadable-widget@example.com")
+        authorization = AuthorizationContext(session, reader)
+        cards = _render_data_cards(
+            WidgetEntry(id="cards", type="data-cards", config={"source": "research/cards.md"}),
+            authorization,
+            content,
+        )
+        text = _render_text(
+            WidgetEntry(id="text", type="text", config={"source": "research/cards.md"}),
+            authorization,
+            content,
+        )
+
+    assert cards.data == {"items": []}
+    assert text.data == {"html": ""}
+
+
+def test_data_card_omits_an_unreadable_but_valid_link_target(app_env):
+    """Cards may be shared without turning a private target into a link."""
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_book("Private", "private", admin)
+    content.create_page("research", "Cards", "cards", "", [], False, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "title: Cards\n",
+            "title: Cards\ncards:\n  - title: Private reference\n    target: private\n",
+        ),
+        encoding="utf-8",
+    )
+    with Session(app.state.engine) as session:
+        reader = _reader(session, "limited-widget@example.com")
+        _grant(session, reader, "research", read=True, group_name="research-readers")
+        authorization = AuthorizationContext(session, reader)
+        rendered = _render_data_cards(
+            WidgetEntry(id="cards", type="data-cards", config={"source": "research/cards.md"}),
+            authorization,
+            content,
+        )
+
+    assert rendered.data["items"][0]["target_url"] is None
+
+
+def test_data_card_links_to_a_readable_book_or_page_target(app_env):
+    """A valid, readable target becomes an internal management link."""
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_book("Projects", "projects", admin)
+    content.create_page("projects", "Overview", "overview", "", [], False, admin)
+    content.create_page("research", "Cards", "cards", "", [], False, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        "---\ntitle: Cards\ncards:\n  - title: Projects\n    target: projects\n"
+        "  - title: Project overview\n    target: projects/overview.md\n---\n",
+        encoding="utf-8",
+    )
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        rendered = _render_data_cards(
+            WidgetEntry(id="cards", type="data-cards", config={"source": "research/cards.md"}),
+            authorization,
+            content,
+        )
+
+    assert rendered.data["items"][0]["target_url"] == "/books/projects"
+    assert rendered.data["items"][1]["target_url"] == "/pages/projects/overview"
 
 
 def test_horizontal_rule_widget_needs_no_source_page(app_env):
