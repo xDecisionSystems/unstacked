@@ -352,6 +352,43 @@ def test_home_renders_the_index_page_body_and_the_featured_widget(client, conten
     assert "Secret" in home.text
 
 
+def test_home_renders_a_generic_data_cards_widget(app_env, client):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Card data", "cards", "Internal data", [], True, admin)
+    source = content.docs / "research" / "cards.md"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "title: Card data\n",
+            "title: Card data\ncards:\n"
+            "  - title: Human-AI Collaboration\n"
+            "    summary: Safer autonomous systems.\n"
+            "    label: Office of Naval Research\n"
+            "    date: Aug 2021\n",
+        ),
+        encoding="utf-8",
+    )
+    content.update_home_page(
+        "",
+        [
+            {
+                "id": "projects",
+                "type": "data-cards",
+                "config": {"title": "Funded Projects & Grants", "source": "research/cards.md"},
+            }
+        ],
+        admin,
+        base_blob_sha=content.home_page_blob_sha(),
+    )
+
+    _login(client, "admin")
+    home = client.get("/tree")
+    assert 'class="data-card-grid"' in home.text
+    assert "Human-AI Collaboration" in home.text
+    assert "Office of Naval Research" in home.text
+
+
 def test_home_renders_multiple_featured_widgets_with_disjoint_grids_and_titles(app_env, client):
     """Two ``featured`` widgets on one Home page each show only their own grid.
 
@@ -562,13 +599,15 @@ def test_home_editor_widget_tray_includes_add_edit_remove_markup(app_env, client
     assert editor.status_code == 200
     text = editor.text
 
-    # Add-a-grid control. A nested <form> here would be invalid HTML --
+    # Add-widget control. A nested <form> here would be invalid HTML --
     # browsers silently drop it, breaking the JS wiring and letting the
     # button fall through to submit the outer Home-edit form instead.
     assert '<div id="add-widget-form" class="widget-add-form">' in text
-    assert '<button type="button" id="add-widget-submit">Add featured grid</button>' in text
+    assert '<button type="button" id="add-widget-submit">Add widget</button>' in text
     assert 'id="add-widget-id"' in text
+    assert 'id="add-widget-type"' in text
     assert 'id="add-widget-title"' in text
+    assert 'id="add-widget-source"' in text
     assert '<p class="error-message" id="add-widget-error" hidden></p>' in text
 
     # Every rendered row carries a title input and a remove button.

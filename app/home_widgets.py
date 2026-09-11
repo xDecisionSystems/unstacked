@@ -24,7 +24,7 @@ from typing import Any
 from app.acl import AuthorizationContext
 from app.content import ContentError, ContentRepository
 from app.nav import NavigationError, read_navigation
-from app.paths import UnsafePath
+from app.paths import UnsafePath, normalize_relative_path, path_depth
 
 
 @dataclass(frozen=True)
@@ -181,8 +181,74 @@ def _render_featured(
     )
 
 
+def _render_data_cards(
+    entry: WidgetEntry, authorization: AuthorizationContext, content: ContentRepository
+) -> RenderedWidget:
+    """Render generic cards declared in one permission-checked Markdown page.
+
+    The source page uses front matter rather than an application table, for
+    example ``cards: [{title, summary, label, date, url}]``.  It can be a draft
+    helper page; its book ACL still governs whether a Home viewer may see the
+    card data.
+    """
+
+    source = entry.config.get("source")
+    if not isinstance(source, str):
+        raise ValueError("requires a Markdown source page")
+    try:
+        source = normalize_relative_path(source)
+    except UnsafePath as exc:
+        raise ValueError("has an invalid source page") from exc
+    if not source.endswith(".md") or path_depth(source) != 2:
+        raise ValueError("source must be a book page such as research/grants.md")
+    if not authorization.policy.decide(source).can_read:
+        return RenderedWidget(id=entry.id, type=entry.type, title="", data={"items": []})
+    try:
+        metadata, _body, _raw = content.read_page(source)
+    except (ContentError, UnsafePath):
+        raise ValueError("source page could not be read") from None
+    cards = metadata.get("cards")
+    if not isinstance(cards, list):
+        raise ValueError("source page needs a 'cards' front-matter list")
+    if len(cards) > 100:
+        raise ValueError("source page may list at most 100 cards")
+    items: list[dict[str, str | None]] = []
+    for card in cards:
+        if not isinstance(card, dict):
+            raise ValueError("each card must be a mapping")
+        title = card.get("title")
+        summary = card.get("summary")
+        label = card.get("label")
+        date = card.get("date")
+        url = card.get("url")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError("each card needs a title")
+        for name, value in (("summary", summary), ("label", label), ("date", date)):
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"card {name} values must be text")
+        if url is not None and (not isinstance(url, str) or not url.startswith(("https://", "http://"))):
+            raise ValueError("card links must use http or https")
+        items.append(
+            {
+                "title": title.strip(),
+                "summary": summary.strip() if isinstance(summary, str) else None,
+                "label": label.strip() if isinstance(label, str) else None,
+                "date": date.strip() if isinstance(date, str) else None,
+                "url": url,
+            }
+        )
+    title = entry.config.get("title")
+    return RenderedWidget(
+        id=entry.id,
+        type=entry.type,
+        title=title.strip() if isinstance(title, str) else "",
+        data={"items": items, "source": source},
+    )
+
+
 WIDGET_REGISTRY: dict[str, WidgetRenderer] = {
     "featured": _render_featured,
+    "data-cards": _render_data_cards,
 }
 
 
@@ -204,7 +270,10 @@ def render_widgets(
         if renderer is None:
             errors.append(WidgetError(entry.id, f"unknown widget type '{entry.type}'"))
             continue
-        rendered.append(renderer(entry, authorization, content))
+        try:
+            rendered.append(renderer(entry, authorization, content))
+        except ValueError as exc:
+            errors.append(WidgetError(entry.id, f"widget '{entry.id}' {exc}"))
     return rendered, errors
 
 

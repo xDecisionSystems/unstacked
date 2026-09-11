@@ -10,6 +10,18 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:21 UTC — Codex
+Added the generic Markdown-backed `data-cards` Home widget. Any authorized
+book page can supply one front-matter `cards` list; Home editors choose its
+source and label, and the widget renders responsive linked cards without a
+new database table or grants-specific code.
+
+Tests: Ruff, focused widget/browser tests, strict content-build tests, and
+nav tests pass.
+- Files: `app/home_widgets.py`, `app/static/style.css`,
+  `app/templates/home_editor.html`, `app/templates/tree.html`,
+  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 03:13 UTC — Codex
 Stabilized the compact filter control's layout: its closed button and open
 search state now reserve the same row height, so cards do not jump when the
@@ -143,13 +155,3 @@ restoring from the named backup repository.
 
 Ruff and focused Settings markup tests pass.
 - Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-07 15:40 UTC — Codex
-Replaced the Settings known-hosts-path field with an SSH server fingerprint
-check. Administrators review and confirm the discovered fingerprint; Unstacked
-then stores and enforces the matching host key privately for future syncs.
-
-Ruff and focused backup tests pass. Full suite: 750 passed; one pre-existing
-Settings navigation assertion fails because it expects an obsolete Home entry.
-- Files: `app/admin_api.py`, `app/backup_config.py`, `app/templates/admin.html`,
-  `tests/test_backup_config.py`, `tests/test_web.py`, `LOG.md`

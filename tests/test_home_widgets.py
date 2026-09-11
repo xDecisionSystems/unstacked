@@ -180,6 +180,52 @@ def test_featured_widget_resolves_page_and_book_titles(app_env):
     assert items["handbook"]["title"] == "Handbook"
 
 
+def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
+    app, _settings, admin, _token = app_env
+    content: ContentRepository = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Card data", "cards", "Internal data", [], True, admin)
+    source = content.docs / "research" / "cards.md"
+    raw = source.read_text(encoding="utf-8")
+    source.write_text(
+        raw.replace(
+            "title: Card data\n",
+            "title: Card data\ncards:\n"
+            "  - title: Human-AI Collaboration\n"
+            "    summary: Safer autonomous systems.\n"
+            "    label: Office of Naval Research\n"
+            "    date: Aug 2021\n"
+            "    url: https://www.onr.navy.mil\n",
+        ),
+        encoding="utf-8",
+    )
+
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        result = build_home_widgets(
+            [
+                {
+                    "id": "projects",
+                    "type": "data-cards",
+                    "config": {"title": "Funded Projects & Grants", "source": "research/cards.md"},
+                }
+            ],
+            authorization,
+            content,
+        )
+
+    assert result.errors == []
+    assert result.rendered[0].data["items"] == [
+        {
+            "title": "Human-AI Collaboration",
+            "summary": "Safer autonomous systems.",
+            "label": "Office of Naval Research",
+            "date": "Aug 2021",
+            "url": "https://www.onr.navy.mil",
+        }
+    ]
+
+
 # --------------------------------------------------------------------------
 # Multiple independent ``featured`` widget instances (per-widget grids).
 # --------------------------------------------------------------------------
