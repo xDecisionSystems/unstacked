@@ -10,6 +10,29 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 06:06 UTC — Claude Code
+Fixed three data-loss risks from the widget-feature commits (see
+`plans/plan_widget_regression_fixes.md`, Phase 2): a page/Home save that
+failed validation or hit a conflict redisplayed the widget editor with an
+empty tray regardless of what was submitted, so an unnoticed resubmission
+would wipe every widget (now recovers the submitted list for redisplay via
+a new `_redisplay_widgets` helper); removing a widget never deleted its
+generated Markdown source, so reusing the same id later silently
+resurrected the old file's stale content instead of a fresh starter
+template (`ensure_widget_sources` now prunes sources its location no
+longer references, scoped to that location's own filename prefix so a
+book's and its pages' sources sharing one directory can't cross-delete
+each other); and a failure in `ensure_widget_sources` *after* the main
+content commit already succeeded routed the response through the error
+path (claiming nothing was saved) or, for a bare `OSError`, crashed as an
+unhandled 500 -- now caught, logged, and the save still redirects as the
+success it is.
+
+Tests: Ruff and full pytest pass (same two pre-existing, unrelated
+failures as before).
+- Files: `app/content.py`, `app/web.py`, `plans/plan_widget_regression_fixes.md`,
+  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 05:38 UTC — Claude Code
 Fixed four regressions from the recent widget-feature commits (see
 `plans/plan_widget_regression_fixes.md`, Phase 1): non-admin readers saw
@@ -155,14 +178,4 @@ Tests: Ruff and focused data-card tests pass.
 - Files: `app/home_widgets.py`, `app/templates/tree.html`,
   `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
 
-## 2026-09-11 03:25 UTC — Codex
-Added optional internal targets to generic data cards. A card title can now
-link to an authorized book (`research`) or page (`research/project.md`),
-while an external URL remains the fallback link when no internal target is
-configured.
-
-Tests: Ruff and focused data-card tests pass.
-- Files: `app/home_widgets.py`, `app/static/style.css`,
-  `app/templates/tree.html`, `tests/test_home_widgets.py`,
-  `tests/test_web.py`, `LOG.md`
 

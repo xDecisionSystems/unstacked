@@ -638,6 +638,91 @@ def test_home_edit_rejects_a_stale_save_without_overwriting(app_env, client):
     assert content.read_home_page()[1] == "Changed elsewhere"
 
 
+def test_page_save_succeeds_even_when_widget_source_creation_fails_afterward(
+    app_env, client, monkeypatch
+):
+    """A page save must not be reported as failed once its content commit lands.
+
+    ``ensure_widget_sources`` runs as a second, independent git operation
+    after the page's own content is already committed. Before this fix, a
+    failure there routed the response through the editor's error path --
+    which claims nothing was saved -- even though the page's markdown had
+    already landed. The affected widget still surfaces its own error on the
+    next render via the existing widget_errors mechanism; this test only
+    covers that the save itself is reported (and behaves) as the success it
+    is.
+    """
+
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Handbook", "handbook", admin)
+    repository.create_page("handbook", "Leave", "leave", "Original", [], False, admin)
+    monkeypatch.setattr(
+        "app.content.ContentRepository.ensure_widget_sources",
+        lambda self, location, widgets, actor: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    _login(client, "admin")
+    editor = client.get("/pages/handbook/leave/edit")
+    csrf_token = _csrf_from(editor.text)
+    stale_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
+
+    response = client.post(
+        "/pages/handbook/leave/edit",
+        data={
+            "csrf_token": csrf_token,
+            "base_blob_sha": stale_sha,
+            "markdown": "Saved despite the widget-source failure",
+            "tags": "",
+            "widgets_json": json.dumps([{"id": "notice", "type": "text", "config": {}}]),
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert repository.read_page("handbook/leave.md")[1] == (
+        "Saved despite the widget-source failure"
+    )
+
+
+def test_home_edit_widget_validation_error_redisplays_the_submitted_widgets_not_empty(
+    app_env, client
+):
+    """A widget-list validation error must not empty the widget tray.
+
+    Two widget ids that would generate the same source filename make
+    ``_generated_widget_entries`` raise before ``save_home`` ever computes a
+    usable ``widgets`` list. Before this fix, that left ``widgets`` at its
+    ``[]`` default and the redisplayed editor showed an empty tray -- a user
+    who didn't notice and saved again would resubmit ``widgets_json=[]`` and
+    silently delete every widget already on Home.
+    """
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    _login(client, "admin")
+
+    editor = client.get("/home/edit")
+    csrf_token = _csrf_from(editor.text)
+
+    response = client.post(
+        "/home/edit",
+        data={
+            "csrf_token": csrf_token,
+            "base_blob_sha": content.home_page_blob_sha(),
+            "title": "Home",
+            "markdown": "Body",
+            "widgets_json": json.dumps(
+                [
+                    {"id": "Announcement", "type": "text", "config": {}},
+                    {"id": "announcement", "type": "text", "config": {}},
+                ]
+            ),
+        },
+    )
+    assert response.status_code == 422
+    assert 'data-id="Announcement"' in response.text
+    assert 'data-id="announcement"' in response.text
+
+
 def test_home_edit_reorders_widgets_and_persists_the_new_order(app_env, client):
     app, _settings, admin, _token = app_env
     content = app.state.content
@@ -1391,6 +1476,43 @@ def test_editor_rejects_a_stale_save_without_overwriting(app_env, client):
     assert response.status_code == 409
     assert "changed since you opened it" in response.text
     assert repository.read_page("handbook/leave.md")[1] == "Changed elsewhere"
+
+
+def test_page_edit_conflict_redisplays_the_submitted_widgets_not_empty(app_env, client):
+    """A rejected page save must not empty the widget tray (see the Home
+    equivalent, test_home_edit_conflict_redisplays_the_submitted_widgets_not_empty,
+    for why: an unnoticed resubmission of an emptied tray deletes every
+    widget on the page)."""
+
+    app, _settings, admin, _token = app_env
+    repository = app.state.content
+    repository.create_book("Handbook", "handbook", admin)
+    repository.create_page("handbook", "Leave", "leave", "Original", [], False, admin)
+    _login(client, "admin")
+    editor = client.get("/pages/handbook/leave/edit")
+    csrf_token = _csrf_from(editor.text)
+    stale_sha = re.search(r'name="base_blob_sha" value="([0-9a-f]+)"', editor.text).group(1)
+    repository.update_page(
+        "handbook/leave.md",
+        "Changed elsewhere",
+        [],
+        False,
+        admin,
+        base_blob_sha=repository.page_blob_sha("handbook/leave.md"),
+    )
+
+    response = client.post(
+        "/pages/handbook/leave/edit",
+        data={
+            "csrf_token": csrf_token,
+            "base_blob_sha": stale_sha,
+            "markdown": "Would overwrite",
+            "tags": "",
+            "widgets_json": json.dumps([{"id": "notice", "type": "text", "config": {}}]),
+        },
+    )
+    assert response.status_code == 409
+    assert 'class="widget-id">notice<' in response.text
 
 
 def test_editor_preview_is_csrf_and_write_gated(app_env, client, content):

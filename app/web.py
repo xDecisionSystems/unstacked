@@ -24,6 +24,7 @@ redirect from ``/``.
 
 import difflib
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +73,7 @@ from app.web_auth import login as auth_login
 from app.web_auth import logout as auth_logout
 
 router = APIRouter(tags=["Web UI"])
+logger = logging.getLogger("unstacked.web")
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -585,10 +587,55 @@ def _widgets_from_form(form: dict[str, str]) -> list[dict]:
     return widgets
 
 
+def _redisplay_widgets(form: dict[str, str]) -> list[dict]:
+    """Recover a widget tray's contents for redisplay after a failed save.
+
+    ``form`` here is the raw submission, not a page's stored front matter --
+    its ``widgets_json`` is the client's pre-canonicalization list (source
+    paths not yet rewritten to their generated form). That's fine for
+    redisplay: showing the tray as the user left it, rather than empty, is
+    what prevents an unnoticed resubmission from wiping every widget on the
+    page. Never raises -- a malformed submission already has its own error
+    message; the tray just falls back to empty rather than compounding it.
+    """
+
+    try:
+        return [entry for entry in _widgets_from_form(form) if isinstance(entry, dict)]
+    except ValueError:
+        return []
+
+
 def _generated_widget_entries(location: str, form: dict[str, str]) -> list[dict]:
     """Ignore client-selected source paths in favor of stable generated ones."""
 
     return widget_entries_for_location(location, _widgets_from_form(form))
+
+
+def _ensure_widget_sources_best_effort(
+    content: ContentRepository, location: str, widgets: list[dict], user: User
+) -> None:
+    """Create/prune this location's widget sources without failing its save.
+
+    Called only after the location's own content commit has already
+    succeeded -- ``widgets`` was already validated to build that commit, so
+    a failure here is a second, independent git operation (disk, git, or
+    filesystem trouble) rather than a validation problem. Letting it
+    propagate would route the response through the editor's error-redisplay
+    path, which claims nothing was saved even though it was: the content
+    commit already landed. Catching broadly is deliberate here for exactly
+    that reason; the affected widget will show its own "source page could
+    not be read" error on the next render via the existing widget_errors
+    mechanism; that page-render-time detection is the actual mitigation.
+    """
+
+    try:
+        content.ensure_widget_sources(location, widgets, user)
+    except Exception:
+        logger.warning(
+            "widget sources for %r could not be created/pruned after a successful save",
+            location,
+            exc_info=True,
+        )
 
 
 def _home_editor_context(
@@ -1021,7 +1068,6 @@ async def save_book_description(
                 markdown=form.get("markdown", ""),
                 widgets=widgets,
             )
-            request.app.state.content.ensure_widget_sources(book_slug, widgets, user)
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             return _book_editor_context(
                 request,
@@ -1032,6 +1078,7 @@ async def save_book_description(
                 error=_web_error(exc),
                 status_code=422,
             )
+        _ensure_widget_sources_best_effort(request.app.state.content, book_slug, widgets, user)
     return RedirectResponse(f"/books/{book_slug}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -1132,6 +1179,11 @@ def _editor_context(
             "card_image": str(metadata.get("card_image") or ""),
             "widgets": metadata.get("widgets") if isinstance(metadata.get("widgets"), list) else [],
         }
+    elif form is not None and "widgets" not in form:
+        # A failed save redisplays the raw submission (its widgets live in
+        # widgets_json, not a "widgets" list) -- recover it so the tray shows
+        # what the user had rather than empty. See _redisplay_widgets.
+        form = {**form, "widgets": _redisplay_widgets(form)}
     context.update({"form": form or {}, "error": error, "editing_path": path})
     return templates.TemplateResponse(request, "editor.html", context, status_code=status_code)
 
@@ -1404,7 +1456,6 @@ async def save_page(
                     card_image=form.get("card_image") or None,
                     widgets=widgets,
                 )
-            request.app.state.content.ensure_widget_sources(target, widgets, user)
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             return _editor_context(
                 request,
@@ -1415,6 +1466,7 @@ async def save_page(
                 error=_web_error(exc),
                 status_code=409 if isinstance(exc, ContentConflict) else 422,
             )
+        _ensure_widget_sources_best_effort(request.app.state.content, target, widgets, user)
     return RedirectResponse(f"/pages/{target.removesuffix('.md')}", status_code=303)
 
 
@@ -1470,13 +1522,16 @@ async def save_home(
                 base_blob_sha=form.get("base_blob_sha", ""),
                 title=form.get("title") or None,
             )
-            request.app.state.content.ensure_widget_sources("index.md", widgets, user)
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             display_form = {
                 "title": form.get("title", ""),
                 "markdown": form.get("markdown", ""),
                 "base_blob_sha": form.get("base_blob_sha", ""),
-                "widgets": widgets,
+                # Falls back to the raw submission when canonicalizing it is
+                # what failed (widgets stayed at its [] default in that
+                # case) -- otherwise the tray would redisplay empty and an
+                # unnoticed resubmission would wipe every widget on Home.
+                "widgets": widgets or _redisplay_widgets(form),
             }
             return _home_editor_context(
                 request,
@@ -1486,6 +1541,7 @@ async def save_home(
                 error=_web_error(exc),
                 status_code=409 if isinstance(exc, ContentConflict) else 422,
             )
+        _ensure_widget_sources_best_effort(request.app.state.content, "index.md", widgets, user)
     return RedirectResponse("/tree", status_code=303)
 
 

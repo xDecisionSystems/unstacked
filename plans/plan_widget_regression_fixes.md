@@ -17,6 +17,8 @@ one appears.
 
 ## Phase 1 — Currently-broken user-facing behavior
 
+**Status: done** (commit `02ffb45`).
+
 1. **Home widgets invisible to non-admin viewers.** `_render_data_cards` and
    `_render_text` (`app/home_widgets.py:205,345`) check
    `authorization.policy.decide(source).can_read` against the widget's raw
@@ -52,6 +54,18 @@ one appears.
    logic's fragility undocumented.
 
 ## Phase 2 — Data-loss risks
+
+**Status: done.** Item 8 took the fallback this phase already named (visibly
+report partial success) rather than merging the two commits into one: true
+atomicity would mean restructuring `update_page`/`update_home_page`/
+`set_container_description` themselves, a larger and riskier change than
+this phase's other items. A failure in `ensure_widget_sources` after the
+main content commit already succeeded no longer routes through the error-
+redisplay path (which claimed nothing was saved) or, for non-`ContentError`
+failures like a bare `OSError`, crashes as an unhandled 500 -- it's caught,
+logged, and the save still redirects as the success it is. The affected
+widget surfaces its own error via the existing `widget_errors` mechanism on
+the next render.
 
 6. **Widget tray emptied on save conflict/validation error.** The editor's
    error-response context (`app/web.py:1112` and the equivalent in

@@ -347,6 +347,79 @@ def test_generated_widget_source_is_created_with_a_commented_example(app_env):
     assert markdown.startswith("<!--")
 
 
+def test_removing_a_widget_deletes_its_generated_source_rather_than_orphaning_it(app_env):
+    """A removed widget's source must not linger to be resurrected later.
+
+    Before this fix, ``ensure_widget_sources`` only ever created a missing
+    file -- it never deleted one for a widget that was removed. Reusing the
+    same id later found the old file already present and silently kept its
+    stale content instead of a fresh starter template.
+    """
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    first_pass = widget_entries_for_location(
+        "research", [{"id": "old", "type": "text", "config": {}}]
+    )
+    created = content.ensure_widget_sources("research", first_pass, admin)
+    source_path = content.docs / created[0]
+    source_path.write_text(
+        source_path.read_text(encoding="utf-8") + "\nDistinctive prior content.\n",
+        encoding="utf-8",
+    )
+
+    # The widget is removed: an empty layout references no sources at all.
+    content.ensure_widget_sources("research", [], admin)
+    assert not source_path.exists()
+
+    # A later widget reusing the same id must start fresh, not inherit the
+    # deleted file's old content (which could only happen if it were never
+    # actually removed).
+    second_pass = widget_entries_for_location(
+        "research", [{"id": "old", "type": "text", "config": {}}]
+    )
+    recreated = content.ensure_widget_sources("research", second_pass, admin)
+    assert recreated == created
+    _metadata, markdown, _raw = content.read_page(recreated[0])
+    assert "Distinctive prior content." not in markdown
+    assert markdown.startswith("<!--")
+
+
+def test_pruning_one_hosts_widgets_never_touches_a_sibling_hosts_widgets(app_env):
+    """A book and one of its pages share the same widget-sources directory.
+
+    A book's own widgets use the ``book-`` filename prefix; a page's use the
+    page's own slug as the prefix (see ``_widget_source_dir_and_prefix``).
+    Pruning must match only its own location's prefix -- glob'ing the shared
+    directory without that filter would delete a sibling's widgets outright.
+    """
+
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "Overview", "overview", "Body", [], False, admin)
+
+    book_widgets = content.ensure_widget_sources(
+        "research",
+        widget_entries_for_location("research", [{"id": "team", "type": "text", "config": {}}]),
+        admin,
+    )
+    page_widgets = content.ensure_widget_sources(
+        "research/overview.md",
+        widget_entries_for_location(
+            "research/overview.md", [{"id": "notice", "type": "text", "config": {}}]
+        ),
+        admin,
+    )
+    assert book_widgets == ["research/widget-sources/book-team.md"]
+    assert page_widgets == ["research/widget-sources/overview-notice.md"]
+
+    # Removing the page's own widget must not prune the book's.
+    content.ensure_widget_sources("research/overview.md", [], admin)
+    assert (content.docs / book_widgets[0]).exists()
+    assert not (content.docs / page_widgets[0]).exists()
+
+
 # --------------------------------------------------------------------------
 # Multiple independent ``featured`` widget instances (per-widget grids).
 # --------------------------------------------------------------------------

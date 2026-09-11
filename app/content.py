@@ -491,6 +491,27 @@ def _validate_widget_entries(widgets: list) -> list[dict]:
 _SOURCE_WIDGET_TYPES = frozenset({"text", "data-cards", "switching-cards"})
 
 
+def _widget_source_dir_and_prefix(location: str) -> tuple[str, str]:
+    """Return the (directory, filename-prefix) pair a location's widget sources share.
+
+    Every widget hosted at ``location`` generates a file at
+    ``{directory}/{prefix}-{widget_id}.md`` -- shared by ``widget_source_path``
+    (to build one file's name) and ``ContentRepository.ensure_widget_sources``
+    (to find every file ``location`` currently owns there, so one no longer
+    referenced by any widget can be pruned instead of resurrected later).
+    """
+
+    location = normalize_relative_path(location)
+    if location == "index.md":
+        return "widget-sources", "home"
+    if location.endswith(".md") and path_depth(location) == 2:
+        parent, page_name = location.rsplit("/", 1)
+        return f"{parent}/widget-sources", Path(page_name).stem
+    if path_depth(location) == 1:
+        return f"{location}/widget-sources", "book"
+    raise ContentError("widget host location is not valid")
+
+
 def widget_source_path(location: str, widget_id: str) -> str:
     """Return the private, deterministic Markdown file for one widget.
 
@@ -499,18 +520,11 @@ def widget_source_path(location: str, widget_id: str) -> str:
     directory at the docs root.
     """
 
-    location = normalize_relative_path(location)
+    directory, prefix = _widget_source_dir_and_prefix(location)
     safe_id = make_slug(widget_id)
     if not safe_id:
         raise ContentError("widget id must contain letters or numbers")
-    if location == "index.md":
-        return f"widget-sources/home-{safe_id}.md"
-    if location.endswith(".md") and path_depth(location) == 2:
-        parent, page_name = location.rsplit("/", 1)
-        return f"{parent}/widget-sources/{Path(page_name).stem}-{safe_id}.md"
-    if path_depth(location) == 1:
-        return f"{location}/widget-sources/book-{safe_id}.md"
-    raise ContentError("widget host location is not valid")
+    return f"{directory}/{prefix}-{safe_id}.md"
 
 
 def widget_entries_for_location(location: str, widgets: list) -> list[dict]:
@@ -1048,11 +1062,23 @@ class ContentRepository:
         Sources are intentionally ordinary draft Markdown files. The app
         excludes their directory from normal navigation while preserving the
         complete file-based, portable content model.
+
+        Also prunes any source this ``location`` previously generated but no
+        longer references (a removed or renamed widget). Without this, a
+        later widget reusing the same id would find the old file already
+        exists and silently inherit its stale content instead of a fresh
+        starter template -- ``widget_source_path`` is a pure function of
+        ``location`` and widget id, so nothing outside this location's own
+        current widget list can be a legitimate reference to it.
         """
 
         entries = widget_entries_for_location(location, widgets)
         created: list[str] = []
+        removed: list[str] = []
         now = datetime.now(timezone.utc).isoformat()
+        expected_sources = {
+            entry["config"]["source"] for entry in entries if entry["type"] in _SOURCE_WIDGET_TYPES
+        }
         with self.git.write_lock():
             for entry in entries:
                 if entry["type"] not in _SOURCE_WIDGET_TYPES:
@@ -1079,12 +1105,22 @@ class ContentRepository:
                     overwrite=False,
                 )
                 created.append(source)
-            if created:
+            directory, prefix = _widget_source_dir_and_prefix(location)
+            source_dir = safe_join(self.docs, directory)
+            if source_dir.is_dir() and not source_dir.is_symlink():
+                for existing in sorted(source_dir.glob(f"{prefix}-*.md")):
+                    if existing.is_symlink():
+                        continue
+                    relative = existing.relative_to(self.docs).as_posix()
+                    if relative not in expected_sources:
+                        existing.unlink()
+                        removed.append(relative)
+            if created or removed:
                 self.git.commit_paths(
-                    [f"docs/{source}" for source in created],
+                    [f"docs/{source}" for source in created + removed],
                     name=actor.display_name,
                     email=actor.email,
-                    message=f"Create widget sources for {location}",
+                    message=f"Update widget sources for {location}",
                 )
         return created
 
