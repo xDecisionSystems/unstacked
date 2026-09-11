@@ -806,20 +806,14 @@ def tree_view(
     request: Request,
     user: Annotated[User | None, Depends(_optional_normal_web_user)],
 ) -> Response:
-    """The dashboard: an anonymous visitor sees it read-only when it is public.
+    """Render the authenticated management dashboard.
 
-    Mirrors ``page_view``/``book_view``'s existing anonymous-public branch
-    rather than gating on ``require_normal_web_user`` unconditionally, since
-    Home can now be published the same way a book or page can.
+    Anonymous readers use the separate filtered static public site; this
+    route deliberately never renders Home without an Unstacked session.
     """
 
-    content = request.app.state.content
     if user is None:
-        if not _home_public(content):
-            return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
-        return templates.TemplateResponse(
-            request, "tree.html", _public_home_context(request, content)
-        )
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     with Session(request.app.state.engine) as session:
         context = _home_context(request, session, user)
     return templates.TemplateResponse(request, "tree.html", context)
@@ -828,8 +822,10 @@ def tree_view(
 @router.get("/books", response_class=HTMLResponse, include_in_schema=False)
 def books_view(
     request: Request,
-    user: Annotated[User, Depends(require_normal_web_user)],
+    user: Annotated[User | None, Depends(_optional_normal_web_user)],
 ) -> Response:
+    if user is None:
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     return templates.TemplateResponse(request, "books.html", context)
@@ -838,8 +834,10 @@ def books_view(
 @router.get("/pages", response_class=HTMLResponse, include_in_schema=False)
 def pages_view(
     request: Request,
-    user: Annotated[User, Depends(require_normal_web_user)],
+    user: Annotated[User | None, Depends(_optional_normal_web_user)],
 ) -> Response:
+    if user is None:
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     return templates.TemplateResponse(request, "pages.html", context)
@@ -851,43 +849,10 @@ def book_view(
     book_slug: str,
     user: Annotated[User | None, Depends(_optional_normal_web_user)],
 ) -> Response:
-    """A single book's pages, shown as one reorderable card grid.
-
-    Reuses the same ACL-filtered ``tree`` context every page already builds
-    rather than a second query -- a book absent from it is either nonexistent
-    or unreadable by this user, and the two must stay indistinguishable, so
-    both collapse to the same 404 for a *signed-in* user. An anonymous
-    visitor gets a redirect instead (see ``_unauthenticated_destination``):
-    the response still depends only on Home's public status, never on
-    whether this specific book exists or is merely unreadable.
-    """
+    """Show a book's reorderable page grid to an authenticated user only."""
 
     if user is None:
-        content = request.app.state.content
-        book_path = content.docs / book_slug
-        pages = (
-            [
-                _page_view(content, page.relative_to(content.docs).as_posix())
-                for page in sorted(book_path.rglob("*.md"))
-                if _public_page(content, page.relative_to(content.docs).as_posix())
-            ]
-            if book_path.is_dir()
-            else []
-        )
-        if not pages and not _container_public(content.docs, book_slug):
-            return RedirectResponse(
-                _unauthenticated_destination(content), status_code=status.HTTP_303_SEE_OTHER
-            )
-        context = _public_context(request)
-        context["book"] = {
-            "slug": book_slug,
-            "title": _container_title(content.docs, book_slug),
-            "pages": pages,
-            "page_count": len(pages),
-            "tags": [],
-            "can_write": False,
-        }
-        return templates.TemplateResponse(request, "book.html", context)
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     book = next((entry for entry in context["tree"] if entry["slug"] == book_slug), None)
@@ -1705,29 +1670,7 @@ def page_view(
     content = request.app.state.content
     target = page_path if page_path.endswith(".md") else f"{page_path}.md"
     if user is None:
-        if not _public_page(content, target):
-            return RedirectResponse(
-                _unauthenticated_destination(content), status_code=status.HTTP_303_SEE_OTHER
-            )
-        metadata, markdown_source, _raw = content.read_page(target)
-        try:
-            html = MarkdownRenderer(content.root).render(target, markdown_source)
-        except RenderConfigurationError:
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Page cannot be rendered")
-        context = _public_context(request)
-        context.update(
-            {
-                "page_title": metadata.get("title"),
-                "body": html,
-                "breadcrumbs": _breadcrumbs(content.docs, target, metadata),
-                "current_path": target.removesuffix(".md"),
-                "draft": False,
-                "can_write": False,
-                "edit_form": {},
-                "available_tags": [],
-            }
-        )
-        return templates.TemplateResponse(request, "page.html", context)
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     with Session(request.app.state.engine) as session:
         authorization = _authorization(session, user)
         try:

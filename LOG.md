@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 02:45 UTC — Codex
+Completed the public/management separation at the browser-route boundary.
+Anonymous management visits to Home, Books, Pages, individual books, and
+individual pages now redirect to login; public content is served only by the
+filtered public static service.
+
+Tests: Ruff, focused management-route browser tests, and public-site tests
+pass.
+- Files: `app/web.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 02:36 UTC — Codex
 Made the management site explicitly login-first: anonymous visits to its
 root or Settings page now redirect to the existing login screen even when
@@ -139,10 +149,3 @@ dark Harbor Ink chrome remains readable in both the top bar and Settings.
 Ruff and focused palette tests pass.
 - Files: `app/theme.py`, `app/static/style.css`, `tests/test_theme.py`,
   `tests/test_theme_api.py`, `LOG.md`
-
-## 2026-09-07 14:55 UTC — Codex
-Restored the original light navigation surface for every built-in color
-preset. Navigation chrome remains available for custom palette changes.
-
-Ruff and the focused palette tests pass.
-- Files: `app/theme.py`, `tests/test_theme.py`, `LOG.md`

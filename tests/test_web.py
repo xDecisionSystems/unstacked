@@ -1399,34 +1399,8 @@ def test_settings_nav_has_a_dedicated_home_page_entry_pointing_to_home(app_env, 
     assert "featured_label" not in response.text
 
 
-def test_public_page_and_book_are_available_without_a_session(app_env, client):
-    app, _settings, admin, _token = app_env
-    repository = app.state.content
-    repository.create_book("Public handbook", "public-handbook", admin)
-    repository.create_page(
-        "public-handbook", "Welcome", "welcome", "# Welcome", [], False, admin
-    )
-    repository.set_subtree_public("public-handbook", True, admin)
-
-    client.cookies.clear()
-    public_page = client.get("/pages/public-handbook/welcome")
-    public_book = client.get("/books/public-handbook")
-    assert public_page.status_code == 200
-    assert public_book.status_code == 200
-    for response in (public_page, public_book):
-        assert '<nav class="topbar-nav"' not in response.text
-        assert 'href="/books">Books</a>' not in response.text
-        assert 'href="/pages">Pages</a>' not in response.text
-
-    _login(client, "admin")
-    signed_in = client.get("/pages/public-handbook/welcome")
-    assert 'href="/books">Books</a>' in signed_in.text
-    assert 'href="/pages">Pages</a>' in signed_in.text
-
-
-def test_public_page_hides_the_history_link_for_an_anonymous_visitor(app_env, client):
-    """The history route requires a session; an anonymous visitor must never
-    be offered a link that only leads to a dead end."""
+def test_public_content_routes_redirect_to_login_on_management_site(app_env, client):
+    """Public content is served by the static public host, never this app."""
 
     app, _settings, admin, _token = app_env
     repository = app.state.content
@@ -1436,122 +1410,17 @@ def test_public_page_hides_the_history_link_for_an_anonymous_visitor(app_env, cl
     )
     repository.set_subtree_public("public-handbook", True, admin)
 
-    _login(client, "admin")
-    signed_in = client.get("/pages/public-handbook/welcome")
-    assert "/pages/public-handbook/welcome/history" in signed_in.text
-
     client.cookies.clear()
-    anonymous = client.get("/pages/public-handbook/welcome")
-    assert anonymous.status_code == 200
-    assert "/pages/public-handbook/welcome/history" not in anonymous.text
-    assert ">History<" not in anonymous.text
-
-
-def test_public_home_page_renders_read_only_for_an_anonymous_visitor(app_env, client):
-    app, _settings, admin, _token = app_env
-    content = app.state.content
-    content.set_home_public(True, admin)
-    content.create_book("Public handbook", "public-handbook", admin)
-    content.create_page(
-        "public-handbook", "Welcome", "welcome", "# Welcome", [], False, admin
-    )
-    content.set_subtree_public("public-handbook", True, admin)
-    content.create_book("Private handbook", "private-handbook", admin)
-    content.create_page(
-        "private-handbook", "Secret", "secret", "# Secret", [], False, admin
-    )
-
-    client.cookies.clear()
-    response = client.get("/tree")
-    assert response.status_code == 200
-    assert "Your featured books and pages." in response.text
-    assert 'href="/home/edit"' not in response.text
-
-
-def test_public_home_page_featured_widget_only_shows_public_items(app_env, client):
-    app, _settings, admin, _token = app_env
-    content = app.state.content
-    content.set_home_public(True, admin)
-    content.create_book("Public handbook", "public-handbook", admin)
-    content.create_page(
-        "public-handbook", "Welcome", "welcome", "# Welcome", [], False, admin
-    )
-    content.set_subtree_public("public-handbook", True, admin)
-    content.create_book("Private handbook", "private-handbook", admin)
-    content.create_page(
-        "private-handbook", "Secret", "secret", "# Secret", [], False, admin
-    )
-    _login(client, "admin")
-    csrf = _csrf_from(client.get("/tree").text)
-    client.post(
-        "/home/feature",
-        data={"csrf_token": csrf, "target": "public-handbook/welcome.md", "grid_id": "featured"},
-        follow_redirects=False,
-    )
-    client.post(
-        "/home/feature",
-        data={"csrf_token": csrf, "target": "private-handbook/secret.md", "grid_id": "featured"},
-        follow_redirects=False,
-    )
-
-    client.cookies.clear()
-    response = client.get("/tree")
-    assert 'href="/pages/public-handbook/welcome"' in response.text
-    assert 'href="/pages/private-handbook/secret"' not in response.text
-    assert "card-home-action" not in response.text
-
-
-def test_public_home_page_renders_multiple_grids_with_disjoint_titles_and_items(app_env, client):
-    """Anonymous mirror of the multi-widget rendering test, via ``_public_home_widgets``.
-
-    Same per-grid disjointness and per-grid optional title as the
-    authenticated path, but filtered by public visibility instead of an
-    ``AuthorizationContext`` -- and a private item in one grid must not leak
-    into either the public grid it shares a page with or the anonymous
-    response at all.
-    """
-
-    app, _settings, admin, _token = app_env
-    content = app.state.content
-    content.set_home_public(True, admin)
-    content.create_book("Research Book", "research-book", admin)
-    content.set_subtree_public("research-book", True, admin)
-    content.create_book("News Book", "news-book", admin)
-    content.set_subtree_public("news-book", True, admin)
-    content.create_book("Private Book", "private-book", admin)
-    content.update_home_page(
-        "Multiple grids.",
-        [
-            {"id": "research", "type": "featured", "config": {"title": "Research"}},
-            {"id": "news", "type": "featured", "config": {}},
-        ],
-        admin,
-        base_blob_sha=content.home_page_blob_sha(),
-    )
-    content.feature_on_home("research-book", "research", admin)
-    content.feature_on_home("private-book", "research", admin)  # not public -> filtered out
-    content.feature_on_home("news-book", "news", admin)
-
-    client.cookies.clear()
-    response = client.get("/tree")
-    assert response.status_code == 200
-
-    sections = re.findall(
-        r'<section class="main-pages home-widget".*?</section>', response.text, re.S
-    )
-    assert len(sections) == 2
-    research_section = next(s for s in sections if "Research Book" in s)
-    news_section = next(s for s in sections if s is not research_section)
-
-    assert 'href="/books/research-book"' in research_section
-    assert "Private Book" not in research_section
-    assert "News Book" not in research_section
-    assert "<h2>Research</h2>" in research_section
-
-    assert 'href="/books/news-book"' in news_section
-    assert "Research Book" not in news_section
-    assert "<h2>" not in news_section
-    assert "Private Book" not in response.text
+    for path in (
+        "/tree",
+        "/books",
+        "/pages",
+        "/books/public-handbook",
+        "/pages/public-handbook/welcome",
+    ):
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/login"
 
 
 def test_home_not_public_keeps_tree_behind_login(client):
@@ -1561,17 +1430,17 @@ def test_home_not_public_keeps_tree_behind_login(client):
     assert response.headers["location"] == "/login"
 
 
-def test_management_root_redirects_to_login_even_when_home_is_public(app_env, client, content):
+def test_management_routes_redirect_to_login_even_when_home_is_public(app_env, client, content):
     app, _settings, admin, _token = app_env
     app.state.content.set_home_public(True, admin)
 
     client.cookies.clear()
     page = client.get("/pages/alice-book/secret", follow_redirects=False)
     assert page.status_code == 303
-    assert page.headers["location"] == "/tree"
+    assert page.headers["location"] == "/login"
     book = client.get("/books/alice-book", follow_redirects=False)
     assert book.status_code == 303
-    assert book.headers["location"] == "/tree"
+    assert book.headers["location"] == "/login"
     root = client.get("/", follow_redirects=False)
     assert root.headers["location"] == "/login"
 
