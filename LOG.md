@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:38 UTC — Codex
+Made Home widgets explicitly palette-aware. Featured and data-card widgets
+now derive their card colors, controls, links, and shadows from the active
+palette rather than retaining fixed original-theme colors.
+
+Tests: Ruff plus focused palette and Home-widget tests pass.
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-09-11 03:36 UTC — Codex
 Made generic data-card widgets Markdown-driven and added ADC Lab-style
 switchable category filters. The source page now supplies the widget title,
@@ -149,15 +157,3 @@ Pages links, while authenticated users still receive them.
 
 Tests: focused public-view browser tests pass.
 - Files: `app/templates/base.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-09 03:07 UTC — Codex
-Separated SSH workspace archives from Git synchronization. Administrators can
-now pin an SSH server fingerprint, upload a portable restore-ready ZIP, and
-guardedly reconstruct content, permissions, users, featured data, and
-appearance settings without exporting operational secrets.
-
-Ruff and focused workspace-archive and Settings tests pass.
-- Files: `Dockerfile`, `app/config.py`, `app/main.py`, `app/ssh_archive.py`,
-  `app/ssh_archive_api.py`, `app/templates/admin.html`, `README.md`,
-  `plans/plan_initial.md`, `tests/conftest.py`, `tests/test_ssh_archive.py`,
-  `tests/test_web.py`, `LOG.md`
