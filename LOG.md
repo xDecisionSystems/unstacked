@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 04:27 UTC — Codex
+Added the missing Text choice to Home's widget picker. Selecting it now
+reveals the same required Markdown source-page field available in Book and
+Page widget editors.
+
+Tests: Ruff and the focused Home widget-picker test pass.
+- Files: `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 04:22 UTC — Codex
 Added an explicit Switching cards widget choice for the ADC Lab Hiring-style
 filter controls. It uses the existing Markdown source format for title,
@@ -148,12 +156,4 @@ filtered public static service.
 
 Tests: Ruff, focused management-route browser tests, and public-site tests
 pass.
-- Files: `app/web.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 02:36 UTC — Codex
-Made the management site explicitly login-first: anonymous visits to its
-root or Settings page now redirect to the existing login screen even when
-the separately served public Home is enabled.
-
-Tests: Ruff and focused management-login browser tests pass.
 - Files: `app/web.py`, `tests/test_web.py`, `LOG.md`

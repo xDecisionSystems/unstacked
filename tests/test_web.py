@@ -648,6 +648,7 @@ def test_home_editor_widget_tray_includes_add_edit_remove_markup(app_env, client
     assert '<button type="button" id="add-widget-submit">Add widget</button>' in text
     assert 'id="add-widget-id"' in text
     assert 'id="add-widget-type"' in text
+    assert '<option value="text">Text</option>' in text
     assert 'id="add-widget-title"' in text
     assert 'id="add-widget-source"' in text
     assert '<p class="error-message" id="add-widget-error" hidden></p>' in text
