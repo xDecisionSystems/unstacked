@@ -1700,22 +1700,24 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert client.get("/admin").status_code == 404
 
 
-def test_settings_nav_has_a_dedicated_home_page_entry_pointing_to_home(app_env, client):
-    """Home's copy/layout editing moved to the Home page itself (index.md).
+def test_settings_has_no_home_panel_and_never_shows_retired_copy_fields(app_env, client):
+    """Home's copy/layout editing -- and, since 76d3e7e, its reset action too
+    -- lives entirely on the Home page itself (index.md), not in Settings.
 
-    Settings keeps only administrator actions appropriate to the home page
-    -- a pointer to where editing now happens, plus (optionally) a
-    reset-to-starter action -- never the old copy-editing form fields.
+    Settings previously kept a dedicated "home" panel as a pointer to Home
+    editing, plus a reset-to-starter action; both were removed once the
+    reset action moved into the Home editor directly (see
+    test_home_editor_has_the_reset_to_starter_action_admins_use). This test
+    now guards the negative: Settings must not resurrect that panel, or the
+    even older retired copy-editing form fields from before either move.
     """
 
     _app, _settings, _admin, _token = app_env
     _login(client, "admin")
     response = client.get("/settings")
     assert response.status_code == 200
-    assert 'data-admin-panel="home"' in response.text
-    assert 'data-admin-section="home"' in response.text
-    assert "Home page" in response.text
-    assert 'href="/"' in response.text
+    assert 'data-admin-panel="home"' not in response.text
+    assert 'data-admin-section="home"' not in response.text
 
     # The Branding form no longer carries Home's retired copy fields.
     assert 'name="home_eyebrow"' not in response.text
@@ -1726,6 +1728,23 @@ def test_settings_nav_has_a_dedicated_home_page_entry_pointing_to_home(app_env, 
     assert "home_title" not in response.text
     assert "home_description" not in response.text
     assert "featured_label" not in response.text
+
+
+def test_home_editor_has_the_reset_to_starter_action_admins_use(app_env, client):
+    """The reset-to-starter control lives in the Home editor for an admin.
+
+    Moved here from Settings by 76d3e7e ("Move home reset into home
+    editor"); tests/test_admin_api.py separately covers the
+    POST /api/admin/home/reset endpoint's own success/403 behavior -- this
+    covers that the admin-only UI control to reach it still exists.
+    """
+
+    _app, _settings, _admin, _token = app_env
+    _login(client, "admin")
+    response = client.get("/home/edit")
+    assert response.status_code == 200
+    assert 'id="home-reset"' in response.text
+    assert "Reset Home to starter content" in response.text
 
 
 def test_public_content_routes_redirect_to_login_on_management_site(app_env, client):

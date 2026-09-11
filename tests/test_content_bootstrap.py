@@ -75,7 +75,11 @@ def test_existing_content_repo_receives_missing_ci_once_and_preserves_custom_wor
 
     content.initialize()
     assert workflow.read_text(encoding="utf-8") == CONTENT_CI_WORKFLOW
-    assert repo.head.commit.message == "Add content validation workflow"
+    message = repo.head.commit.message
+    assert message.startswith("Add content validation workflow")
+    assert "Changed paths:\n- .github/workflows/validate-content.yml" in message
+    assert "User: Unstacked <system@unstacked.local>" in message
+    assert "Timestamp (UTC):" in message
     seeded_head = repo.head.commit.hexsha
 
     # Re-running startup is a no-op once the managed workflow is present.

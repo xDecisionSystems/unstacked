@@ -10,6 +10,32 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 15:40 UTC — Claude Code
+Fixed the two tests that had been failing on `main` independent of
+`plans/plan_widget_regression_fixes.md` (both genuinely missed follow-ups
+from other, unrelated commits, not caused by that plan's work):
+
+- `test_content_bootstrap.py`'s CI-workflow test asserted the seeded
+  commit's message with exact equality, but `a38b934` ("Clarify Git sync
+  and annotate content commits") added Changed-paths/User/Timestamp
+  trailers to every content commit and updated `test_content_lifecycle.py`
+  for it while missing this one. Switched to the same
+  startswith()/substring pattern that test already uses.
+- `test_web.py`'s Settings-nav test asserted a "home" panel existed in
+  Settings, but `76d3e7e` ("Move home reset into home editor") removed
+  that panel entirely -- confirmed via `git show` that its one piece of
+  real functionality (the reset-to-starter action) was fully and
+  correctly relocated into `home_editor.html` in the same commit, not
+  dropped. Replaced the stale assertion with two tests: one confirming
+  Settings no longer has a home panel (plus the still-valid check that
+  Home's much-older retired copy-editing fields never reappear), and a
+  new one confirming the reset control now exists in the Home editor
+  instead -- filling a real coverage gap that commit also left behind.
+
+Tests: Ruff and full pytest pass -- zero failures, not just the same two
+pre-existing ones as prior entries in this log.
+- Files: `tests/test_content_bootstrap.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 15:27 UTC — Claude Code
 Phase 5 (efficiency) of `plans/plan_widget_regression_fixes.md`, the last
 phase of that plan: cached `_load_markdown_settings`'s result in
@@ -219,14 +245,3 @@ Tests: Ruff and focused widget renderer, Book, and Page-view tests pass.
   `app/templates/book_editor.html`, `app/templates/editor.html`,
   `app/templates/page.html`, `app/templates/tree.html`, `app/web.py`,
   `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 03:38 UTC — Codex
-Made Home widgets explicitly palette-aware. Featured and data-card widgets
-now derive their card colors, controls, links, and shadows from the active
-palette rather than retaining fixed original-theme colors.
-
-Tests: Ruff plus focused palette and Home-widget tests pass.
-- Files: `app/static/style.css`, `LOG.md`
-
-
-
