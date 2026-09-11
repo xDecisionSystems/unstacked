@@ -190,13 +190,20 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
     source.write_text(
         raw.replace(
             "title: Card data\n",
-            "title: Card data\ncards:\n"
+            "title: Card data\nwidget:\n"
+            "  title: Funded Projects & Grants\n"
+            "  text: Current and recent work.\n"
+            "  filters:\n"
+            "    - id: research\n"
+            "      label: Research\n"
+            "cards:\n"
             "  - title: Human-AI Collaboration\n"
             "    text: Safer autonomous systems.\n"
             "    label: Office of Naval Research\n"
             "    date: Aug 2021\n"
             "    url: https://www.onr.navy.mil\n"
-            "    target: research\n",
+            "    target: research\n"
+            "    filters: [research]\n",
         ),
         encoding="utf-8",
     )
@@ -208,11 +215,7 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
                 {
                     "id": "projects",
                     "type": "data-cards",
-                    "config": {
-                        "title": "Funded Projects & Grants",
-                        "text": "Current and recent work.",
-                        "source": "research/cards.md",
-                    },
+                    "config": {"source": "research/cards.md"},
                 }
             ],
             authorization,
@@ -228,9 +231,12 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
             "date": "Aug 2021",
             "url": "https://www.onr.navy.mil",
             "target_url": "/books/research",
+            "filters": ["research"],
         }
     ]
     assert result.rendered[0].data["text"] == "Current and recent work."
+    assert result.rendered[0].title == "Funded Projects & Grants"
+    assert result.rendered[0].data["filters"] == [{"id": "research", "label": "Research"}]
 
 
 # --------------------------------------------------------------------------

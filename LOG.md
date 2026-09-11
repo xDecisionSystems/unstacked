@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:36 UTC — Codex
+Made generic data-card widgets Markdown-driven and added ADC Lab-style
+switchable category filters. The source page now supplies the widget title,
+introductory text, filter labels, card memberships, and all card details.
+
+Tests: Ruff and focused Home-widget/editor tests pass.
+- Files: `app/home_widgets.py`, `app/static/style.css`,
+  `app/templates/home_editor.html`, `app/templates/tree.html`,
+  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 03:31 UTC — Codex
 Expanded generic Home data-card widgets with optional introductory text. The
 widget title now occupies a left-hand heading column, while its introduction
@@ -150,13 +160,4 @@ Ruff and focused workspace-archive and Settings tests pass.
 - Files: `Dockerfile`, `app/config.py`, `app/main.py`, `app/ssh_archive.py`,
   `app/ssh_archive_api.py`, `app/templates/admin.html`, `README.md`,
   `plans/plan_initial.md`, `tests/conftest.py`, `tests/test_ssh_archive.py`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-09-09 02:41 UTC — Codex
-Clarified Git as synchronization in Settings and enriched every content commit
-message with changed paths, editor identity, and a UTC timestamp.
-
-Ruff and focused content, Git, Home, and Settings tests pass.
-- Files: `app/git_backend.py`, `app/templates/admin.html`,
-  `tests/test_content_lifecycle.py`, `tests/test_home_page.py`,
   `tests/test_web.py`, `LOG.md`

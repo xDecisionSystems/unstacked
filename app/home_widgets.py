@@ -186,8 +186,9 @@ def _render_data_cards(
 ) -> RenderedWidget:
     """Render generic cards declared in one permission-checked Markdown page.
 
-    The source page uses front matter rather than an application table, for
-    example ``cards: [{title, text, label, date, target}]``.  It can be a draft
+    The source page uses front matter rather than an application table. Its
+    ``widget`` mapping supplies the title, introductory text, and optional
+    filters, while ``cards`` supplies the cards themselves. It can be a draft
     helper page; its book ACL still governs whether a Home viewer may see the
     card data.
     """
@@ -195,9 +196,6 @@ def _render_data_cards(
     source = entry.config.get("source")
     if not isinstance(source, str):
         raise ValueError("requires a Markdown source page")
-    intro_text = entry.config.get("text")
-    if intro_text is not None and not isinstance(intro_text, str):
-        raise ValueError("intro text must be text")
     try:
         source = normalize_relative_path(source)
     except UnsafePath as exc:
@@ -215,7 +213,41 @@ def _render_data_cards(
         raise ValueError("source page needs a 'cards' front-matter list")
     if len(cards) > 100:
         raise ValueError("source page may list at most 100 cards")
-    items: list[dict[str, str | None]] = []
+    widget = metadata.get("widget")
+    if widget is None:
+        widget = {}
+    if not isinstance(widget, dict):
+        raise ValueError("source page 'widget' must be a mapping")
+    widget_title = widget.get("title")
+    intro_text = widget.get("text")
+    for name, value in (("title", widget_title), ("text", intro_text)):
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"widget {name} must be text")
+    raw_filters = widget.get("filters", [])
+    if not isinstance(raw_filters, list):
+        raise ValueError("widget filters must be a list")
+    if len(raw_filters) > 20:
+        raise ValueError("widget may have at most 20 filters")
+    filters: list[dict[str, str]] = []
+    filter_ids: set[str] = set()
+    for item in raw_filters:
+        if not isinstance(item, dict):
+            raise ValueError("each widget filter must be a mapping")
+        filter_id = item.get("id")
+        filter_label = item.get("label")
+        if (
+            not isinstance(filter_id, str)
+            or not filter_id
+            or not filter_id.replace("-", "").replace("_", "").isalnum()
+            or filter_id in filter_ids
+        ):
+            raise ValueError("widget filters need unique letter, number, dash, or underscore ids")
+        if not isinstance(filter_label, str) or not filter_label.strip():
+            raise ValueError("widget filters need labels")
+        filter_ids.add(filter_id)
+        filters.append({"id": filter_id, "label": filter_label.strip()})
+
+    items: list[dict[str, str | list[str] | None]] = []
     for card in cards:
         if not isinstance(card, dict):
             raise ValueError("each card must be a mapping")
@@ -225,11 +257,18 @@ def _render_data_cards(
         date = card.get("date")
         url = card.get("url")
         target = card.get("target")
+        card_filters = card.get("filters", [])
         if not isinstance(title, str) or not title.strip():
             raise ValueError("each card needs a title")
         for name, value in (("text", text), ("label", label), ("date", date)):
             if value is not None and not isinstance(value, str):
                 raise ValueError(f"card {name} values must be text")
+        if not isinstance(card_filters, list) or not all(
+            isinstance(value, str) for value in card_filters
+        ):
+            raise ValueError("card filters must be a list of filter ids")
+        if unknown_filters := set(card_filters) - filter_ids:
+            raise ValueError(f"card uses unknown filter '{sorted(unknown_filters)[0]}'")
         if url is not None and (not isinstance(url, str) or not url.startswith(("https://", "http://"))):
             raise ValueError("card links must use http or https")
         target_url: str | None = None
@@ -266,17 +305,25 @@ def _render_data_cards(
                 "date": date.strip() if isinstance(date, str) else None,
                 "url": url,
                 "target_url": target_url,
+                "filters": card_filters,
             }
         )
-    title = entry.config.get("title")
+    # Old layouts stored the heading and text on the widget entry itself.
+    # Keep that small fallback so existing Home pages remain readable, but
+    # newly-authored data-card widgets place all display data in this source.
+    if widget_title is None:
+        widget_title = entry.config.get("title")
+    if intro_text is None:
+        intro_text = entry.config.get("text")
     return RenderedWidget(
         id=entry.id,
         type=entry.type,
-        title=title.strip() if isinstance(title, str) else "",
+        title=widget_title.strip() if isinstance(widget_title, str) else "",
         data={
             "items": items,
             "source": source,
             "text": intro_text.strip() if isinstance(intro_text, str) else None,
+            "filters": filters,
         },
     )
 
