@@ -365,7 +365,8 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
             "  - title: Human-AI Collaboration\n"
             "    summary: Safer autonomous systems.\n"
             "    label: Office of Naval Research\n"
-            "    date: Aug 2021\n",
+            "    date: Aug 2021\n"
+            "    target: research\n",
         ),
         encoding="utf-8",
     )
@@ -387,6 +388,7 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
     assert 'class="data-card-grid"' in home.text
     assert "Human-AI Collaboration" in home.text
     assert "Office of Naval Research" in home.text
+    assert 'href="/books/research"' in home.text
 
 
 def test_home_renders_multiple_featured_widgets_with_disjoint_grids_and_titles(app_env, client):

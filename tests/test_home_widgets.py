@@ -195,7 +195,8 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
             "    summary: Safer autonomous systems.\n"
             "    label: Office of Naval Research\n"
             "    date: Aug 2021\n"
-            "    url: https://www.onr.navy.mil\n",
+            "    url: https://www.onr.navy.mil\n"
+            "    target: research\n",
         ),
         encoding="utf-8",
     )
@@ -222,6 +223,7 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
             "label": "Office of Naval Research",
             "date": "Aug 2021",
             "url": "https://www.onr.navy.mil",
+            "target_url": "/books/research",
         }
     ]
 

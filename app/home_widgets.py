@@ -187,7 +187,7 @@ def _render_data_cards(
     """Render generic cards declared in one permission-checked Markdown page.
 
     The source page uses front matter rather than an application table, for
-    example ``cards: [{title, summary, label, date, url}]``.  It can be a draft
+    example ``cards: [{title, summary, label, date, url, target}]``.  It can be a draft
     helper page; its book ACL still governs whether a Home viewer may see the
     card data.
     """
@@ -221,6 +221,7 @@ def _render_data_cards(
         label = card.get("label")
         date = card.get("date")
         url = card.get("url")
+        target = card.get("target")
         if not isinstance(title, str) or not title.strip():
             raise ValueError("each card needs a title")
         for name, value in (("summary", summary), ("label", label), ("date", date)):
@@ -228,6 +229,32 @@ def _render_data_cards(
                 raise ValueError(f"card {name} values must be text")
         if url is not None and (not isinstance(url, str) or not url.startswith(("https://", "http://"))):
             raise ValueError("card links must use http or https")
+        target_url: str | None = None
+        if target is not None:
+            if not isinstance(target, str):
+                raise ValueError("card targets must be book or page paths")
+            try:
+                normalized_target = normalize_relative_path(target)
+            except UnsafePath as exc:
+                raise ValueError("card targets must be book or page paths") from exc
+            if normalized_target.endswith(".md"):
+                if path_depth(normalized_target) != 2:
+                    raise ValueError("page targets must look like research/project.md")
+                try:
+                    content.read_page(normalized_target)
+                except (ContentError, UnsafePath):
+                    raise ValueError("card target page could not be read") from None
+                if authorization.policy.decide(normalized_target).can_read:
+                    target_url = f"/pages/{normalized_target.removesuffix('.md')}"
+            else:
+                if path_depth(normalized_target) != 1:
+                    raise ValueError("book targets must be a book path")
+                try:
+                    read_navigation(content.docs / normalized_target / ".pages")
+                except NavigationError:
+                    raise ValueError("card target book could not be read") from None
+                if authorization.policy.decide(normalized_target).can_read:
+                    target_url = f"/books/{normalized_target}"
         items.append(
             {
                 "title": title.strip(),
@@ -235,6 +262,7 @@ def _render_data_cards(
                 "label": label.strip() if isinstance(label, str) else None,
                 "date": date.strip() if isinstance(date, str) else None,
                 "url": url,
+                "target_url": target_url,
             }
         )
     title = entry.config.get("title")

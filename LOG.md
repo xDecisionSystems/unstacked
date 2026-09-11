@@ -10,6 +10,17 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:25 UTC — Codex
+Added optional internal targets to generic data cards. A card title can now
+link to an authorized book (`research`) or page (`research/project.md`),
+while an external URL remains the fallback link when no internal target is
+configured.
+
+Tests: Ruff and focused data-card tests pass.
+- Files: `app/home_widgets.py`, `app/static/style.css`,
+  `app/templates/tree.html`, `tests/test_home_widgets.py`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 03:21 UTC — Codex
 Added the generic Markdown-backed `data-cards` Home widget. Any authorized
 book page can supply one front-matter `cards` list; Home editors choose its
@@ -146,12 +157,4 @@ for HTTPS/token setup and SSH backup for deploy-key and server-fingerprint
 confirmation. Each still configures the one active backup destination.
 
 Ruff and focused backup and Settings tests pass.
-- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-08 13:16 UTC — Codex
-Moved SSH repository backup configuration into its own Remote backup Settings
-page. Import / Export now remains focused on moving MkDocs ZIP files and
-restoring from the named backup repository.
-
-Ruff and focused Settings markup tests pass.
 - Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`
