@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 04:52 UTC — Codex
+Made Book and Page widget IDs user-entered, visible, and unique per host so
+multiple widgets of the same kind are distinguishable. The ID continues to
+determine the generated Markdown source filename.
+
+Tests: Ruff and focused Book-editor test pass.
+- Files: `app/static/widget_editor.js`, `app/templates/_widget_editor.html`,
+  `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 04:46 UTC — Codex
 Kept the compact filter button at a fixed 42px width when its search field is
 opened, preventing flexbox resizing during the interaction.
@@ -145,13 +154,3 @@ search field is toggled.
 
 Tests: Ruff passes.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-09-11 03:10 UTC — Codex
-Replaced always-visible library search fields with compact funnel controls.
-Books, Pages, and book page grids now reveal their existing search input only
-when requested, preserving live filtering and keyboard focus behavior.
-
-Tests: Ruff and focused Books/Pages/browser tests pass.
-- Files: `app/static/filter_toggle.js`, `app/static/style.css`,
-  `app/templates/book.html`, `app/templates/books.html`,
-  `app/templates/pages.html`, `LOG.md`

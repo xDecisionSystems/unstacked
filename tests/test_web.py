@@ -1518,6 +1518,7 @@ def test_book_has_an_editable_markdown_introduction(app_env, client):
     assert editor.status_code == 200
     assert "Edit Handbook" in editor.text
     assert "toastui-editor-all.min.js" in editor.text
+    assert 'data-widget-id' in editor.text
 
     saved = client.post(
         "/books/handbook/edit",
