@@ -192,7 +192,7 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
             "title: Card data\n",
             "title: Card data\ncards:\n"
             "  - title: Human-AI Collaboration\n"
-            "    summary: Safer autonomous systems.\n"
+            "    text: Safer autonomous systems.\n"
             "    label: Office of Naval Research\n"
             "    date: Aug 2021\n"
             "    url: https://www.onr.navy.mil\n"
@@ -219,7 +219,7 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
     assert result.rendered[0].data["items"] == [
         {
             "title": "Human-AI Collaboration",
-            "summary": "Safer autonomous systems.",
+            "text": "Safer autonomous systems.",
             "label": "Office of Naval Research",
             "date": "Aug 2021",
             "url": "https://www.onr.navy.mil",

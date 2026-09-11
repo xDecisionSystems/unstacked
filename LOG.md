@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:27 UTC — Codex
+Simplified the generic data-card schema: each card requires a title and can
+optionally include text, a label, and a date. Authorized internal title links
+remain available through the optional target field.
+
+Tests: Ruff and focused data-card tests pass.
+- Files: `app/home_widgets.py`, `app/templates/tree.html`,
+  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 03:25 UTC — Codex
 Added optional internal targets to generic data cards. A card title can now
 link to an authorized book (`research`) or page (`research/project.md`),
@@ -150,11 +159,3 @@ putting network work or failure on the save request.
 Ruff and focused backup and Git tests pass.
 - Files: `app/git_backend.py`, `app/backup_runtime.py`,
   `tests/test_git_backend.py`, `LOG.md`
-
-## 2026-09-09 02:19 UTC — Codex
-Split backup connection choices into separate Settings pages: Git repository
-for HTTPS/token setup and SSH backup for deploy-key and server-fingerprint
-confirmation. Each still configures the one active backup destination.
-
-Ruff and focused backup and Settings tests pass.
-- Files: `app/templates/admin.html`, `tests/test_web.py`, `LOG.md`

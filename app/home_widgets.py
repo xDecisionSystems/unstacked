@@ -187,7 +187,7 @@ def _render_data_cards(
     """Render generic cards declared in one permission-checked Markdown page.
 
     The source page uses front matter rather than an application table, for
-    example ``cards: [{title, summary, label, date, url, target}]``.  It can be a draft
+    example ``cards: [{title, text, label, date, target}]``.  It can be a draft
     helper page; its book ACL still governs whether a Home viewer may see the
     card data.
     """
@@ -217,14 +217,14 @@ def _render_data_cards(
         if not isinstance(card, dict):
             raise ValueError("each card must be a mapping")
         title = card.get("title")
-        summary = card.get("summary")
+        text = card.get("text")
         label = card.get("label")
         date = card.get("date")
         url = card.get("url")
         target = card.get("target")
         if not isinstance(title, str) or not title.strip():
             raise ValueError("each card needs a title")
-        for name, value in (("summary", summary), ("label", label), ("date", date)):
+        for name, value in (("text", text), ("label", label), ("date", date)):
             if value is not None and not isinstance(value, str):
                 raise ValueError(f"card {name} values must be text")
         if url is not None and (not isinstance(url, str) or not url.startswith(("https://", "http://"))):
@@ -258,7 +258,7 @@ def _render_data_cards(
         items.append(
             {
                 "title": title.strip(),
-                "summary": summary.strip() if isinstance(summary, str) else None,
+                "text": text.strip() if isinstance(text, str) else None,
                 "label": label.strip() if isinstance(label, str) else None,
                 "date": date.strip() if isinstance(date, str) else None,
                 "url": url,

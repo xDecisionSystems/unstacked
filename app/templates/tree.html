@@ -18,7 +18,7 @@
   {% elif widget.type == 'data-cards' %}
     {% set cards = widget.data['items'] %}
     {% if cards %}<ul class="data-card-grid">
-      {% for card in cards %}<li class="data-card"><h3>{% if card.target_url %}<a href="{{ card.target_url }}">{{ card.title }}</a>{% elif card.url %}<a href="{{ card.url }}" rel="noopener noreferrer" target="_blank">{{ card.title }}</a>{% else %}{{ card.title }}{% endif %}</h3>{% if card.summary %}<p>{{ card.summary }}</p>{% endif %}{% if card.label %}<span class="data-card-label">{{ card.label }}</span>{% endif %}{% if card.date %}<time>{{ card.date }}</time>{% endif %}</li>{% endfor %}
+      {% for card in cards %}<li class="data-card"><h3>{% if card.target_url %}<a href="{{ card.target_url }}">{{ card.title }}</a>{% elif card.url %}<a href="{{ card.url }}" rel="noopener noreferrer" target="_blank">{{ card.title }}</a>{% else %}{{ card.title }}{% endif %}</h3>{% if card.text %}<p>{{ card.text }}</p>{% endif %}{% if card.label %}<span class="data-card-label">{{ card.label }}</span>{% endif %}{% if card.date %}<time>{{ card.date }}</time>{% endif %}</li>{% endfor %}
     </ul>{% else %}<p class="empty-state">No cards are available to you.</p>{% endif %}
   {% endif %}
 </section>

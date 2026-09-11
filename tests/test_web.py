@@ -363,7 +363,7 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
             "title: Card data\n",
             "title: Card data\ncards:\n"
             "  - title: Human-AI Collaboration\n"
-            "    summary: Safer autonomous systems.\n"
+            "    text: Safer autonomous systems.\n"
             "    label: Office of Naval Research\n"
             "    date: Aug 2021\n"
             "    target: research\n",
