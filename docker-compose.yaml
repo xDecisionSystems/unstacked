@@ -71,7 +71,9 @@ services:
       retries: 3
 
   public:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: deploy/public.Dockerfile
     restart: unless-stopped
     depends_on:
       app:
@@ -82,7 +84,6 @@ services:
       - "127.0.0.1:${UNSTACKED_PUBLIC_HOST_PORT:-8081}:8080"
     volumes:
       - public-site:/usr/share/nginx/html:ro
-      - ./deploy/public-nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s
