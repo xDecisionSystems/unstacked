@@ -8,6 +8,7 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <label for="markdown-editor">Markdown</label>
   <textarea id="markdown-editor" name="markdown">{{ form.markdown }}</textarea>
+  {% set widget_form = form %}{% include "_widget_editor.html" %}
   <div class="form-actions"><button type="submit">Save</button><a class="button" href="/books/{{ book.slug }}">Cancel</a></div>
 </form>
 <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">

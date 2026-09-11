@@ -118,10 +118,15 @@ class AIContentService:
         return self.content.set_container_tags(writable_path, tags, authorization.user)
 
     def set_book_description(
-        self, authorization: AuthorizationContext, *, path: str, markdown: str
+        self,
+        authorization: AuthorizationContext,
+        *,
+        path: str,
+        markdown: str,
+        widgets: list[dict] | None = None,
     ) -> str:
         return self.content.set_container_description(
-            authorization.require_write(path), markdown, authorization.user
+            authorization.require_write(path), markdown, authorization.user, widgets=widgets
         )
 
     def set_container_public(

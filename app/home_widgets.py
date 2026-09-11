@@ -328,9 +328,38 @@ def _render_data_cards(
     )
 
 
+def _render_text(
+    entry: WidgetEntry, authorization: AuthorizationContext, content: ContentRepository
+) -> RenderedWidget:
+    """Load a permission-checked Markdown page for a reusable text widget."""
+
+    source = entry.config.get("source")
+    if not isinstance(source, str):
+        raise ValueError("requires a Markdown source page")
+    try:
+        source = normalize_relative_path(source)
+    except UnsafePath as exc:
+        raise ValueError("has an invalid source page") from exc
+    if not source.endswith(".md") or path_depth(source) != 2:
+        raise ValueError("source must be a book page such as research/about.md")
+    if not authorization.policy.decide(source).can_read:
+        return RenderedWidget(id=entry.id, type=entry.type, title="", data={"html": ""})
+    try:
+        _metadata, markdown, _raw = content.read_page(source)
+    except (ContentError, UnsafePath):
+        raise ValueError("source page could not be read") from None
+    return RenderedWidget(
+        id=entry.id,
+        type=entry.type,
+        title="",
+        data={"source": source, "markdown": markdown},
+    )
+
+
 WIDGET_REGISTRY: dict[str, WidgetRenderer] = {
     "featured": _render_featured,
     "data-cards": _render_data_cards,
+    "text": _render_text,
 }
 
 

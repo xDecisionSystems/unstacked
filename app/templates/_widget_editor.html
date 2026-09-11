@@ -1,0 +1,12 @@
+<fieldset class="widget-tray" data-widget-tray>
+  <legend>Widgets</legend>
+  <p class="tag-help">Widgets render below this content. Their source files remain ordinary Markdown pages.</p>
+  <input type="hidden" name="widgets_json" data-widgets-json value="">
+  <ul class="widget-list" data-widget-list>
+    {% for widget in widget_form.widgets %}
+    <li class="widget-row" data-widget='{{ widget | tojson }}'><span class="widget-label">{{ widget.type|capitalize }}</span><span class="widget-id">{{ widget.get('config', {}).get('source', '') }}</span><button type="button" class="widget-remove danger" data-widget-remove aria-label="Remove this widget">✕</button></li>
+    {% endfor %}
+  </ul>
+  <div class="widget-add-form"><label>Type<select data-widget-type><option value="text">Text</option><option value="data-cards">Data cards</option></select></label><label>Markdown source page<input data-widget-source placeholder="research/about.md"></label><button type="button" data-widget-add>Add widget</button></div>
+  <p class="error-message" data-widget-error hidden></p>
+</fieldset>

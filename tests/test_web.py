@@ -402,6 +402,34 @@ def test_home_renders_a_generic_data_cards_widget(app_env, client):
     assert 'data-card-filters="research"' in home.text
 
 
+def test_page_renders_a_text_widget_from_an_authorized_markdown_source(app_env, client):
+    app, _settings, admin, _token = app_env
+    content = app.state.content
+    content.create_book("Handbook", "handbook", admin)
+    content.create_page(
+        "handbook", "Reusable", "reusable", "A **shared** notice.", [], False, admin
+    )
+    content.create_page("handbook", "Overview", "overview", "Page body.", [], False, admin)
+    path = content.docs / "handbook" / "overview.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "title: Overview\n",
+            "title: Overview\nwidgets:\n"
+            "  - id: notice\n"
+            "    type: text\n"
+            "    config:\n"
+            "      source: handbook/reusable.md\n",
+        ),
+        encoding="utf-8",
+    )
+
+    _login(client, "admin")
+    page = client.get("/pages/handbook/overview")
+    assert page.status_code == 200
+    assert "A <strong>shared</strong> notice." in page.text
+    assert 'class="page-body widget-text"' in page.text
+
+
 def test_home_renders_multiple_featured_widgets_with_disjoint_grids_and_titles(app_env, client):
     """Two ``featured`` widgets on one Home page each show only their own grid.
 

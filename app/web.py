@@ -41,7 +41,13 @@ from app import branding, mailer, smtp_config, theme, theme_config
 from app.acl import AccessDenied, AuthorizationContext
 from app.assets import AssetTooLarge, UnsupportedAsset, detect_image
 from app.auth import client_identifier, hash_password
-from app.content import ContentConflict, ContentError, ContentExists, ContentMissing
+from app.content import (
+    ContentConflict,
+    ContentError,
+    ContentExists,
+    ContentMissing,
+    ContentRepository,
+)
 from app.export import ExportError, StaticExportRunner
 from app.home_widgets import build_home_widgets, parse_widget_entries
 from app.mkdocs_import import MkDocsImportError, MkDocsImportService
@@ -518,17 +524,48 @@ def _home_context(request: Request, session: Session, user: User) -> dict:
         body_html = MarkdownRenderer(content.root).render("index.md", markdown)
     except RenderConfigurationError:
         body_html = ""
-    widgets_result = build_home_widgets(metadata.get("widgets"), authorization, content)
+    home_widgets, widget_errors = _render_content_widgets(
+        content, authorization, metadata.get("widgets")
+    )
     context.update(
         {
             "home_title": metadata.get("title") or "Home",
             "home_body": body_html,
-            "home_widgets": widgets_result.rendered,
-            "home_widget_errors": [error.message for error in widgets_result.errors],
+            "home_widgets": home_widgets,
+            "home_widget_errors": widget_errors,
             "can_write_home": authorization.policy.decide("index.md").can_write,
         }
     )
     return context
+
+
+def _render_content_widgets(
+    content: ContentRepository, authorization: AuthorizationContext, raw_widgets: object
+) -> tuple[list, list[str]]:
+    """Render portable widgets and turn text-widget Markdown into safe HTML."""
+
+    result = build_home_widgets(raw_widgets, authorization, content)
+    renderer = MarkdownRenderer(content.root)
+    for widget in result.rendered:
+        if widget.type != "text" or not widget.data.get("markdown"):
+            continue
+        try:
+            widget.data["html"] = renderer.render(widget.data["source"], widget.data["markdown"])
+        except RenderConfigurationError:
+            widget.data["html"] = ""
+    return result.rendered, [error.message for error in result.errors]
+
+
+def _widgets_from_form(form: dict[str, str]) -> list[dict]:
+    """Accept the editor's small JSON widget layout without trusting its shape."""
+
+    try:
+        widgets = json.loads(form.get("widgets_json") or "[]")
+    except json.JSONDecodeError as exc:
+        raise ValueError("Widgets must be valid JSON") from exc
+    if not isinstance(widgets, list):
+        raise ValueError("Widgets must be a list")
+    return widgets
 
 
 def _home_editor_context(
@@ -862,6 +899,7 @@ def book_view(
 
     if user is None:
         return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+    content = request.app.state.content
     with Session(request.app.state.engine) as session:
         context = _base_context(request, session, user)
     book = next((entry for entry in context["tree"] if entry["slug"] == book_slug), None)
@@ -877,6 +915,20 @@ def book_view(
         description_html = ""
     context["book"]["description"] = description
     context["book"]["description_html"] = description_html
+    try:
+        navigation = read_navigation(content.docs / book_slug / ".pages")
+        book_widgets, widget_errors = _render_content_widgets(
+            content, _authorization(session, user), navigation.values.get("widgets")
+        )
+    except NavigationError:
+        book_widgets, widget_errors = [], []
+    context.update(
+        {
+            "content_widgets": book_widgets,
+            "widget_errors": widget_errors,
+            "can_write_widgets": _authorization(session, user).policy.decide(book_slug).can_write,
+        }
+    )
     return templates.TemplateResponse(request, "book.html", context)
 
 
@@ -899,7 +951,14 @@ def _book_editor_context(
     context.update(
         {
             "book": {"slug": book_slug, "title": navigation.title or _slug_title(book_slug)},
-            "form": {"markdown": navigation.description if markdown is None else markdown},
+            "form": {
+                "markdown": navigation.description if markdown is None else markdown,
+                "widgets": (
+                    navigation.values.get("widgets")
+                    if isinstance(navigation.values.get("widgets"), list)
+                    else []
+                ),
+            },
             "error": error,
         }
     )
@@ -933,7 +992,10 @@ async def save_book_description(
     with Session(request.app.state.engine) as session:
         try:
             request.app.state.ai_service.set_book_description(
-                _authorization(session, user), path=book_slug, markdown=form.get("markdown", "")
+                _authorization(session, user),
+                path=book_slug,
+                markdown=form.get("markdown", ""),
+                widgets=_widgets_from_form(form),
             )
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             return _book_editor_context(
@@ -1039,6 +1101,7 @@ def _editor_context(
             "base_blob_sha": content.page_blob_sha(path),
             "parent": path.rsplit("/", 1)[0],
             "card_image": str(metadata.get("card_image") or ""),
+            "widgets": metadata.get("widgets") if isinstance(metadata.get("widgets"), list) else [],
         }
     context.update({"form": form or {}, "error": error, "editing_path": path})
     return templates.TemplateResponse(request, "editor.html", context, status_code=status_code)
@@ -1294,6 +1357,7 @@ async def save_page(
                 form.get("draft") == "on",
                 base_blob_sha=form.get("base_blob_sha", ""),
                 card_image=form.get("card_image") or None,
+                widgets=_widgets_from_form(form),
             )
         except (AccessDenied, ContentError, UnsafePath, ValueError) as exc:
             return _editor_context(
@@ -1805,8 +1869,17 @@ def page_view(
                     "public": bool(metadata.get("public")),
                     "base_blob_sha": content.page_blob_sha(target),
                     "card_image": str(metadata.get("card_image") or ""),
+                    "widgets": (
+                        metadata.get("widgets")
+                        if isinstance(metadata.get("widgets"), list)
+                        else []
+                    ),
                 },
                 "available_tags": sorted(available_tags, key=str.casefold),
             }
         )
+        page_widgets, widget_errors = _render_content_widgets(
+            content, authorization, metadata.get("widgets")
+        )
+        context.update({"content_widgets": page_widgets, "widget_errors": widget_errors})
     return templates.TemplateResponse(request, "page.html", context)

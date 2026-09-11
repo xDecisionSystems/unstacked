@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_content_widgets.html" as content_widget %}
 {% block title %}{{ home_title }} · Unstacked{% endblock %}
 {% block content %}
 <div class="screen-heading dashboard-header">
@@ -7,51 +8,5 @@
 </div>
 {% if home_widget_errors and can_write_home %}<p class="error-message">Some widgets could not be displayed: {{ home_widget_errors|join('; ') }}</p>{% endif %}
 <article class="page-body home-body">{{ home_body | safe }}</article>
-{% for widget in home_widgets %}
-<section class="main-pages home-widget" aria-label="{{ widget.title or (widget.type|capitalize ~ ' widget') }}">
-  {% if widget.type == 'data-cards' %}
-    {% set cards = widget.data['items'] %}
-    <div class="data-cards-widget">
-      {% if widget.title %}<header class="data-cards-intro"><h2>{{ widget.title }}</h2></header>{% endif %}
-      <div class="data-cards-content">
-        {% if widget.data.text %}<p class="data-cards-text">{{ widget.data.text }}</p>{% endif %}
-        {% if widget.data.filters %}<div class="data-card-filters" role="group" aria-label="Filter {{ widget.title or 'cards' }}"><button type="button" class="data-card-filter is-active" data-card-filter="all" aria-pressed="true">All</button>{% for filter in widget.data.filters %}<button type="button" class="data-card-filter" data-card-filter="{{ filter.id }}" aria-pressed="false">{{ filter.label }}</button>{% endfor %}</div>{% endif %}
-        {% if cards %}<ul class="data-card-grid" data-card-grid>
-          {% for card in cards %}<li class="data-card" data-card-filters="{{ card.filters|join(' ') }}"><h3>{% if card.target_url %}<a href="{{ card.target_url }}">{{ card.title }}</a>{% elif card.url %}<a href="{{ card.url }}" rel="noopener noreferrer" target="_blank">{{ card.title }}</a>{% else %}{{ card.title }}{% endif %}</h3>{% if card.text %}<p>{{ card.text }}</p>{% endif %}{% if card.label %}<span class="data-card-label">{{ card.label }}</span>{% endif %}{% if card.date %}<time>{{ card.date }}</time>{% endif %}</li>{% endfor %}
-        </ul><p class="empty-state data-card-empty" data-card-empty hidden>No cards match this filter.</p>{% else %}<p class="empty-state">No cards are available to you.</p>{% endif %}
-      </div>
-    </div>
-  {% else %}
-  {% if widget.title %}<h2>{{ widget.title }}</h2>{% endif %}
-  {% if widget.type == 'featured' %}
-    {% set widget_items = widget.data['items'] %}
-    {% if widget_items %}<ul class="page-cards book-page-grid">
-      {% for item in widget_items %}<li class="page-card"><a href="{% if item.kind == 'book' %}/books/{{ item.target }}{% else %}/pages/{{ item.target }}{% endif %}">{% if item.kind == 'page' and item.card_image %}<img class="page-card-image" src="/assets/{{ item.card_image }}" alt="">{% endif %}<span class="page-card-type">{{ item.kind|upper }}</span><strong>{{ item.title }}</strong><span class="page-card-open">Open →</span></a>{% if is_admin %}<form class="card-home-action" method="post" action="/home/remove"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="target" value="{{ item.target }}{% if item.kind == 'page' %}.md{% endif %}"><input type="hidden" name="grid_id" value="{{ widget.id }}"><input type="hidden" name="return_to" value="/tree"><button class="feature-star is-featured" type="submit" title="Remove from home" aria-label="Remove from home"><span aria-hidden="true">★</span></button></form>{% endif %}</li>{% endfor %}
-    </ul>{% else %}<p class="empty-state">No featured content yet.</p>{% endif %}
-  {% endif %}
-  {% endif %}
-</section>
-{% endfor %}
-<script>
-document.querySelectorAll('.data-cards-widget').forEach((widget) => {
-  const buttons = widget.querySelectorAll('.data-card-filter');
-  const cards = widget.querySelectorAll('[data-card-filters]');
-  const empty = widget.querySelector('[data-card-empty]');
-  buttons.forEach((button) => button.addEventListener('click', () => {
-    const selected = button.dataset.cardFilter;
-    let visible = 0;
-    buttons.forEach((item) => {
-      const active = item === button;
-      item.classList.toggle('is-active', active);
-      item.setAttribute('aria-pressed', String(active));
-    });
-    cards.forEach((card) => {
-      const show = selected === 'all' || card.dataset.cardFilters.split(' ').includes(selected);
-      card.hidden = !show;
-      if (show) visible += 1;
-    });
-    if (empty) empty.hidden = visible !== 0;
-  }));
-});
-</script>
+{{ content_widget.render(home_widgets) }}
 {% endblock %}

@@ -19,6 +19,7 @@
        a sibling, associated only via for/id. -->
   <label for="markdown-editor">Markdown</label>
   <textarea id="markdown-editor" name="markdown">{{ form.markdown }}</textarea>
+  {% if editing_path %}{% set widget_form = form %}{% include "_widget_editor.html" %}{% endif %}
   <div class="form-actions"><button type="submit">Save</button>{% if editing_path %}<a class="button" href="/pages/{{ editing_path.removesuffix('.md') }}">Cancel</a>{% endif %}</div>
 </form>
 <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">

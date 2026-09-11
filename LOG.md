@@ -10,6 +10,20 @@ how long any entry is.
 
 ---
 
+## 2026-09-11 03:46 UTC — Codex
+Extended portable widgets from Home to book and page views. Authors can now
+add Markdown-backed text or data-card widgets in Book and Page editors; text
+widgets render an authorized source Markdown page below the host content.
+
+Tests: Ruff and focused widget renderer, Book, and Page-view tests pass.
+- Files: `app/ai_service.py`, `app/content.py`, `app/home_widgets.py`,
+  `app/static/widget_editor.js`, `app/static/widget_filters.js`,
+  `app/templates/_content_widgets.html`, `app/templates/_widget_editor.html`,
+  `app/templates/base.html`, `app/templates/book.html`,
+  `app/templates/book_editor.html`, `app/templates/editor.html`,
+  `app/templates/page.html`, `app/templates/tree.html`, `app/web.py`,
+  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
+
 ## 2026-09-11 03:38 UTC — Codex
 Made Home widgets explicitly palette-aware. Featured and data-card widgets
 now derive their card colors, controls, links, and shadows from the active
@@ -149,11 +163,3 @@ Added a plan for a separate public static site and management site while
 explicitly preserving the current Unstacked login process and permissions.
 
 - Files: `plan/split_site_plan.md`, `LOG.md`
-
-## 2026-09-09 03:24 UTC — Codex
-Made top-bar content navigation explicitly session-only and added regression
-coverage proving anonymous public book and page views do not expose Books or
-Pages links, while authenticated users still receive them.
-
-Tests: focused public-view browser tests pass.
-- Files: `app/templates/base.html`, `tests/test_web.py`, `LOG.md`

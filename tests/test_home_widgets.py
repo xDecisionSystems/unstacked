@@ -239,6 +239,27 @@ def test_data_cards_widget_reads_generic_cards_from_one_markdown_page(app_env):
     assert result.rendered[0].data["filters"] == [{"id": "research", "label": "Research"}]
 
 
+def test_text_widget_loads_an_authorized_markdown_page(app_env):
+    app, _settings, admin, _token = app_env
+    content: ContentRepository = app.state.content
+    content.create_book("Research", "research", admin)
+    content.create_page("research", "About", "about", "Reusable **text**.", [], False, admin)
+
+    with Session(app.state.engine) as session:
+        authorization = AuthorizationContext(session, session.get(User, admin.id))
+        result = build_home_widgets(
+            [{"id": "about", "type": "text", "config": {"source": "research/about.md"}}],
+            authorization,
+            content,
+        )
+
+    assert result.errors == []
+    assert result.rendered[0].data == {
+        "source": "research/about.md",
+        "markdown": "Reusable **text**.",
+    }
+
+
 # --------------------------------------------------------------------------
 # Multiple independent ``featured`` widget instances (per-widget grids).
 # --------------------------------------------------------------------------

@@ -989,6 +989,7 @@ class ContentRepository:
         *,
         base_blob_sha: str,
         card_image: str | None | object = _CARD_IMAGE_UNSET,
+        widgets: list[dict] | None = None,
     ) -> str:
         """Rewrite a page body and its editable metadata as one commit.
 
@@ -1005,6 +1006,7 @@ class ContentRepository:
 
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
             raise ContentError("page exceeds configured size limit")
+        validated_widgets = _validate_widget_entries(widgets) if widgets is not None else None
         try:
             with self.git.write_lock():
                 page_relative = normalize_relative_path(relative)
@@ -1026,6 +1028,8 @@ class ContentRepository:
                 document = parse_page(original, default_title=Path(page_relative).stem)
                 now = datetime.now(timezone.utc).isoformat()
                 metadata = {"updated_at": now, "tags": list(tags), "draft": draft}
+                if validated_widgets is not None:
+                    metadata["widgets"] = validated_widgets
                 if card_image is not _CARD_IMAGE_UNSET:
                     normalized_card_image = self._card_image_ref(page_relative, card_image)
                     if normalized_card_image:
@@ -1363,11 +1367,14 @@ class ContentRepository:
                 tree.write_internal_text(relative, original, overwrite=True)
                 raise
 
-    def set_container_description(self, relative: str, markdown: str, actor: User) -> str:
+    def set_container_description(
+        self, relative: str, markdown: str, actor: User, *, widgets: list[dict] | None = None
+    ) -> str:
         """Persist a book's portable Markdown introduction in ``.pages``."""
 
         if len(markdown.encode("utf-8")) > self.settings.max_page_bytes:
             raise ContentError("book description exceeds configured size limit")
+        validated_widgets = _validate_widget_entries(widgets) if widgets is not None else None
         with self.git.write_lock():
             relative = normalize_relative_path(relative)
             if path_depth(relative) != 1 or relative in RESERVED_ROOT_NAMES:
@@ -1378,6 +1385,8 @@ class ContentRepository:
                 navigation = parse_navigation(original, source=".pages")
                 values = dict(navigation.values)
                 values["description"] = markdown
+                if validated_widgets is not None:
+                    values["widgets"] = validated_widgets
                 serialized = serialize_navigation(Navigation(values), source=".pages")
                 tree.write_internal_text(relative, serialized, overwrite=True)
                 return self.git.commit_paths(

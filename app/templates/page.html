@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_content_widgets.html" as content_widget %}
 {% block title %}{{ page_title or "Page" }} · Unstacked{% endblock %}
 {% block content %}
 <div class="page-actions">
@@ -37,12 +38,15 @@
          inside the editor and misdirects focus/toolbar state. Keep the label
          a sibling, associated only via for/id. -->
     <div class="markdown-field"><label for="markdown-editor">Markdown</label><textarea id="markdown-editor" name="markdown">{{ edit_form.markdown }}</textarea></div>
+    {% set widget_form = edit_form %}{% include "_widget_editor.html" %}
   </form>
 </section>
 {% endif %}
 <article class="page-body">
   {{ body | safe }}
 </article>
+{% if widget_errors and can_write %}<p class="error-message">Some widgets could not be displayed: {{ widget_errors|join('; ') }}</p>{% endif %}
+{{ content_widget.render(content_widgets) }}
 {% endblock %}
 {% block scripts %}
 {% if can_write %}
