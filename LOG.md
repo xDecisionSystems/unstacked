@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-09-13 02:02 UTC — Codex
+Aligned the book-permissions matrix so book names stay left-aligned and the
+per-book default-access icon group is pinned to the right edge of its column.
+
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-09-11 19:33 UTC — Codex
 Restored the required App CI coverage threshold with targeted tests instead
 of weakening the 85% gate. Added coverage for widget-source validation,
@@ -232,12 +238,3 @@ Tests: Ruff and focused text/data-card/switching-card tests pass.
 - Files: `app/home_widgets.py`, `app/templates/_content_widgets.html`,
   `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
   `tests/test_home_widgets.py`, `LOG.md`
-
-## 2026-09-11 03:49 UTC — Codex
-Enabled safe Markdown formatting for data-card widget introductions and card
-text. These fields now render through the same Markdown pipeline as Text
-widgets, while titles, labels, dates, and filter controls remain plain text.
-
-Tests: Ruff and focused text/data-card widget tests pass.
-- Files: `app/static/style.css`, `app/templates/_content_widgets.html`,
-  `app/web.py`, `tests/test_web.py`, `LOG.md`
