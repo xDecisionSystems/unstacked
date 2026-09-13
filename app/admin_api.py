@@ -38,7 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
-from app import backup_config, backup_runtime, branding, smtp_config, theme, theme_config
+from app import backup_config, backup_runtime, branding, mailer, smtp_config, theme, theme_config
 from app.acl import AccessPolicy, Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password
 from app.backup_config import GIT_REMOTE, BackupTarget
@@ -336,6 +336,10 @@ class SMTPResponse(BaseModel):
     from_email: str | None = None
     starttls: bool = True
     use_ssl: bool = False
+
+
+class SMTPTestEmail(BaseModel):
+    recipient: EmailStr
 
 
 # --------------------------------------------------------------------------
@@ -1477,6 +1481,23 @@ def update_smtp(payload: SMTPUpdate, request: Request, actor: AdminActor) -> SMT
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     _audit("admin.smtp.update", actor, host=state.host, from_email=state.from_email)
     return _smtp_response(request)
+
+
+@router.post("/smtp/test", response_model=DetailResponse, dependencies=CsrfGuard)
+def send_smtp_test_email(
+    payload: SMTPTestEmail, request: Request, actor: AdminActor
+) -> DetailResponse:
+    """Deliver a harmless message through the saved SMTP configuration."""
+
+    try:
+        mailer.send_test_email(
+            smtp_config.load(request.app.state.settings.smtp_config_path),
+            str(payload.recipient),
+        )
+    except mailer.MailDeliveryError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    _audit("admin.smtp.test", actor)
+    return DetailResponse(detail="Test email sent.")
 
 
 @router.post("/home/reset", response_model=DetailResponse, dependencies=CsrfGuard)

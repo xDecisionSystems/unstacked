@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-13 02:06 UTC — Codex
+Added an admin-only SMTP test-email action with a recipient field so saved
+mail settings can be verified without starting a password-reset flow.
+
+Tests: Ruff and focused SMTP API/console tests pass. Compose build and
+health check pass on local port 8001.
+
+- Files: `app/admin_api.py`, `app/mailer.py`, `app/templates/admin.html`,
+  `tests/test_admin_api.py`, `LOG.md`
+
 ## 2026-09-13 02:02 UTC — Codex
 Aligned the book-permissions matrix so book names stay left-aligned and the
 per-book default-access icon group is pinned to the right edge of its column.
@@ -228,13 +238,3 @@ Page widget editors.
 
 Tests: Ruff and the focused Home widget-picker test pass.
 - Files: `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 04:22 UTC — Codex
-Added an explicit Switching cards widget choice for the ADC Lab Hiring-style
-filter controls. It uses the existing Markdown source format for title,
-intro, filter labels, card memberships, and card content.
-
-Tests: Ruff and focused text/data-card/switching-card tests pass.
-- Files: `app/home_widgets.py`, `app/templates/_content_widgets.html`,
-  `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
-  `tests/test_home_widgets.py`, `LOG.md`

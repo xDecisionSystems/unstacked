@@ -428,6 +428,52 @@ def test_admin_can_save_smtp_configuration_without_reading_the_password(app_env,
     assert client.get("/api/admin/smtp", headers=bearer(token)).json() == response.json()
 
 
+def test_admin_can_send_an_smtp_test_email(app_env, client, monkeypatch):
+    app, settings, _admin, token = app_env
+    smtp_config_path = settings.smtp_config_path
+    smtp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    smtp_config_path.write_text(
+        '{"host":"smtp.example.test","from_email":"no-reply@example.com"}',
+        encoding="utf-8",
+    )
+    delivered = {}
+
+    def capture(config, recipient):
+        delivered["config"] = config
+        delivered["recipient"] = recipient
+
+    monkeypatch.setattr("app.admin_api.mailer.send_test_email", capture)
+    response = client.post(
+        "/api/admin/smtp/test",
+        json={"recipient": "admin@example.com"},
+        headers=bearer(token),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"detail": "Test email sent."}
+    assert delivered["config"].host == "smtp.example.test"
+    assert delivered["recipient"] == "admin@example.com"
+
+
+def test_smtp_test_email_reports_delivery_failure(app_env, client, monkeypatch):
+    _app, _settings, _admin, token = app_env
+
+    def fail(_config, _recipient):
+        from app.mailer import MailDeliveryError
+
+        raise MailDeliveryError("Email could not be delivered")
+
+    monkeypatch.setattr("app.admin_api.mailer.send_test_email", fail)
+    response = client.post(
+        "/api/admin/smtp/test",
+        json={"recipient": "admin@example.com"},
+        headers=bearer(token),
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Email could not be delivered"
+
+
 def test_password_reset_revokes_the_cookie_and_the_bearer_token(app_env, client, content):
     """One reset, both transports: either survivor would defeat the reset."""
 

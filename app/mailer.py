@@ -25,6 +25,25 @@ def send_password_reset(config: SMTPConfig, recipient: str, url: str) -> None:
         f"Set a new password: {url}\n\n"
         "This link expires in 30 minutes. If you did not request it, you can ignore this email."
     )
+    _deliver(config, message)
+
+
+def send_test_email(config: SMTPConfig, recipient: str) -> None:
+    """Send an administrator-requested SMTP configuration check."""
+
+    if not config.configured:
+        raise MailDeliveryError("Email delivery has not been configured")
+    message = EmailMessage()
+    message["From"] = config.from_email
+    message["To"] = recipient
+    message["Subject"] = "Unstacked SMTP test"
+    message.set_content(
+        "This is a practice email from Unstacked. Your SMTP settings are working."
+    )
+    _deliver(config, message)
+
+
+def _deliver(config: SMTPConfig, message: EmailMessage) -> None:
     try:
         client_type = smtplib.SMTP_SSL if config.use_ssl else smtplib.SMTP
         with client_type(config.host, config.port, timeout=10) as client:
