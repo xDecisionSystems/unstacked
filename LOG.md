@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-13 02:22 UTC — Codex
+Grouped SSH archive actions into one vertical control stack so their spacing
+stays consistent, including the immediate archive action.
+
+Tests: Ruff and focused admin-console test pass.
+
+- Files: `app/static/style.css`, `app/templates/admin.html`, `LOG.md`
+
 ## 2026-09-13 02:06 UTC — Codex
 Added an admin-only SMTP test-email action with a recipient field so saved
 mail settings can be verified without starting a password-reset flow.
@@ -230,11 +238,3 @@ Tests: Ruff and focused separator/widget-picker tests pass.
   `app/static/widget_editor.js`, `app/templates/_content_widgets.html`,
   `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
   `tests/test_home_widgets.py`, `LOG.md`
-
-## 2026-09-11 04:27 UTC — Codex
-Added the missing Text choice to Home's widget picker. Selecting it now
-reveals the same required Markdown source-page field available in Book and
-Page widget editors.
-
-Tests: Ruff and the focused Home widget-picker test pass.
-- Files: `app/templates/home_editor.html`, `tests/test_web.py`, `LOG.md`
