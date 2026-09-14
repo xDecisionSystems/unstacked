@@ -208,6 +208,7 @@ button, .button, .feature-star,
 .permission-icon.is-active svg, .permission-icon.is-active svg * {
   stroke: var(--accent-text, #fffdf9) !important;
 }
+.smtp-test-action { display: inline-flex; align-items: center; gap: 10px; }.smtp-test-action [data-smtp-test-status] { font-size: 13px; color: var(--muted); }.smtp-test-action [data-smtp-test-status].is-error { color: var(--danger); }
 
 /* Keep page-edit controls available alongside long editor content. */
 @media (min-width: 1001px) {

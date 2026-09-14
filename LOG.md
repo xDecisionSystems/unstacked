@@ -10,6 +10,15 @@ how long any entry is.
 
 ---
 
+## 2026-09-14 04:39 UTC — Codex
+Moved SMTP test-email feedback beside its Test button, with inline success and
+error states instead of using the page-level settings message.
+
+Tests: Ruff and focused admin-console test pass.
+
+- Files: `app/static/style.css`, `app/templates/admin.html`, `tests/test_web.py`,
+  `LOG.md`
+
 ## 2026-09-14 03:28 UTC — Codex
 Made page-editor Save and Cancel controls persist while scrolling: sticky in
 the desktop action rail and floating at the lower right on narrow screens.
@@ -226,13 +235,3 @@ opened, preventing flexbox resizing during the interaction.
 
 Tests: Ruff and whitespace checks pass.
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-09-11 04:42 UTC — Codex
-Made source-backed widgets create their own deterministic Markdown files on
-save. Source paths derive from the host and widget ID; each new file contains
-a commented example, and widget rows now link directly to its editor.
-
-Tests: Ruff and focused widget/editor tests pass.
-- Files: `app/content.py`, `app/home_widgets.py`, `app/search.py`, `app/static/widget_editor.js`,
-  `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
-  `app/web.py`, `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`

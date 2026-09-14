@@ -1640,6 +1640,7 @@ def test_admin_console_is_admin_only_and_exposes_existing_api_controls(app_env, 
     assert "/api/admin/smtp" in response.text
     assert "data-smtp" in response.text
     assert "data-smtp-test" in response.text
+    assert "data-smtp-test-status" in response.text
     assert "test_recipient" in response.text
     assert 'data-title="SMTP"' in response.text
     assert 'data-admin-panel="git-backup"' in response.text
