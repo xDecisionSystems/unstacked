@@ -10,6 +10,14 @@ how long any entry is.
 
 ---
 
+## 2026-09-14 03:28 UTC — Codex
+Made page-editor Save and Cancel controls persist while scrolling: sticky in
+the desktop action rail and floating at the lower right on narrow screens.
+
+Tests: Ruff and focused page-editor tests pass.
+
+- Files: `app/static/style.css`, `LOG.md`
+
 ## 2026-09-13 02:22 UTC — Codex
 Grouped SSH archive actions into one vertical control stack so their spacing
 stays consistent, including the immediate archive action.
@@ -228,13 +236,3 @@ Tests: Ruff and focused widget/editor tests pass.
 - Files: `app/content.py`, `app/home_widgets.py`, `app/search.py`, `app/static/widget_editor.js`,
   `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
   `app/web.py`, `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 04:30 UTC — Codex
-Added a Horizontal separator widget to the Home, Book, and Page pickers. It
-renders a palette-aware divider and requires no Markdown source file.
-
-Tests: Ruff and focused separator/widget-picker tests pass.
-- Files: `app/home_widgets.py`, `app/static/style.css`,
-  `app/static/widget_editor.js`, `app/templates/_content_widgets.html`,
-  `app/templates/_widget_editor.html`, `app/templates/home_editor.html`,
-  `tests/test_home_widgets.py`, `LOG.md`

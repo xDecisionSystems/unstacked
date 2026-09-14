@@ -208,3 +208,28 @@ button, .button, .feature-star,
 .permission-icon.is-active svg, .permission-icon.is-active svg * {
   stroke: var(--accent-text, #fffdf9) !important;
 }
+
+/* Keep page-edit controls available alongside long editor content. */
+@media (min-width: 1001px) {
+  #inline-editor .inline-editor-actions {
+    position: sticky;
+    top: 16px;
+    z-index: 2;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    justify-self: start;
+    transform: translateX(-96px);
+  }
+}
+@media (max-width: 1000px) {
+  #inline-editor .inline-editor-actions {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    left: auto;
+    z-index: 3;
+    flex-direction: row;
+    transform: none;
+  }
+}
