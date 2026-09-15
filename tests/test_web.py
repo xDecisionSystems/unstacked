@@ -229,6 +229,167 @@ def test_forgot_password_sends_a_reset_only_for_an_active_matching_email(
     assert _login(client, "reset-user", password="a fresh secure password").status_code == 303
 
 
+def test_accepting_an_invite_creates_the_account_and_lets_the_user_sign_in(
+    app_env, client, monkeypatch
+):
+    _app, settings, _admin, token = app_env
+    settings.public_base_url = "https://wiki.example.test"
+    smtp_path = settings.smtp_config_path
+    smtp_path.parent.mkdir(parents=True, exist_ok=True)
+    smtp_path.write_text(
+        '{"host":"smtp.example.test","from_email":"no-reply@example.com"}', encoding="utf-8"
+    )
+    delivered = []
+    monkeypatch.setattr(
+        "app.admin_api.mailer.send_user_invite",
+        lambda _config, recipient, url: delivered.append((recipient, url)),
+    )
+    monkeypatch.setattr("app.web.mailer.send_account_created_notification", lambda *a, **k: None)
+
+    invited = client.post(
+        "/api/admin/users/invite",
+        json={"email": "newhire@example.com", "display_name": "New Hire"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert invited.status_code == 200
+
+    token_value = parse_qs(urlparse(delivered[0][1]).query)["token"][0]
+    page = client.get(f"/accept-invite?token={token_value}")
+    assert page.status_code == 200
+    assert "newhire@example.com" in page.text
+    assert "New Hire" in page.text
+
+    too_short = client.post(
+        f"/accept-invite?token={token_value}",
+        data={"username": "newhire", "password": "too short"},
+    )
+    assert too_short.status_code == 400
+    assert "at least 12 characters" in too_short.text
+
+    accepted = client.post(
+        f"/accept-invite?token={token_value}",
+        data={"username": "newhire", "password": "a fresh secure password"},
+        follow_redirects=False,
+    )
+    assert accepted.headers["location"] == "/login"
+
+    signed_in = client.post(
+        "/auth/login",
+        json={"username": "newhire", "password": "a fresh secure password"},
+    )
+    assert signed_in.status_code == 200
+    assert signed_in.json()["must_change_password"] is False
+    assert signed_in.json()["display_name"] == "New Hire"
+
+    reused = client.post(
+        f"/accept-invite?token={token_value}",
+        data={"username": "someone-else", "password": "second attempt password"},
+        follow_redirects=False,
+    )
+    assert reused.status_code == 409
+    assert "already been used" in reused.text
+
+
+def test_accept_invite_rejects_an_unknown_or_tampered_token(client):
+    page = client.get("/accept-invite?token=not-a-real-token")
+    assert page.status_code == 200
+    assert "invalid or has expired" in page.text
+
+
+def test_accepting_an_admin_invite_grants_admin_access(app_env, client, monkeypatch):
+    _app, settings, _admin, token = app_env
+    settings.public_base_url = "https://wiki.example.test"
+    smtp_path = settings.smtp_config_path
+    smtp_path.parent.mkdir(parents=True, exist_ok=True)
+    smtp_path.write_text(
+        '{"host":"smtp.example.test","from_email":"no-reply@example.com"}', encoding="utf-8"
+    )
+    delivered = []
+    monkeypatch.setattr(
+        "app.admin_api.mailer.send_user_invite",
+        lambda _config, recipient, url: delivered.append((recipient, url)),
+    )
+    monkeypatch.setattr("app.web.mailer.send_account_created_notification", lambda *a, **k: None)
+    invited = client.post(
+        "/api/admin/users/invite",
+        json={"email": "newadmin@example.com", "display_name": "New Admin", "is_admin": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert invited.status_code == 200
+
+    token_value = parse_qs(urlparse(delivered[0][1]).query)["token"][0]
+    client.post(
+        f"/accept-invite?token={token_value}",
+        data={"username": "newadmin", "password": PASSWORD},
+        follow_redirects=False,
+    )
+
+    signed_in = client.post("/auth/login", json={"username": "newadmin", "password": PASSWORD})
+    assert signed_in.status_code == 200
+    assert signed_in.json()["is_admin"] is True
+
+
+def test_accepting_an_invite_notifies_active_admins_to_assign_groups(
+    app_env, client, monkeypatch
+):
+    """Every active admin is told, the new account is not, and a deactivated
+    or non-admin account never hears about it."""
+
+    app, settings, _admin, token = app_env
+    settings.public_base_url = "https://wiki.example.test"
+    smtp_path = settings.smtp_config_path
+    smtp_path.parent.mkdir(parents=True, exist_ok=True)
+    smtp_path.write_text(
+        '{"host":"smtp.example.test","from_email":"no-reply@example.com"}', encoding="utf-8"
+    )
+    second_admin = _make_user(app, "second-admin")
+    with Session(app.state.engine) as session:
+        persisted = session.get(User, second_admin.id)
+        persisted.is_admin = True
+        session.add(persisted)
+        session.commit()
+    inactive_admin = _make_user(app, "retired-admin")
+    with Session(app.state.engine) as session:
+        persisted = session.get(User, inactive_admin.id)
+        persisted.is_admin = True
+        persisted.is_active = False
+        session.add(persisted)
+        session.commit()
+    _make_user(app, "regular-user")
+
+    invited_delivered = []
+    monkeypatch.setattr(
+        "app.admin_api.mailer.send_user_invite",
+        lambda _config, recipient, url: invited_delivered.append((recipient, url)),
+    )
+    notified = []
+    monkeypatch.setattr(
+        "app.web.mailer.send_account_created_notification",
+        lambda _config, recipient, **kwargs: notified.append((recipient, kwargs)),
+    )
+
+    client.post(
+        "/api/admin/users/invite",
+        json={"email": "newhire2@example.com", "display_name": "New Hire Two"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    token_value = parse_qs(urlparse(invited_delivered[0][1]).query)["token"][0]
+    client.post(
+        f"/accept-invite?token={token_value}",
+        data={"username": "newhire2", "password": PASSWORD},
+        follow_redirects=False,
+    )
+
+    recipients = {recipient for recipient, _kwargs in notified}
+    assert recipients == {"admin@example.com", "second-admin@example.com"}
+    assert "retired-admin@example.com" not in recipients
+    assert "newhire2@example.com" not in recipients
+    _recipient, kwargs = notified[0]
+    assert kwargs["username"] == "newhire2"
+    assert kwargs["display_name"] == "New Hire Two"
+    assert kwargs["settings_url"] == "https://wiki.example.test/settings#users-section"
+
+
 # --------------------------------------------------------------------------
 # ACL-filtered tree and page view
 # --------------------------------------------------------------------------

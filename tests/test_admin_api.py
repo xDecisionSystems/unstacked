@@ -474,6 +474,88 @@ def test_smtp_test_email_reports_delivery_failure(app_env, client, monkeypatch):
     assert response.json()["detail"] == "Email could not be delivered"
 
 
+def test_inviting_an_email_sends_a_setup_link_and_creates_no_account_yet(
+    app_env, client, monkeypatch
+):
+    _app, settings, _admin, token = app_env
+    settings.public_base_url = "https://wiki.example.test"
+    smtp_config_path = settings.smtp_config_path
+    smtp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    smtp_config_path.write_text(
+        '{"host":"smtp.example.test","from_email":"no-reply@example.com"}',
+        encoding="utf-8",
+    )
+    delivered = []
+    monkeypatch.setattr(
+        "app.admin_api.mailer.send_user_invite",
+        lambda _config, recipient, url: delivered.append((recipient, url)),
+    )
+
+    response = client.post(
+        "/api/admin/users/invite",
+        json={"email": "Invited.Person@Example.com", "display_name": "Invited Person"},
+        headers=bearer(token),
+    )
+    assert response.status_code == 200
+    assert response.json() == {"detail": "Invitation sent."}
+    assert delivered == [("invited.person@example.com", delivered[0][1])]
+    assert "/accept-invite?token=" in delivered[0][1]
+
+    emails = [u["email"] for u in client.get("/api/admin/users", headers=bearer(token)).json()]
+    assert "invited.person@example.com" not in emails
+
+
+def test_invite_requires_smtp_to_be_configured(app_env, client):
+    _app, settings, _admin, token = app_env
+    settings.public_base_url = "https://wiki.example.test"
+    response = client.post(
+        "/api/admin/users/invite",
+        json={"email": "nomail@example.com", "display_name": "No Mail"},
+        headers=bearer(token),
+    )
+    assert response.status_code == 400
+    assert "SMTP" in response.json()["detail"]
+
+
+def test_invite_is_rejected_for_an_existing_account_email(app_env, client):
+    _app, settings, admin, token = app_env
+    settings.public_base_url = "https://wiki.example.test"
+    settings.smtp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.smtp_config_path.write_text(
+        '{"host":"smtp.example.test","from_email":"no-reply@example.com"}', encoding="utf-8"
+    )
+    response = client.post(
+        "/api/admin/users/invite",
+        json={"email": admin.email, "display_name": "Duplicate"},
+        headers=bearer(token),
+    )
+    assert response.status_code == 409
+
+
+def test_invite_delivery_failure_reports_an_error(app_env, client, monkeypatch):
+    _app, settings, _admin, token = app_env
+    settings.public_base_url = "https://wiki.example.test"
+    smtp_config_path = settings.smtp_config_path
+    smtp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    smtp_config_path.write_text(
+        '{"host":"smtp.example.test","from_email":"no-reply@example.com"}',
+        encoding="utf-8",
+    )
+
+    def fail(_config, _recipient, _url):
+        from app.mailer import MailDeliveryError
+
+        raise MailDeliveryError("Email could not be delivered")
+
+    monkeypatch.setattr("app.admin_api.mailer.send_user_invite", fail)
+    response = client.post(
+        "/api/admin/users/invite",
+        json={"email": "ghost@example.com", "display_name": "Ghost"},
+        headers=bearer(token),
+    )
+    assert response.status_code == 502
+
+
 def test_password_reset_revokes_the_cookie_and_the_bearer_token(app_env, client, content):
     """One reset, both transports: either survivor would defeat the reset."""
 

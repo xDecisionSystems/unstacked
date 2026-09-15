@@ -50,6 +50,7 @@ from app.default_groups import (
     sync_admin_membership,
 )
 from app.git_backend import GitSyncError, scrub_git_output
+from app.invitations import build_invite_url
 from app.models import Group, Permission, User, UserGroup, normalize_path_prefix
 from app.paths import (
     RESERVED_ROOT_NAMES,
@@ -86,10 +87,24 @@ class UserCreate(BaseModel):
     username: str = Field(min_length=1, max_length=200)
     email: EmailStr
     display_name: str = Field(min_length=1, max_length=200)
-    # There is no mail transport in this deployment model, so an administrator
-    # sets the initial password directly and communicates it out of band. No
-    # invitation tokens are minted here.
+    # An administrator sets the initial password directly and communicates it
+    # out of band. See `UserInvite` below for the alternative that instead
+    # emails the recipient a link to create the account themselves.
     password: str = Field(min_length=MINIMUM_PASSWORD_LENGTH, max_length=1024)
+    is_admin: bool = False
+
+
+class UserInvite(BaseModel):
+    """Email an address a link to create its own account.
+
+    No account exists until the recipient follows the link and chooses a
+    username and password themselves; the email and display name are set
+    here, by the inviting administrator. Requires SMTP and a public base URL
+    to be configured.
+    """
+
+    email: EmailStr
+    display_name: str = Field(min_length=1, max_length=200)
     is_admin: bool = False
 
 
@@ -616,6 +631,37 @@ def create_user(payload: UserCreate, request: Request, actor: AdminActor) -> Use
             is_admin=user.is_admin,
         )
         return _user_response(user)
+
+
+@router.post("/users/invite", response_model=DetailResponse, dependencies=CsrfGuard)
+def invite_user(payload: UserInvite, request: Request, actor: AdminActor) -> DetailResponse:
+    """Email an invitation link that lets the recipient create their own account.
+
+    No account exists until the link is redeemed (see ``accept_invite_submit``
+    in :mod:`app.web`), so there is nothing to roll back if delivery fails or
+    the invitation simply goes unused.
+    """
+
+    settings = request.app.state.settings
+    smtp_state = smtp_config.load(settings.smtp_config_path)
+    if not smtp_state.configured:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "SMTP has not been configured")
+    if not settings.public_base_url:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "UNSTACKED_PUBLIC_BASE_URL must be set before inviting users",
+        )
+    email = str(payload.email).casefold()
+    with Session(request.app.state.engine) as session:
+        if session.exec(select(User).where(User.email == email)).first() is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "A user with that email already exists")
+    url = build_invite_url(settings, email, payload.display_name, payload.is_admin)
+    try:
+        mailer.send_user_invite(smtp_state, email, url)
+    except mailer.MailDeliveryError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    _audit("admin.user.invite", actor, email=email, is_admin=payload.is_admin)
+    return DetailResponse(detail="Invitation sent.")
 
 
 @router.get("/users", response_model=list[UserResponse])

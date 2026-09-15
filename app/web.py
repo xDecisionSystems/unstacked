@@ -36,6 +36,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from markupsafe import Markup, escape
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app import branding, mailer, smtp_config, theme, theme_config
@@ -51,8 +52,10 @@ from app.content import (
     ContentRepository,
     widget_entries_for_location,
 )
+from app.default_groups import sync_admin_membership
 from app.export import ExportError, StaticExportRunner
 from app.home_widgets import build_home_widgets, is_home_widget_source, parse_widget_entries
+from app.invitations import read_invite_token
 from app.mkdocs_import import MkDocsImportError, MkDocsImportService
 from app.models import User
 from app.nav import NavigationError, read_navigation
@@ -140,6 +143,12 @@ def _read_reset_token(request: Request) -> User | None:
             return None
         session.expunge(user)
         return user
+
+
+def _read_invite(request: Request) -> dict[str, object] | None:
+    return read_invite_token(
+        request.app.state.settings, request.query_params.get("token", "")
+    )
 
 
 @router.get("/branding/logo", include_in_schema=False)
@@ -713,6 +722,119 @@ async def reset_password_submit(request: Request) -> Response:
         persisted.api_token_generation += 1
         session.add(persisted)
         session.commit()
+    return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+
+
+INVALID_INVITE_ERROR = "This invitation link is invalid or has already been used."
+
+
+def _notify_admins_of_new_account(request: Request, session: Session, user: User) -> None:
+    """Best-effort nudge to assign the new account's group memberships.
+
+    A self-serve account starts in no groups, so an administrator would
+    otherwise only discover it by opening Settings. Delivery is never
+    required for account creation to succeed, so any failure here -- SMTP
+    unconfigured included -- is swallowed the same way a failed
+    password-reset send is in :func:`forgot_password_submit`.
+    """
+
+    settings = request.app.state.settings
+    smtp_state = smtp_config.load(settings.smtp_config_path)
+    if not smtp_state.configured or not settings.public_base_url:
+        return
+    settings_url = f"{settings.public_base_url.rstrip('/')}/settings#users-section"
+    admins = session.exec(
+        select(User)
+        .where(User.is_admin.is_(True))
+        .where(User.is_active.is_(True))
+        .where(User.id != user.id)
+    ).all()
+    for admin in admins:
+        try:
+            mailer.send_account_created_notification(
+                smtp_state,
+                admin.email,
+                username=user.username,
+                display_name=user.display_name,
+                settings_url=settings_url,
+            )
+        except mailer.MailDeliveryError:
+            pass
+
+
+@router.get("/accept-invite", response_class=HTMLResponse, include_in_schema=False)
+def accept_invite_page(request: Request) -> Response:
+    invite = _read_invite(request)
+    return templates.TemplateResponse(
+        request,
+        "accept_invite.html",
+        {
+            "valid": invite is not None,
+            "email": invite["email"] if invite else None,
+            "display_name": invite["display_name"] if invite else None,
+            "error": None,
+        },
+    )
+
+
+@router.post("/accept-invite", include_in_schema=False)
+async def accept_invite_submit(request: Request) -> Response:
+    invite = _read_invite(request)
+    if invite is None:
+        return templates.TemplateResponse(
+            request,
+            "accept_invite.html",
+            {"valid": False, "email": None, "display_name": None, "error": INVALID_INVITE_ERROR},
+            status_code=400,
+        )
+    form = await _read_form(request)
+    username = form.get("username", "").strip()
+    password = form.get("password", "")
+    error = None
+    if not username or len(username) > 200:
+        error = "Choose a username between 1 and 200 characters"
+    elif len(password) < 12:
+        error = "Password must be at least 12 characters"
+    if error:
+        return templates.TemplateResponse(
+            request,
+            "accept_invite.html",
+            {
+                "valid": True,
+                "email": invite["email"],
+                "display_name": invite["display_name"],
+                "error": error,
+            },
+            status_code=400,
+        )
+    with Session(request.app.state.engine) as session:
+        user = User(
+            username=username,
+            email=invite["email"],
+            password_hash=hash_password(password),
+            display_name=invite["display_name"],
+            is_admin=bool(invite["is_admin"]),
+        )
+        session.add(user)
+        try:
+            session.flush()
+            sync_admin_membership(session, user)
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            return templates.TemplateResponse(
+                request,
+                "accept_invite.html",
+                {
+                    "valid": True,
+                    "email": invite["email"],
+                    "display_name": invite["display_name"],
+                    "error": "That username is taken, or this invitation has already been used.",
+                },
+                status_code=409,
+            )
+        session.refresh(user)
+        _notify_admins_of_new_account(request, session, user)
     return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
 
 
