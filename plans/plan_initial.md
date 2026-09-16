@@ -94,15 +94,16 @@ Implementation: a native mkdocs `hooks:` entry (mkdocs ≥ 1.4) pointing at `hoo
 
 The app is a single wiki instance but may have multiple server processes. Use a repository-scoped **inter-process file lock** around each complete mutation (validate → atomic file changes → stage exact paths → commit); all web, worker, bootstrap, restore, and admin git operations take the same lock. A failed mutation restores the original files and leaves the index clean. Editing uses optimistic concurrency: the editor carries the blob SHA it loaded, and a save whose path or base SHA no longer matches is rejected with a conflict view rather than silently overwriting.
 
-### Database — users, groups, permissions only
+### Database — users, groups, permissions, and API-token metadata
 
 SQLite (SQLModel/SQLAlchemy):
 - `users` (id, username, email, password hash, display name, is_admin, is_active, must_change_password, session_generation, api_token_generation)
 - `groups` (id, name, description)
 - `user_groups` (user_id, group_id)
 - `permissions` (group_id, path_prefix, can_read, can_write) — `path_prefix` is a normalized, segment-aware relative path under `docs/`; raw string prefix matching is forbidden. Resolution semantics are defined under T4.1.
+- `api_token` (user_id, JWT ID, description, issue/expiry/revocation timestamps) — non-secret metadata for listing and individual revocation; the raw bearer token is never persisted.
 
-No content, revisions, API-token records, or search index live in the database. AI clients use expiring signed bearer tokens containing user ID, token generation, issued-at, expiry, audience, and a unique token ID. Incrementing `users.api_token_generation` revokes all outstanding API tokens for that user; deactivating the user rejects them immediately. This deliberately trades per-token naming/revocation for the repo's strict four-table database boundary.
+No content, revisions, raw API tokens, or search index live in the database. AI clients use signed bearer tokens containing user ID, token generation, issued-at, expiry, audience, and a unique token ID. The database stores only non-secret token metadata so users can name, list, expire, and individually revoke issued tokens. Incrementing `users.api_token_generation` still revokes all outstanding API tokens for that user; deactivating the user rejects them immediately. This exception to the former four-table database boundary was approved by the user on 2026-09-16.
 
 ### First administrator credentials
 
@@ -123,7 +124,7 @@ ordinary reset process if this initial credential is lost.
 | Module | Responsibility |
 |---|---|
 | `config` | Settings (paths, secrets, optional backup-remote creds) via pydantic-settings |
-| `models` | SQLModel schema: users/groups/memberships/permissions + migrations |
+| `models` | SQLModel schema: users/groups/memberships/permissions/API-token metadata + migrations |
 | `auth` | Password hashing, sessions, CSRF, API-token auth |
 | `paths` | Slugs + path safety (traversal prevention) — every filesystem path goes through here |
 | `frontmatter_io` | Front-matter read/write round-trip |
@@ -146,7 +147,7 @@ unstacked/
     templates/
     static/
   content/              # nested mkdocs git repo — gitignored here, managed via GitPython
-  data/app.db           # SQLite: users/groups/memberships/permissions only
+  data/app.db           # SQLite: users/groups/memberships/permissions/API-token metadata
   tests/
   plans/
 ```
@@ -200,7 +201,7 @@ named module before writing anything new. No marker means nothing is built.
 
 #### [x] T1.1 — Database schema
 `sonnet` / `terra` · **M** · **high** · depends: T0.1, T0.2
-`app/models.py`: SQLModel definitions for the four tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. `users.username` is unique and suitable for the initial `admin` login; `must_change_password` is non-null and defaults false. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
+`app/models.py`: SQLModel definitions for the tables above; engine/session factory; SQLite foreign-key enforcement and appropriate unique/index/check constraints. `users.username` is unique and suitable for the initial `admin` login; `must_change_password` is non-null and defaults false. Add Alembic from the first schema rather than relying on `create_all()` after bootstrap.
 **Done when:** migrations upgrade a fresh DB to head, foreign-key cascades and uniqueness constraints behave as specified, tests can insert a user, group, membership, and normalized permission, and migration coverage proves the initial-password flag and unique username survive upgrades.
 
 #### [x] T1.2 — Password auth & sessions
@@ -211,7 +212,7 @@ When `must_change_password` is true, issue a restricted session that can access 
 
 #### [x] T1.3 — API token auth
 `opus` / `sol` · **M** · **high** · depends: T1.1, T1.2
-Issue short-lived signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, and the user's current `api_token_generation`; verify an explicit algorithm and audience, then resolve the active user so machine clients inherit current group permissions. Admin/user revocation increments the generation and revokes all of that user's issued tokens. Keep tokens out of storage and logs, and document the lack of per-token revocation.
+Issue signed bearer tokens with `sub`, `iat`, `exp`, `aud`, `jti`, and the user's current `api_token_generation`; verify an explicit algorithm and audience, then resolve the active user so machine clients inherit current group permissions. Persist only non-secret token metadata for named expiry and individual revocation; keep raw tokens out of storage and logs. Admin/user revoke-all increments the generation and marks every issued-token record revoked.
 **Done when:** a valid token authenticates as its active user; expired, wrong-audience, wrong-generation, tampered, and deactivated-user tokens fail; revocation invalidates all prior tokens; and raw tokens are never persisted or logged.
 
 #### [x] T1.4 — First-run bootstrap CLI
@@ -343,7 +344,7 @@ Revision list, side-by-side diff, restore button with confirmation.
 
 #### [x] T5.5 — Admin UI
 `sonnet` / `terra` · **L** · **high** · depends: T4.3, T5.2, T1.3, T6.3, T6.4, T7.1
-Screens for users, groups, memberships, permission grants, issue/revoke-all API tokens, a **backup setup page** (configure/test/clear the backup target and trigger a manual backup — see T6.4, which owns the persistence and re-configuration logic this page calls), and export actions. Token UI states plainly that tokens are short-lived, shown once, and revocation affects all tokens for that user; the backup setup page carries the same "never rendered back" guarantee for a saved credential.
+Screens for users, groups, memberships, permission grants, issue/list/revoke API tokens (individually or all at once), a **backup setup page** (configure/test/clear the backup target and trigger a manual backup — see T6.4, which owns the persistence and re-configuration logic this page calls), and export actions. Token UI states plainly that raw tokens are shown once, while non-secret metadata supports token management; the backup setup page carries the same "never rendered back" guarantee for a saved credential.
 **Note:** `/admin` is an admin-only, CSRF-protected browser console over the established APIs: users, groups/memberships, grants, token issue/revoke, backup configure/manual push/clear, and acknowledged static-export download. Export ZIPs are private response bytes, never a public filesystem mount.
 
 ---
@@ -379,7 +380,7 @@ Background task coalescing rapid saves into a periodic sync to whichever backup 
 #### [x] T6.4 — Backup setup page & runtime-editable configuration
 `opus` / `sol` · **M** · **high** · depends: T6.1, T4.3
 Today the backup target is env-var-only, wired once at startup via `ContentRepository.initialize()` → `GitBackend.configure_remote`. An operator wants a page to set this up rather than editing `.env`/Coolify env vars and redeploying — so this task makes it admin-UI-configurable at runtime:
-- Persist target configuration to a local file under `data/` (e.g. `data/backup_config.json`), following the same file-based-secret precedent already used for `api_token_secret_path` — **not** a new table, so the settled "four tables" database-scope decision stays intact. The stored record is target-typed (`type: "git-remote" | ...`) so a future S3/rsync implementation is another variant of the same record, not a redesign.
+- Persist target configuration to a local file under `data/` (e.g. `data/backup_config.json`), following the same file-based-secret precedent already used for `api_token_secret_path` — **not** a new table, because database records remain limited to identities, ACLs, and non-secret API-token metadata. The stored record is target-typed (`type: "git-remote" | ...`) so a future S3/rsync implementation is another variant of the same record, not a redesign.
 - Admin-only read/update routes. Reading back the config **never** re-renders a saved token or key — same "shown once" precedent as the API-token screen — it shows target type, URL, and status only. Saving a new configuration re-runs `configure_remote` immediately (so a bad credential or unreachable host is caught the moment it's saved, not at the next restart) and only persists on success.
 - The admin UI page itself (folded into T5.5, not a separate screen): current status (configured / not configured, target type, last successful sync from T6.2, last sanitized error), a form to set/change the git-remote target (URL, the "confirmed private" affirmation checkbox, token *or* deploy-key-path + known-hosts-path), a "Back up now" button (T6.3), and a "Clear configuration" action that returns the app to the fully-supported "no backup target" state.
 **Backend done when:** an admin configures, tests, and clears a git-remote
@@ -530,7 +531,7 @@ aren't relitigated mid-implementation:
 | Backend | Python / FastAPI | Reuses MkDocs/Python-Markdown configuration and invokes `mkdocs build` instead of adopting an unrelated renderer. |
 | Content storage | Markdown files in a git repo | The whole point: a working static site must be recoverable from the content folder alone. |
 | Revision history | Git commits | No revisions table; `git log`/`diff`/`checkout` replace it, and deletes are recoverable in place of a recycle bin. |
-| Database scope | Four tables: users, groups, memberships, permissions | No content, revision, token, or search rows. Signed API tokens use a generation field on the user for revoke-all. |
+| Database scope | Users, groups, memberships, permissions, and non-secret API-token metadata | No content, revision, raw token, or search rows. API-token metadata enables named expiry and individual revocation; the user generation field still supports revoke-all. |
 | Permissions | Group → segment-aware path rules; greatest specificity, deny wins ties | Deterministic across multiple groups; default deny; write implies read. Path moves are admin-only in MVP because location defines access. |
 | Auth | Local passwords only | No SSO/LDAP, but kept behind an `authenticate()` seam. |
 | Shelves | Not built — books at `docs/` root | Adds a level nobody asked for; addable later as a folder move with no migration. |

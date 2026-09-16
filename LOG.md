@@ -10,6 +10,13 @@ how long any entry is.
 
 ---
 
+## 2026-09-16 03:08 UTC — Codex
+Recorded the user's approval for non-secret API-token metadata in SQLite,
+updating the database-boundary guidance while retaining the ban on content and
+raw token storage.
+
+- Files: `AGENTS.md`, `plans/plan_initial.md`, `LOG.md`
+
 ## 2026-09-14 04:39 UTC — Codex
 Moved SMTP test-email feedback beside its Test button, with inline success and
 error states instead of using the page-level settings message.
@@ -228,10 +235,3 @@ determine the generated Markdown source filename.
 Tests: Ruff and focused Book-editor test pass.
 - Files: `app/static/widget_editor.js`, `app/templates/_widget_editor.html`,
   `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 04:46 UTC — Codex
-Kept the compact filter button at a fixed 42px width when its search field is
-opened, preventing flexbox resizing during the interaction.
-
-Tests: Ruff and whitespace checks pass.
-- Files: `app/static/style.css`, `LOG.md`

@@ -7,8 +7,9 @@ Instructions for AI coding agents (Claude Code, Codex, etc.) working in this rep
 `unstacked` is a file-based alternative to BookStack. The core idea: wiki
 **content** (books/chapters/pages) lives as plain markdown files in a git
 repo, laid out exactly the way [mkdocs](https://www.mkdocs.org/) expects
-(`docs/` + `mkdocs.yml`). Only **users, groups, and permissions** live in a
-real database (SQLite). See [plans/plan_initial.md](plans/plan_initial.md)
+(`docs/` + `mkdocs.yml`). Only **users, groups, permissions, and API-token
+metadata** live in a real database (SQLite). See
+[plans/plan_initial.md](plans/plan_initial.md)
 for the full architecture and phased implementation plan — read it before
 making structural changes, and keep it up to date as decisions evolve.
 
@@ -20,7 +21,9 @@ don't work around them without checking with the user first.
 
 - **Content never goes in the database.** Books/chapters/pages are folders
   and `.md` files under `content/docs/`, never rows. The database only
-  holds `users`, `groups`, `user_groups`, and `permissions`.
+  holds `users`, `groups`, `user_groups`, `permissions`, and non-secret
+  API-token metadata required for per-token management; raw tokens are never
+  stored.
 - **The content tree must stay a valid, buildable mkdocs project at all
   times.** Any change to books/chapters/pages must leave `mkdocs build`
   working from `content/` alone, with no app code or database involved.
@@ -63,7 +66,7 @@ unstacked/
                    #   render, search, export, ai_api, templates/
   content/        # nested mkdocs git repo (docs/ + mkdocs.yml) — gitignored
                    #   from this repo, managed via GitPython
-  data/           # app.db (SQLite: users/groups/permissions only)
+  data/           # app.db (SQLite: users/groups/permissions/API-token metadata)
   tests/
   plans/          # planning docs, e.g. plan_initial.md
 ```
