@@ -10,6 +10,36 @@ how long any entry is.
 
 ---
 
+## 2026-09-16 06:09 UTC — Claude Code
+Fixed a real vulnerability the user spotted by asking the right question:
+`clear-inactive` deleting a revoked `ApiToken` row could resurrect that
+token, since `get_current_user`'s revocation check only fires when a row
+still exists, and individual revoke deliberately never bumps the account's
+`api_token_generation` (that's what keeps it from logging out every other
+token). Added a `generation` column recorded at issuance; both
+clear-inactive endpoints now only delete a row once it is provably inert on
+its own -- expired, or superseded by a later generation bump -- never one
+that was merely individually revoked.
+
+Tests: Ruff and full pytest suite pass (same pre-existing mkdocs-dependent
+failures as before); rewrote the clear-inactive tests to prove the fix
+(a revoked-but-unexpired row survives clearing and the token it describes
+stays rejected; a generation-superseded row is removed).
+- Files: `app/admin_api.py`, `app/ai_api.py`, `app/models.py`,
+  `app/migrations/versions/20260916_0005_api_token_generation.py`,
+  `tests/test_admin_api.py`, `tests/test_ai_api.py`, `LOG.md`
+
+## 2026-09-16 05:58 UTC — Claude Code
+Removed the "Revoke every token for one account" dropdown form from the
+Settings token panel: the per-token trash-can icons plus the "My tokens"
+and "All tokens (every user)" heading actions already cover every case it
+handled, per the user's observation that it was now redundant. The
+underlying `/api/auth/tokens/revoke` endpoint is untouched -- the "My
+tokens" heading action still calls it for the caller's own account.
+
+Tests: Focused admin-console/token tests pass.
+- Files: `app/templates/admin.html`, `LOG.md`
+
 ## 2026-09-16 05:52 UTC — Claude Code
 Added a "clear" action (distinct X-in-circle icon, next to the existing
 revoke trash-can) beside "My tokens" and "All tokens (every user)" that
@@ -150,22 +180,4 @@ the desktop action rail and floating at the lower right on narrow screens.
 Tests: Ruff and focused page-editor tests pass.
 
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-09-13 02:22 UTC — Codex
-Grouped SSH archive actions into one vertical control stack so their spacing
-stays consistent, including the immediate archive action.
-
-Tests: Ruff and focused admin-console test pass.
-
-- Files: `app/static/style.css`, `app/templates/admin.html`, `LOG.md`
-
-## 2026-09-13 02:06 UTC — Codex
-Added an admin-only SMTP test-email action with a recipient field so saved
-mail settings can be verified without starting a password-reset flow.
-
-Tests: Ruff and focused SMTP API/console tests pass. Compose build and
-health check pass on local port 8001.
-
-- Files: `app/admin_api.py`, `app/mailer.py`, `app/templates/admin.html`,
-  `tests/test_admin_api.py`, `LOG.md`
 
