@@ -713,6 +713,25 @@ def list_all_api_tokens(request: Request, actor: AdminActor) -> list[AdminApiTok
         ]
 
 
+@router.post("/tokens/revoke-all", response_model=DetailResponse, dependencies=CsrfGuard)
+def revoke_every_api_token(request: Request, actor: AdminActor) -> DetailResponse:
+    """Revoke every token for every user in the workspace, in one action.
+
+    Distinct from ``/api/auth/tokens/revoke``, which always targets one
+    account: this is the "All tokens (every user)" panel's own trash-can
+    action, and touches every account at once.
+    """
+
+    with Session(request.app.state.engine) as session:
+        users = session.exec(select(User)).all()
+        for user in users:
+            revoke_all_api_tokens(session, user)
+            session.add(user)
+        session.commit()
+        _audit("admin.tokens.revoke_all", actor, user_count=len(users))
+    return DetailResponse(detail="Every token for every user has been revoked.")
+
+
 @router.patch("/users/{user_id}", response_model=UserResponse, dependencies=CsrfGuard)
 def update_user(
     user_id: int,

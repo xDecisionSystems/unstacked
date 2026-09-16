@@ -10,6 +10,20 @@ how long any entry is.
 
 ---
 
+## 2026-09-16 04:58 UTC — Claude Code
+Replaced the token tables' text "Revoke" buttons with a trash-can icon
+(reusing the existing group-delete SVG, generalized into a shared
+`.icon-delete` class), and added the same icon next to the "My tokens" and
+"All tokens (every user)" headings to revoke everything in that scope at
+once. The latter needed a new admin-only `POST /api/admin/tokens/revoke-all`
+endpoint -- there was previously no way to revoke literally every token for
+every user in one action, only one account at a time.
+
+Tests: Ruff and full pytest suite pass (same pre-existing mkdocs-dependent
+failures as before).
+- Files: `app/admin_api.py`, `app/static/style.css`,
+  `app/templates/admin.html`, `tests/test_admin_api.py`, `LOG.md`
+
 ## 2026-09-16 04:45 UTC — Claude Code
 Widened the Settings token panel: `#tokens-section` was missing the
 `admin-panel-wide` class every other full-width admin section has, so it
@@ -146,14 +160,4 @@ Aligned the book-permissions matrix so book names stay left-aligned and the
 per-book default-access icon group is pinned to the right edge of its column.
 
 - Files: `app/static/style.css`, `LOG.md`
-
-## 2026-09-11 19:33 UTC — Codex
-Restored the required App CI coverage threshold with targeted tests instead
-of weakening the 85% gate. Added coverage for widget-source validation,
-widget ACL behavior, malformed card-link data, and public-site staging,
-publication, and worker fail-closed paths. This protects the recently added
-widget and split public-site behavior while making CI actionable again.
-
-Tests: Ruff and the complete pytest suite pass at 85.02% coverage.
-- Files: `tests/test_home_widgets.py`, `tests/test_public_site.py`, `LOG.md`
 

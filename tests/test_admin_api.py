@@ -598,6 +598,47 @@ def test_admin_can_list_every_users_tokens_and_revoke_any_of_them(app_env, clien
     assert client.get("/api/ai/tree", headers=bearer(reader_token)).status_code == 200
 
 
+def test_admin_can_revoke_every_token_for_every_user_at_once(app_env, client):
+    app, settings, _admin, admin_token = app_env
+    reader = _make_user(app, "reader4@example.com")
+    reader_token = create_api_token(reader, settings)
+
+    admin_issued = client.post(
+        "/api/auth/token", json={"username": "admin", "password": PASSWORD}
+    ).json()
+    reader_issued = client.post(
+        "/api/auth/token", json={"username": "reader4", "password": PASSWORD}
+    ).json()
+
+    # A non-admin cannot reach the workspace-wide action.
+    assert client.post(
+        "/api/admin/tokens/revoke-all", json={}, headers=bearer(reader_token)
+    ).status_code == 403
+
+    response = client.post("/api/admin/tokens/revoke-all", json={}, headers=bearer(admin_token))
+    assert response.status_code == 200
+
+    for token in (
+        admin_token,
+        reader_token,
+        admin_issued["access_token"],
+        reader_issued["access_token"],
+    ):
+        assert client.get("/api/ai/tree", headers=bearer(token)).status_code == 401
+
+    # The old admin token is dead too, so re-authenticate to inspect the
+    # now-revoked rows.
+    fresh_admin_token = client.post(
+        "/api/auth/token", json={"username": "admin", "password": PASSWORD}
+    ).json()["access_token"]
+    listed = {
+        row["id"]: row
+        for row in client.get("/api/admin/tokens", headers=bearer(fresh_admin_token)).json()
+    }
+    assert listed[admin_issued["token_id"]]["revoked_at"] is not None
+    assert listed[reader_issued["token_id"]]["revoked_at"] is not None
+
+
 def test_password_reset_revokes_the_cookie_and_the_bearer_token(app_env, client, content):
     """One reset, both transports: either survivor would defeat the reset."""
 
