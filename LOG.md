@@ -10,12 +10,69 @@ how long any entry is.
 
 ---
 
+## 2026-09-16 04:05 UTC — Claude Code
+Added `GET /api/admin/tokens`, listing every issued API token across all
+accounts with the owning user's username/display name attached, plus an "All
+tokens (every user)" panel in Settings. Revoking reuses the existing
+per-token revoke endpoint, which already allowed an admin to revoke any
+user's token -- this was the missing way to find it.
+
+Tests: Ruff and focused admin-API/token tests pass; full pytest suite green
+(same pre-existing mkdocs-dependent failures as before).
+- Files: `app/admin_api.py`, `app/templates/admin.html`,
+  `tests/test_admin_api.py`, `LOG.md`
+
 ## 2026-09-16 03:08 UTC — Codex
 Recorded the user's approval for non-secret API-token metadata in SQLite,
 updating the database-boundary guidance while retaining the ban on content and
 raw token storage.
 
 - Files: `AGENTS.md`, `plans/plan_initial.md`, `LOG.md`
+
+## 2026-09-16 03:04 UTC — Claude Code
+Issuing a token now records a description and a chosen lifetime (1h/1d/7d/
+30d/90d/never) in a new `api_token` table, and shows the issue date and
+expiry alongside the token. A token can be revoked individually without
+logging out every other integration on the account; the existing "revoke
+all" action now also marks the affected rows so the list stays accurate.
+Every existing bare-minted token (the whole test suite, bootstrap, etc.)
+keeps working unchanged -- the account-generation counter remains the actual
+security boundary, and the new per-row check only applies when a row exists.
+
+Tests: Ruff and full pytest suite pass (same pre-existing mkdocs-dependent
+failures as before).
+- Files: `app/admin_api.py`, `app/ai_api.py`, `app/auth.py`,
+  `app/migrations/versions/20260915_0004_api_tokens.py`, `app/models.py`,
+  `app/templates/admin.html`, `app/web.py`, `app/web_auth.py`,
+  `tests/test_ai_api.py`, `tests/test_models.py`, `LOG.md`
+
+## 2026-09-16 02:31 UTC — Claude Code
+The issued API token was a raw `<pre>` that overflowed its column instead of
+wrapping, with no way to copy it besides manual text selection. It now sits
+in a bordered box that wraps long text and has a Copy button.
+
+- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
+
+## 2026-09-16 02:26 UTC — Claude Code
+Fixed an undefined `issuedToken` reference in the Settings API-token form:
+the `#issued-token` `<pre>` was never queried into a variable, so displaying
+a freshly issued token threw `ReferenceError: issuedToken is not defined`
+instead of showing it.
+
+- Files: `app/templates/admin.html`, `LOG.md`
+
+## 2026-09-15 00:59 UTC — Claude Code
+Added email invitations for user account creation: administrators can invite
+a user by email and display name from Settings, and the recipient follows a
+signed 7-day link to choose their own username and password. New accounts
+start in no groups, so every active administrator gets an email nudge to
+assign group memberships once the invite is accepted.
+
+Tests: Ruff and full pytest suite pass (same pre-existing mkdocs-dependent
+failures as before).
+- Files: `app/admin_api.py`, `app/invitations.py`, `app/mailer.py`,
+  `app/templates/accept_invite.html`, `app/templates/admin.html`,
+  `app/web.py`, `tests/test_admin_api.py`, `tests/test_web.py`, `LOG.md`
 
 ## 2026-09-14 04:39 UTC — Codex
 Moved SMTP test-email feedback beside its Test button, with inline success and
@@ -151,87 +208,3 @@ neither has Python-level test coverage.
   `app/templates/home_editor.html`, `plans/plan_widget_regression_fixes.md`,
   `tests/test_home_widgets.py`, `LOG.md`
 
-## 2026-09-11 13:59 UTC — Claude Code
-Fixed a closed-session reuse bug in `book_view` (see
-`plans/plan_widget_regression_fixes.md`, Phase 3): its `with Session(...) as
-session:` block only wrapped `_base_context`, and two later calls to
-`_authorization(session, user)` ran against the already-closed session --
-SQLAlchemy silently reopens a connection for the reuse rather than raising,
-so it survived every normal request as long as the response still
-rendered, and would leak a checked-out connection under sustained traffic.
-Widened the `with` block to cover the whole function, and (bundled in
-since it's the same lines) reused one `AuthorizationContext` and one
-`read_navigation()` result instead of building/parsing each twice --
-removing `_container_description`, whose only remaining caller this
-consolidation replaced. Verified with a session that asserts if queried
-after `close()`; had to switch it to a non-admin reader after finding an
-admin's `AuthorizationContext` short-circuits before ever touching the
-database, which let the bug hide from the first version of the test too.
-
-Tests: Ruff and full pytest pass (same two pre-existing, unrelated
-failures as before).
-- Files: `app/web.py`, `plans/plan_widget_regression_fixes.md`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 06:06 UTC — Claude Code
-Fixed three data-loss risks from the widget-feature commits (see
-`plans/plan_widget_regression_fixes.md`, Phase 2): a page/Home save that
-failed validation or hit a conflict redisplayed the widget editor with an
-empty tray regardless of what was submitted, so an unnoticed resubmission
-would wipe every widget (now recovers the submitted list for redisplay via
-a new `_redisplay_widgets` helper); removing a widget never deleted its
-generated Markdown source, so reusing the same id later silently
-resurrected the old file's stale content instead of a fresh starter
-template (`ensure_widget_sources` now prunes sources its location no
-longer references, scoped to that location's own filename prefix so a
-book's and its pages' sources sharing one directory can't cross-delete
-each other); and a failure in `ensure_widget_sources` *after* the main
-content commit already succeeded routed the response through the error
-path (claiming nothing was saved) or, for a bare `OSError`, crashed as an
-unhandled 500 -- now caught, logged, and the save still redirects as the
-success it is.
-
-Tests: Ruff and full pytest pass (same two pre-existing, unrelated
-failures as before).
-- Files: `app/content.py`, `app/web.py`, `plans/plan_widget_regression_fixes.md`,
-  `tests/test_home_widgets.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 05:38 UTC — Claude Code
-Fixed four regressions from the recent widget-feature commits (see
-`plans/plan_widget_regression_fixes.md`, Phase 1): non-admin readers saw
-empty data-cards/text widgets on Home because their generated source path
-had no ACL rows of its own (now decided against `index.md`, matching the
-write path); the shared widget macro had silently dropped the admin
-"remove from Home" control (restored); `switching-cards` widgets never
-rendered their Markdown text (the check only matched the literal
-`"data-cards"` type); and a book could be created named `widget-sources`,
-colliding with the reserved generated-widget-source directory and vanishing
-from listings once any Home widget existed (now a reserved root name, and
-excluded from the Admin group's book-permission mirroring).
-
-Tests: Ruff and full pytest pass (only the two pre-existing, unrelated
-failures remain: `test_existing_content_repo_receives_missing_ci_once_and_preserves_custom_workflow`,
-`test_settings_nav_has_a_dedicated_home_page_entry_pointing_to_home`).
-- Files: `app/default_groups.py`, `app/home_widgets.py`, `app/paths.py`,
-  `app/templates/_content_widgets.html`, `app/templates/book.html`,
-  `app/templates/page.html`, `app/templates/tree.html`, `app/web.py`,
-  `plans/plan_widget_regression_fixes.md`, `tests/test_paths.py`,
-  `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 04:54 UTC — Codex
-Added immediate red duplicate-ID feedback beneath the Book/Page Widget ID
-input. IDs are also validated server-side, including names that would create
-the same generated Markdown filename.
-
-Tests: Ruff and focused duplicate-ID test pass.
-- Files: `app/content.py`, `app/static/widget_editor.js`,
-  `app/templates/_widget_editor.html`, `tests/test_home_widgets.py`, `LOG.md`
-
-## 2026-09-11 04:52 UTC — Codex
-Made Book and Page widget IDs user-entered, visible, and unique per host so
-multiple widgets of the same kind are distinguishable. The ID continues to
-determine the generated Markdown source filename.
-
-Tests: Ruff and focused Book-editor test pass.
-- Files: `app/static/widget_editor.js`, `app/templates/_widget_editor.html`,
-  `tests/test_web.py`, `LOG.md`
