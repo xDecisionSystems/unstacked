@@ -676,3 +676,76 @@ def test_bare_minted_tokens_with_no_row_still_authenticate(client, app_env):
     _app, settings, admin, _token = app_env
     bare = create_api_token(admin, settings)
     assert client.get("/api/ai/tree", headers=bearer(bare)).status_code == 200
+
+
+def test_clearing_my_inactive_tokens_removes_only_revoked_and_expired_rows(client, app_env):
+    app, _settings, _admin, admin_token = app_env
+    active = client.post(
+        "/api/auth/token", json={"username": "admin", "password": "correct horse battery staple"}
+    ).json()
+    to_revoke = client.post(
+        "/api/auth/token", json={"username": "admin", "password": "correct horse battery staple"}
+    ).json()
+    to_expire = client.post(
+        "/api/auth/token", json={"username": "admin", "password": "correct horse battery staple"}
+    ).json()
+
+    client.post(
+        f"/api/auth/tokens/{to_revoke['token_id']}/revoke", json={}, headers=bearer(admin_token)
+    )
+    with Session(app.state.engine) as session:
+        record = session.get(ApiToken, to_expire["token_id"])
+        record.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+        session.add(record)
+        session.commit()
+
+    response = client.post(
+        "/api/auth/tokens/clear-inactive", json={}, headers=bearer(admin_token)
+    )
+    assert response.status_code == 200
+    assert response.json()["removed"] == 2
+
+    remaining_ids = {
+        row["id"] for row in client.get("/api/auth/tokens", headers=bearer(admin_token)).json()
+    }
+    assert active["token_id"] in remaining_ids
+    assert to_revoke["token_id"] not in remaining_ids
+    assert to_expire["token_id"] not in remaining_ids
+
+    # Idempotent: nothing left to remove the second time.
+    again = client.post("/api/auth/tokens/clear-inactive", json={}, headers=bearer(admin_token))
+    assert again.json()["removed"] == 0
+
+
+def test_clearing_my_inactive_tokens_never_touches_another_users(client, app_env):
+    app, settings, _admin, admin_token = app_env
+    with Session(app.state.engine) as session:
+        member = User(
+            username="member3",
+            email="member3@example.com",
+            password_hash=hash_password("member password is sufficiently long"),
+            display_name="Member Three",
+        )
+        session.add(member)
+        session.commit()
+        session.refresh(member)
+        member_token = create_api_token(member, settings)
+
+    member_issued = client.post(
+        "/api/auth/token",
+        json={"username": "member3", "password": "member password is sufficiently long"},
+    ).json()
+    client.post(
+        f"/api/auth/tokens/{member_issued['token_id']}/revoke",
+        json={},
+        headers=bearer(member_token),
+    )
+
+    response = client.post(
+        "/api/auth/tokens/clear-inactive", json={}, headers=bearer(admin_token)
+    )
+    assert response.json()["removed"] == 0
+
+    listed = client.get("/api/admin/tokens", headers=bearer(admin_token)).json()
+    all_tokens = {row["id"]: row for row in listed}
+    assert all_tokens[member_issued["token_id"]]["revoked_at"] is not None

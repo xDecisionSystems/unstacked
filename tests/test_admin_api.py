@@ -639,6 +639,42 @@ def test_admin_can_revoke_every_token_for_every_user_at_once(app_env, client):
     assert listed[reader_issued["token_id"]]["revoked_at"] is not None
 
 
+def test_admin_can_clear_every_inactive_token_across_all_users(app_env, client):
+    app, settings, _admin, admin_token = app_env
+    reader = _make_user(app, "reader5@example.com")
+    reader_token = create_api_token(reader, settings)
+
+    active = client.post(
+        "/api/auth/token", json={"username": "admin", "password": PASSWORD}
+    ).json()
+    to_revoke = client.post(
+        "/api/auth/token", json={"username": "reader5", "password": PASSWORD}
+    ).json()
+    client.post(
+        f"/api/auth/tokens/{to_revoke['token_id']}/revoke", json={}, headers=bearer(admin_token)
+    )
+
+    assert client.post(
+        "/api/admin/tokens/clear-inactive", json={}, headers=bearer(reader_token)
+    ).status_code == 403
+
+    response = client.post(
+        "/api/admin/tokens/clear-inactive", json={}, headers=bearer(admin_token)
+    )
+    assert response.status_code == 200
+    assert response.json()["removed"] == 1
+
+    remaining_ids = {
+        row["id"] for row in client.get("/api/admin/tokens", headers=bearer(admin_token)).json()
+    }
+    assert active["token_id"] in remaining_ids
+    assert to_revoke["token_id"] not in remaining_ids
+
+    # Idempotent: nothing left to remove the second time.
+    again = client.post("/api/admin/tokens/clear-inactive", json={}, headers=bearer(admin_token))
+    assert again.json()["removed"] == 0
+
+
 def test_password_reset_revokes_the_cookie_and_the_bearer_token(app_env, client, content):
     """One reset, both transports: either survivor would defeat the reset."""
 

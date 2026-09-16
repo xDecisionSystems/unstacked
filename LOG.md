@@ -10,6 +10,20 @@ how long any entry is.
 
 ---
 
+## 2026-09-16 05:52 UTC — Claude Code
+Added a "clear" action (distinct X-in-circle icon, next to the existing
+revoke trash-can) beside "My tokens" and "All tokens (every user)" that
+permanently deletes already-revoked or expired `api_token` rows -- pure
+housekeeping, never touches an active token. New endpoints
+`POST /api/auth/tokens/clear-inactive` (self, in `ai_api.py`) and
+`POST /api/admin/tokens/clear-inactive` (every user, admin-only, in
+`admin_api.py`), each returning how many rows were removed.
+
+Tests: Ruff and full pytest suite pass (same pre-existing mkdocs-dependent
+failures as before).
+- Files: `app/admin_api.py`, `app/ai_api.py`, `app/templates/admin.html`,
+  `tests/test_admin_api.py`, `tests/test_ai_api.py`, `LOG.md`
+
 ## 2026-09-16 04:58 UTC — Claude Code
 Replaced the token tables' text "Revoke" buttons with a trash-can icon
 (reusing the existing group-delete SVG, generalized into a shared
@@ -154,10 +168,4 @@ health check pass on local port 8001.
 
 - Files: `app/admin_api.py`, `app/mailer.py`, `app/templates/admin.html`,
   `tests/test_admin_api.py`, `LOG.md`
-
-## 2026-09-13 02:02 UTC — Codex
-Aligned the book-permissions matrix so book names stay left-aligned and the
-per-book default-access icon group is pinned to the right edge of its column.
-
-- Files: `app/static/style.css`, `LOG.md`
 

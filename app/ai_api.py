@@ -21,6 +21,7 @@ from fastapi import (
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
+from sqlalchemy import delete, or_
 from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
@@ -220,6 +221,10 @@ class ApiTokenResponse(BaseModel):
     issued_at: datetime
     expires_at: datetime | None
     revoked_at: datetime | None
+
+
+class ClearedTokensResponse(BaseModel):
+    removed: int
 
 
 class ContainerCreate(BaseModel):
@@ -512,6 +517,37 @@ def revoke_one_api_token(
             expires_at=record.expires_at,
             revoked_at=record.revoked_at,
         )
+
+
+@router.post(
+    "/auth/tokens/clear-inactive",
+    response_model=ClearedTokensResponse,
+    dependencies=[Depends(_csrf_for_cookie_token_action)],
+)
+def clear_my_inactive_tokens(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+) -> ClearedTokensResponse:
+    """Permanently delete the caller's own revoked or expired token records.
+
+    Only ever removes rows that can no longer authenticate anything, so this
+    is pure housekeeping for the "My tokens" list -- never a way to end an
+    active session (see ``revoke_api_tokens``/``revoke_one_api_token`` for
+    that).
+    """
+
+    caller = (
+        get_current_user(request, credentials) if credentials else get_current_web_user(request)
+    )
+    now = datetime.now(timezone.utc)
+    with Session(request.app.state.engine) as session:
+        result = session.execute(
+            delete(ApiToken)
+            .where(ApiToken.user_id == caller.id)
+            .where(or_(ApiToken.revoked_at.is_not(None), ApiToken.expires_at < now))
+        )
+        session.commit()
+    return ClearedTokensResponse(removed=result.rowcount)
 
 
 @router.post(

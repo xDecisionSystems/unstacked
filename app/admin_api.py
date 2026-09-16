@@ -27,7 +27,7 @@ import base64
 import logging
 import re
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -137,6 +137,10 @@ class AdminApiTokenResponse(BaseModel):
     issued_at: datetime
     expires_at: datetime | None
     revoked_at: datetime | None
+
+
+class ClearedTokensResponse(BaseModel):
+    removed: int
 
 
 class GroupCreate(BaseModel):
@@ -730,6 +734,27 @@ def revoke_every_api_token(request: Request, actor: AdminActor) -> DetailRespons
         session.commit()
         _audit("admin.tokens.revoke_all", actor, user_count=len(users))
     return DetailResponse(detail="Every token for every user has been revoked.")
+
+
+@router.post("/tokens/clear-inactive", response_model=ClearedTokensResponse, dependencies=CsrfGuard)
+def clear_every_inactive_token(request: Request, actor: AdminActor) -> ClearedTokensResponse:
+    """Permanently delete every already-revoked or expired token record.
+
+    Only ever removes rows that can no longer authenticate anything, so this
+    is pure housekeeping for the "All tokens (every user)" list -- never a
+    way to end an active session (see ``revoke_every_api_token`` for that).
+    """
+
+    now = datetime.now(timezone.utc)
+    with Session(request.app.state.engine) as session:
+        result = session.execute(
+            delete(ApiToken).where(
+                or_(ApiToken.revoked_at.is_not(None), ApiToken.expires_at < now)
+            )
+        )
+        session.commit()
+        _audit("admin.tokens.clear_inactive", actor, removed=result.rowcount)
+    return ClearedTokensResponse(removed=result.rowcount)
 
 
 @router.patch("/users/{user_id}", response_model=UserResponse, dependencies=CsrfGuard)
