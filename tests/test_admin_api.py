@@ -556,6 +556,48 @@ def test_invite_delivery_failure_reports_an_error(app_env, client, monkeypatch):
     assert response.status_code == 502
 
 
+def test_admin_can_list_every_users_tokens_and_revoke_any_of_them(app_env, client):
+    app, settings, admin, admin_token = app_env
+    reader = _make_user(app, "reader3@example.com")
+    reader_token = create_api_token(reader, settings)
+
+    admin_issued = client.post(
+        "/api/auth/token",
+        json={"username": "admin", "password": PASSWORD, "description": "admin's own"},
+    ).json()
+    reader_issued = client.post(
+        "/api/auth/token",
+        json={"username": "reader3", "password": PASSWORD, "description": "reader's own"},
+    ).json()
+
+    listed = client.get("/api/admin/tokens", headers=bearer(admin_token))
+    assert listed.status_code == 200
+    by_id = {row["id"]: row for row in listed.json()}
+    assert by_id[admin_issued["token_id"]]["username"] == "admin"
+    assert by_id[admin_issued["token_id"]]["description"] == "admin's own"
+    assert by_id[reader_issued["token_id"]]["username"] == "reader3"
+    assert by_id[reader_issued["token_id"]]["description"] == "reader's own"
+
+    # A non-admin can list only their own tokens, and cannot reach the
+    # all-users admin listing at all.
+    assert client.get("/api/admin/tokens", headers=bearer(reader_token)).status_code == 403
+    own = client.get("/api/auth/tokens", headers=bearer(reader_token)).json()
+    assert [row["id"] for row in own] == [reader_issued["token_id"]]
+
+    # An administrator can revoke a token belonging to a different account.
+    revoked = client.post(
+        f"/api/auth/tokens/{reader_issued['token_id']}/revoke", json={}, headers=bearer(admin_token)
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["revoked_at"] is not None
+    revoked_headers = bearer(reader_issued["access_token"])
+    assert client.get("/api/ai/tree", headers=revoked_headers).status_code == 401
+    # The admin's own token, and the reader's account itself, are unaffected.
+    admin_headers = bearer(admin_issued["access_token"])
+    assert client.get("/api/ai/tree", headers=admin_headers).status_code == 200
+    assert client.get("/api/ai/tree", headers=bearer(reader_token)).status_code == 200
+
+
 def test_password_reset_revokes_the_cookie_and_the_bearer_token(app_env, client, content):
     """One reset, both transports: either survivor would defeat the reset."""
 

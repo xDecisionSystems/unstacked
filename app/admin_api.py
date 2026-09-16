@@ -27,6 +27,7 @@ import base64
 import logging
 import re
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -51,7 +52,7 @@ from app.default_groups import (
 )
 from app.git_backend import GitSyncError, scrub_git_output
 from app.invitations import build_invite_url
-from app.models import Group, Permission, User, UserGroup, normalize_path_prefix
+from app.models import ApiToken, Group, Permission, User, UserGroup, normalize_path_prefix
 from app.paths import (
     RESERVED_ROOT_NAMES,
     UnsafePath,
@@ -125,6 +126,17 @@ class UserResponse(BaseModel):
     display_name: str
     is_admin: bool
     is_active: bool
+
+
+class AdminApiTokenResponse(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    display_name: str
+    description: str
+    issued_at: datetime
+    expires_at: datetime | None
+    revoked_at: datetime | None
 
 
 class GroupCreate(BaseModel):
@@ -669,6 +681,36 @@ def list_users(request: Request, actor: AdminActor) -> list[UserResponse]:
     with Session(request.app.state.engine) as session:
         rows = session.exec(select(User).order_by(User.id)).all()
         return [_user_response(row) for row in rows]
+
+
+@router.get("/tokens", response_model=list[AdminApiTokenResponse])
+def list_all_api_tokens(request: Request, actor: AdminActor) -> list[AdminApiTokenResponse]:
+    """Every issued token, for every user, newest first.
+
+    ``/api/auth/tokens/{id}/revoke`` already lets an administrator revoke any
+    user's token; this is the read side that lets them find it in the first
+    place without knowing which account to ask for individually.
+    """
+
+    with Session(request.app.state.engine) as session:
+        rows = session.exec(
+            select(ApiToken, User)
+            .join(User, ApiToken.user_id == User.id)
+            .order_by(ApiToken.issued_at.desc())
+        ).all()
+        return [
+            AdminApiTokenResponse(
+                id=token.id,
+                user_id=token.user_id,
+                username=user.username,
+                display_name=user.display_name,
+                description=token.description,
+                issued_at=token.issued_at,
+                expires_at=token.expires_at,
+                revoked_at=token.revoked_at,
+            )
+            for token, user in rows
+        ]
 
 
 @router.patch("/users/{user_id}", response_model=UserResponse, dependencies=CsrfGuard)
