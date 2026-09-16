@@ -11,6 +11,7 @@ administrator still exists.
 import logging
 import shutil
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,7 @@ from sqlmodel import Session, select
 from app.acl import resolve_access
 from app.admin_api import _audit
 from app.auth import create_api_token, hash_password
-from app.models import Permission, User, UserGroup
+from app.models import ApiToken, Permission, User, UserGroup
 from app.web_auth import CSRF_HEADER_NAME, SESSION_COOKIE_NAME
 from tests.conftest import bearer
 
@@ -640,6 +641,12 @@ def test_admin_can_revoke_every_token_for_every_user_at_once(app_env, client):
 
 
 def test_admin_can_clear_every_inactive_token_across_all_users(app_env, client):
+    """Clearing must only ever remove a row that is provably dead on its own
+    (expired, or superseded by a generation bump) -- never one that was only
+    individually revoked, since deleting that row would resurrect its
+    still-otherwise-valid JWT (``get_current_user`` checks ``revoked_at``
+    only when a row for the token still exists)."""
+
     app, settings, _admin, admin_token = app_env
     reader = _make_user(app, "reader5@example.com")
     reader_token = create_api_token(reader, settings)
@@ -647,12 +654,23 @@ def test_admin_can_clear_every_inactive_token_across_all_users(app_env, client):
     active = client.post(
         "/api/auth/token", json={"username": "admin", "password": PASSWORD}
     ).json()
-    to_revoke = client.post(
+    revoked_but_unexpired = client.post(
+        "/api/auth/token",
+        json={"username": "reader5", "password": PASSWORD, "expires_in": "never"},
+    ).json()
+    to_expire = client.post(
         "/api/auth/token", json={"username": "reader5", "password": PASSWORD}
     ).json()
     client.post(
-        f"/api/auth/tokens/{to_revoke['token_id']}/revoke", json={}, headers=bearer(admin_token)
+        f"/api/auth/tokens/{revoked_but_unexpired['token_id']}/revoke",
+        json={},
+        headers=bearer(admin_token),
     )
+    with Session(app.state.engine) as session:
+        record = session.get(ApiToken, to_expire["token_id"])
+        record.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+        session.add(record)
+        session.commit()
 
     assert client.post(
         "/api/admin/tokens/clear-inactive", json={}, headers=bearer(reader_token)
@@ -668,7 +686,13 @@ def test_admin_can_clear_every_inactive_token_across_all_users(app_env, client):
         row["id"] for row in client.get("/api/admin/tokens", headers=bearer(admin_token)).json()
     }
     assert active["token_id"] in remaining_ids
-    assert to_revoke["token_id"] not in remaining_ids
+    assert revoked_but_unexpired["token_id"] in remaining_ids
+    assert to_expire["token_id"] not in remaining_ids
+
+    # The row survived, so the token it describes is (still, correctly)
+    # rejected -- clearing did not resurrect it.
+    revoked_headers = bearer(revoked_but_unexpired["access_token"])
+    assert client.get("/api/ai/tree", headers=revoked_headers).status_code == 401
 
     # Idempotent: nothing left to remove the second time.
     again = client.post("/api/admin/tokens/clear-inactive", json={}, headers=bearer(admin_token))

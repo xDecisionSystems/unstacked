@@ -57,6 +57,12 @@ class ApiToken(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
     jti: str = Field(sa_column=Column(String, unique=True, index=True, nullable=False))
+    # The owner's `api_token_generation` at the moment this token was signed.
+    # A row is only safe to delete outright once this no longer matches the
+    # user's current generation (that mismatch alone already fails the JWT,
+    # independent of this row existing) -- see the "clear inactive tokens"
+    # endpoints, which is the only thing that ever deletes a row.
+    generation: int = 0
     description: str = ""
     issued_at: datetime
     expires_at: datetime | None = None

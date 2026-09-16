@@ -21,7 +21,7 @@ from fastapi import (
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, or_
+from sqlalchemy import and_, delete, or_
 from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
@@ -419,6 +419,7 @@ def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
         record = ApiToken(
             user_id=user.id,
             jti=jti,
+            generation=user.api_token_generation,
             description=payload.description.strip(),
             issued_at=issued_at,
             expires_at=expires_at,
@@ -528,12 +529,15 @@ def clear_my_inactive_tokens(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
 ) -> ClearedTokensResponse:
-    """Permanently delete the caller's own revoked or expired token records.
+    """Permanently delete the caller's own dead token records.
 
-    Only ever removes rows that can no longer authenticate anything, so this
-    is pure housekeeping for the "My tokens" list -- never a way to end an
-    active session (see ``revoke_api_tokens``/``revoke_one_api_token`` for
-    that).
+    A row is only ever deleted once it is *provably* inert on its own: its
+    JWT has either passed its ``exp``, or the account's token generation has
+    since moved past what was signed into it. A row revoked individually
+    (see ``revoke_one_api_token``) but neither expired nor superseded is
+    deliberately left alone -- deleting it would remove the one thing
+    stopping its still-otherwise-valid JWT from authenticating again, since
+    ``get_current_user`` only checks ``revoked_at`` when a row exists at all.
     """
 
     caller = (
@@ -544,7 +548,12 @@ def clear_my_inactive_tokens(
         result = session.execute(
             delete(ApiToken)
             .where(ApiToken.user_id == caller.id)
-            .where(or_(ApiToken.revoked_at.is_not(None), ApiToken.expires_at < now))
+            .where(
+                or_(
+                    and_(ApiToken.expires_at.is_not(None), ApiToken.expires_at < now),
+                    ApiToken.generation != caller.api_token_generation,
+                )
+            )
         )
         session.commit()
     return ClearedTokensResponse(removed=result.rowcount)

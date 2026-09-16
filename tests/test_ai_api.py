@@ -678,20 +678,32 @@ def test_bare_minted_tokens_with_no_row_still_authenticate(client, app_env):
     assert client.get("/api/ai/tree", headers=bearer(bare)).status_code == 200
 
 
-def test_clearing_my_inactive_tokens_removes_only_revoked_and_expired_rows(client, app_env):
+def test_clearing_my_inactive_tokens_removes_only_provably_dead_rows(client, app_env):
+    """A row revoked individually but neither expired nor superseded must
+    survive clearing: deleting it would let its still-generation-valid JWT
+    authenticate again, since ``get_current_user`` only checks a token's
+    ``revoked_at`` when a row for it still exists at all."""
+
     app, _settings, _admin, admin_token = app_env
     active = client.post(
         "/api/auth/token", json={"username": "admin", "password": "correct horse battery staple"}
     ).json()
-    to_revoke = client.post(
-        "/api/auth/token", json={"username": "admin", "password": "correct horse battery staple"}
+    revoked_but_unexpired = client.post(
+        "/api/auth/token",
+        json={
+            "username": "admin",
+            "password": "correct horse battery staple",
+            "expires_in": "never",
+        },
     ).json()
     to_expire = client.post(
         "/api/auth/token", json={"username": "admin", "password": "correct horse battery staple"}
     ).json()
 
     client.post(
-        f"/api/auth/tokens/{to_revoke['token_id']}/revoke", json={}, headers=bearer(admin_token)
+        f"/api/auth/tokens/{revoked_but_unexpired['token_id']}/revoke",
+        json={},
+        headers=bearer(admin_token),
     )
     with Session(app.state.engine) as session:
         record = session.get(ApiToken, to_expire["token_id"])
@@ -703,18 +715,53 @@ def test_clearing_my_inactive_tokens_removes_only_revoked_and_expired_rows(clien
         "/api/auth/tokens/clear-inactive", json={}, headers=bearer(admin_token)
     )
     assert response.status_code == 200
-    assert response.json()["removed"] == 2
+    assert response.json()["removed"] == 1
 
     remaining_ids = {
         row["id"] for row in client.get("/api/auth/tokens", headers=bearer(admin_token)).json()
     }
     assert active["token_id"] in remaining_ids
-    assert to_revoke["token_id"] not in remaining_ids
+    assert revoked_but_unexpired["token_id"] in remaining_ids
     assert to_expire["token_id"] not in remaining_ids
 
-    # Idempotent: nothing left to remove the second time.
+    # The row survived, so the token it describes is (still, correctly)
+    # rejected -- clearing did not resurrect it.
+    revoked_headers = bearer(revoked_but_unexpired["access_token"])
+    assert client.get("/api/ai/tree", headers=revoked_headers).status_code == 401
+
+    # Idempotent: nothing further to remove the second time.
     again = client.post("/api/auth/tokens/clear-inactive", json={}, headers=bearer(admin_token))
     assert again.json()["removed"] == 0
+
+
+def test_clearing_tokens_removes_rows_superseded_by_a_generation_bump(client, app_env):
+    """Unlike an individual revoke, a bulk revoke-all bumps the account's
+    generation, which independently kills the JWT -- so once that has
+    happened, deleting the now-redundant row is provably safe."""
+
+    _app, _settings, _admin, admin_token = app_env
+    issued = client.post(
+        "/api/auth/token",
+        json={
+            "username": "admin",
+            "password": "correct horse battery staple",
+            "expires_in": "never",
+        },
+    ).json()
+    client.post("/api/auth/tokens/revoke", json={}, headers=bearer(admin_token))
+    fresh_token = client.post(
+        "/api/auth/token", json={"username": "admin", "password": "correct horse battery staple"}
+    ).json()["access_token"]
+
+    cleared = client.post(
+        "/api/auth/tokens/clear-inactive", json={}, headers=bearer(fresh_token)
+    )
+    assert cleared.json()["removed"] == 1
+
+    remaining_ids = {
+        row["id"] for row in client.get("/api/auth/tokens", headers=bearer(fresh_token)).json()
+    }
+    assert issued["token_id"] not in remaining_ids
 
 
 def test_clearing_my_inactive_tokens_never_touches_another_users(client, app_env):

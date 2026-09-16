@@ -34,7 +34,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import delete, not_, or_, update
+from sqlalchemy import and_, delete, not_, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
@@ -738,18 +738,30 @@ def revoke_every_api_token(request: Request, actor: AdminActor) -> DetailRespons
 
 @router.post("/tokens/clear-inactive", response_model=ClearedTokensResponse, dependencies=CsrfGuard)
 def clear_every_inactive_token(request: Request, actor: AdminActor) -> ClearedTokensResponse:
-    """Permanently delete every already-revoked or expired token record.
+    """Permanently delete every already-dead token record, for every user.
 
-    Only ever removes rows that can no longer authenticate anything, so this
-    is pure housekeeping for the "All tokens (every user)" list -- never a
-    way to end an active session (see ``revoke_every_api_token`` for that).
+    A row is only ever deleted once it is *provably* inert on its own: its
+    JWT has either passed its ``exp``, or its owner's token generation has
+    since moved past what was signed into it (a correlated subquery, since
+    rows here span every account). A row revoked individually but neither
+    expired nor superseded is deliberately left alone -- deleting it would
+    remove the one thing stopping its still-otherwise-valid JWT from
+    authenticating again, since ``get_current_user`` only checks
+    ``revoked_at`` when a row exists at all. See ``revoke_every_api_token``
+    for actually ending an active session.
     """
 
     now = datetime.now(timezone.utc)
+    owner_generation = (
+        select(User.api_token_generation).where(User.id == ApiToken.user_id).scalar_subquery()
+    )
     with Session(request.app.state.engine) as session:
         result = session.execute(
             delete(ApiToken).where(
-                or_(ApiToken.revoked_at.is_not(None), ApiToken.expires_at < now)
+                or_(
+                    and_(ApiToken.expires_at.is_not(None), ApiToken.expires_at < now),
+                    ApiToken.generation != owner_generation,
+                )
             )
         )
         session.commit()
