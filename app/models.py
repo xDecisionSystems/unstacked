@@ -1,4 +1,5 @@
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 
 from alembic import command
@@ -38,6 +39,28 @@ class Group(SQLModel, table=True):
 class UserGroup(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
     group_id: int = Field(foreign_key="group.id", primary_key=True, ondelete="CASCADE")
+
+
+class ApiToken(SQLModel, table=True):
+    """Metadata for a bearer token, keyed by the ``jti`` embedded in the JWT.
+
+    The JWT itself remains the actual credential -- nothing here is checked
+    during authentication except whether this row's ``revoked_at`` is set, so
+    a token minted without a row (as every test in this codebase mints one)
+    keeps working exactly as before. This table exists only so a user can see
+    what they issued and revoke one token without invalidating every other
+    one, which the coarser ``User.api_token_generation`` counter cannot do.
+    """
+
+    __tablename__ = "api_token"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+    jti: str = Field(sa_column=Column(String, unique=True, index=True, nullable=False))
+    description: str = ""
+    issued_at: datetime
+    expires_at: datetime | None = None
+    revoked_at: datetime | None = None
 
 
 def normalize_path_prefix(raw: str) -> str:

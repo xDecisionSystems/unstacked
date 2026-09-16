@@ -24,7 +24,7 @@ from itsdangerous import Signer as _Signer
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from app.auth import authenticate, client_identifier, hash_password
+from app.auth import authenticate, client_identifier, hash_password, revoke_all_api_tokens
 from app.config import Settings
 from app.models import User
 
@@ -329,7 +329,7 @@ def change_password(
         persisted.password_hash = hash_password(payload.new_password)
         persisted.must_change_password = False
         persisted.session_generation += 1
-        persisted.api_token_generation += 1
+        revoke_all_api_tokens(session, persisted)
         session.add(persisted)
         session.commit()
         session.refresh(persisted)

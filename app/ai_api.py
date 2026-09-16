@@ -1,9 +1,11 @@
 import re
 from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from time import monotonic
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import quote
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -19,7 +21,7 @@ from fastapi import (
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlmodel import Session
+from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
 from app.acl import AccessDenied, AuthorizationContext
@@ -29,9 +31,10 @@ from app.auth import (
     client_identifier,
     create_api_token,
     get_current_user,
+    revoke_all_api_tokens,
 )
 from app.content import ContentError, ContentExists, ContentMissing, CreatedContent, StoredAsset
-from app.models import User
+from app.models import ApiToken, User
 from app.paths import UnsafePath, make_slug, normalize_relative_path
 from app.search import SearchError, SearchTimeout
 from app.web_auth import get_current_web_user, require_csrf
@@ -158,15 +161,42 @@ def inline_disposition(filename: str) -> str:
     return _disposition("inline", filename, "asset")
 
 
+# Named presets rather than an arbitrary caller-supplied duration, so a
+# script hitting this endpoint directly can't quietly mint a token that
+# outlives every sane review window.
+TOKEN_TTL_PRESETS: dict[str, int | None] = {
+    "1h": 3_600,
+    "1d": 86_400,
+    "7d": 604_800,
+    "30d": 2_592_000,
+    "90d": 7_776_000,
+    "never": None,
+}
+# A "never expiring" token still carries a real JWT `exp` -- decoding always
+# requires one -- so it gets one far enough out to be, in practice, never.
+# The `ApiToken` row's `expires_at` is what actually says "never" (`None`);
+# this is purely an implementation detail of the token's own signature.
+_NEVER_EXPIRES_JWT_HORIZON = timedelta(days=36_500)
+
+
 class TokenRequest(BaseModel):
     username: str = Field(min_length=1, max_length=200)
     password: str = Field(min_length=1, max_length=1024)
+    description: str = Field(default="", max_length=200)
+    # Matches the endpoint's prior fixed-TTL behavior for any caller that
+    # omits this field, so an existing script's tokens don't silently start
+    # living longer than before.
+    expires_in: Literal["1h", "1d", "7d", "30d", "90d", "never"] = "1h"
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    expires_in: int
+    expires_in: int | None
+    token_id: int
+    description: str
+    issued_at: datetime
+    expires_at: datetime | None
 
 
 class RevokeTokensRequest(BaseModel):
@@ -182,6 +212,14 @@ class RevokeTokensRequest(BaseModel):
 class RevokeTokensResponse(BaseModel):
     user_id: int
     api_token_generation: int
+
+
+class ApiTokenResponse(BaseModel):
+    id: int
+    description: str
+    issued_at: datetime
+    expires_at: datetime | None
+    revoked_at: datetime | None
 
 
 class ContainerCreate(BaseModel):
@@ -369,11 +407,111 @@ def issue_token(payload: TokenRequest, request: Request) -> TokenResponse:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
         if user.must_change_password:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Password change required")
-        token = create_api_token(user, request.app.state.settings)
+        ttl_seconds = TOKEN_TTL_PRESETS[payload.expires_in]
+        issued_at = datetime.now(timezone.utc)
+        expires_at = None if ttl_seconds is None else issued_at + timedelta(seconds=ttl_seconds)
+        jti = str(uuid4())
+        record = ApiToken(
+            user_id=user.id,
+            jti=jti,
+            description=payload.description.strip(),
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        token = create_api_token(
+            user,
+            settings,
+            jti=jti,
+            expires_at=expires_at or (issued_at + _NEVER_EXPIRES_JWT_HORIZON),
+        )
     return TokenResponse(
         access_token=token,
-        expires_in=request.app.state.settings.api_token_ttl_seconds,
+        expires_in=ttl_seconds,
+        token_id=record.id,
+        description=record.description,
+        issued_at=record.issued_at,
+        expires_at=record.expires_at,
     )
+
+
+@router.get("/auth/tokens", response_model=list[ApiTokenResponse])
+def list_api_tokens(
+    request: Request,
+    user_id: Annotated[int | None, Query(gt=0)] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+) -> list[ApiTokenResponse]:
+    """List one account's issued tokens, newest first.
+
+    Omitting ``user_id`` means the caller's own tokens; viewing another
+    account's is an administrator-only operation, matching ``tokens/revoke``.
+    """
+
+    caller = (
+        get_current_user(request, credentials) if credentials else get_current_web_user(request)
+    )
+    target_id = user_id if user_id is not None else caller.id
+    if target_id != caller.id and not caller.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required")
+    with Session(request.app.state.engine) as session:
+        rows = session.exec(
+            select(ApiToken)
+            .where(ApiToken.user_id == target_id)
+            .order_by(ApiToken.issued_at.desc())
+        ).all()
+        return [
+            ApiTokenResponse(
+                id=row.id,
+                description=row.description,
+                issued_at=row.issued_at,
+                expires_at=row.expires_at,
+                revoked_at=row.revoked_at,
+            )
+            for row in rows
+        ]
+
+
+@router.post(
+    "/auth/tokens/{token_id}/revoke",
+    response_model=ApiTokenResponse,
+    dependencies=[Depends(_csrf_for_cookie_token_action)],
+)
+def revoke_one_api_token(
+    token_id: int,
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+) -> ApiTokenResponse:
+    """Revoke exactly one token, leaving every other token for the account valid.
+
+    The coarser ``/auth/tokens/revoke`` bumps the account generation and kills
+    everything at once; this only marks one ``ApiToken`` row, so disconnecting
+    one integration (a leaked or retired GPT token, say) doesn't also log out
+    every other one.
+    """
+
+    caller = (
+        get_current_user(request, credentials) if credentials else get_current_web_user(request)
+    )
+    with Session(request.app.state.engine) as session:
+        record = session.get(ApiToken, token_id)
+        if record is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Token not found")
+        if record.user_id != caller.id and not caller.is_admin:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required")
+        if record.revoked_at is None:
+            record.revoked_at = datetime.now(timezone.utc)
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+        return ApiTokenResponse(
+            id=record.id,
+            description=record.description,
+            issued_at=record.issued_at,
+            expires_at=record.expires_at,
+            revoked_at=record.revoked_at,
+        )
 
 
 @router.post(
@@ -386,12 +524,12 @@ def revoke_api_tokens(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
 ) -> RevokeTokensResponse:
-    """Invalidate every bearer token issued to one account.
+    """Invalidate every bearer token issued to one account, all at once.
 
-    There are intentionally no token rows: advancing the account generation
-    invalidates every signed token for that account without retaining a raw
-    credential or even a credential fingerprint.  A user can revoke their own
-    tokens; only an administrator may revoke another user's tokens.
+    Advancing the account generation invalidates every signed token for that
+    account, including any minted with no ``ApiToken`` row at all. See
+    ``revoke_api_token`` below to kill just one token instead.  A user can
+    revoke their own tokens; only an administrator may revoke another user's.
     """
 
     user = get_current_user(request, credentials) if credentials else get_current_web_user(request)
@@ -405,7 +543,7 @@ def revoke_api_tokens(
         target = session.get(User, target_id)
         if target is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-        target.api_token_generation += 1
+        revoke_all_api_tokens(session, target)
         session.add(target)
         session.commit()
         session.refresh(target)

@@ -42,7 +42,7 @@ from sqlmodel import Session, select
 from app import branding, mailer, smtp_config, theme, theme_config
 from app.acl import AccessDenied, AuthorizationContext
 from app.assets import AssetTooLarge, UnsupportedAsset, detect_image
-from app.auth import client_identifier, hash_password
+from app.auth import client_identifier, hash_password, revoke_all_api_tokens
 from app.content import (
     SOURCE_WIDGET_TYPES,
     ContentConflict,
@@ -719,7 +719,7 @@ async def reset_password_submit(request: Request) -> Response:
         persisted.password_hash = hash_password(password)
         persisted.must_change_password = False
         persisted.session_generation += 1
-        persisted.api_token_generation += 1
+        revoke_all_api_tokens(session, persisted)
         session.add(persisted)
         session.commit()
     return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)

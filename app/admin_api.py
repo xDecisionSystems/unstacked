@@ -40,7 +40,7 @@ from sqlmodel import Session, select
 
 from app import backup_config, backup_runtime, branding, mailer, smtp_config, theme, theme_config
 from app.acl import AccessPolicy, Rule, explain_access
-from app.auth import bearer_scheme, get_current_user, hash_password
+from app.auth import bearer_scheme, get_current_user, hash_password, revoke_all_api_tokens
 from app.backup_config import GIT_REMOTE, BackupTarget
 from app.content import ContentConflict, ContentError, ContentRepository
 from app.default_groups import (
@@ -719,7 +719,7 @@ def reset_password(
     with Session(request.app.state.engine) as session:
         user = _require_user(session, user_id)
         user.password_hash = hash_password(payload.password)
-        user.api_token_generation += 1
+        revoke_all_api_tokens(session, user)
         # An admin-set password is a temporary credential communicated out of
         # band, same as at account creation — force the user to replace it.
         user.must_change_password = True

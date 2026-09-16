@@ -41,7 +41,14 @@ def _user(email: str = "member@example.com") -> User:
 
 def test_migrations_create_only_the_authorization_tables(database):
     tables = set(inspect(database).get_table_names())
-    assert tables == {"alembic_version", "user", "group", "usergroup", "permission"}
+    assert tables == {
+        "alembic_version",
+        "user",
+        "group",
+        "usergroup",
+        "permission",
+        "api_token",
+    }
     columns = {column["name"] for column in inspect(database).get_columns("user")}
     assert {"username", "must_change_password"} <= columns
 

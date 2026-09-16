@@ -9,10 +9,11 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 from pwdlib import PasswordHash
+from sqlalchemy import update
 from sqlmodel import Session, select
 
 from app.config import Settings
-from app.models import User
+from app.models import ApiToken, User
 
 password_hash = PasswordHash.recommended()
 DUMMY_PASSWORD_HASH = password_hash.hash("dummy-password")
@@ -103,7 +104,22 @@ def authenticate(session: Session, username: str, password: str) -> User | None:
     return user
 
 
-def create_api_token(user: User, settings: Settings) -> str:
+def create_api_token(
+    user: User,
+    settings: Settings,
+    *,
+    jti: str | None = None,
+    expires_at: datetime | None = None,
+) -> str:
+    """Sign a bearer token. ``expires_at``, if given, must be timezone-aware.
+
+    ``jti`` and ``expires_at`` are optional so every existing caller --
+    production and the many tests that mint a token directly, with no
+    ``ApiToken`` row at all -- keeps getting the prior behavior unchanged.
+    The self-service issuance endpoint is the one caller that passes both, so
+    it can persist the same identifiers in an ``ApiToken`` row.
+    """
+
     if user.id is None:
         raise ValueError("user must be persisted before issuing a token")
     if user.must_change_password:
@@ -113,14 +129,14 @@ def create_api_token(user: User, settings: Settings) -> str:
         "sub": str(user.id),
         "generation": user.api_token_generation,
         "iat": now,
-        "exp": now + timedelta(seconds=settings.api_token_ttl_seconds),
+        "exp": expires_at or now + timedelta(seconds=settings.api_token_ttl_seconds),
         "aud": settings.api_token_audience,
-        "jti": str(uuid4()),
+        "jti": jti or str(uuid4()),
     }
     return jwt.encode(payload, settings.token_secret, algorithm="HS256")
 
 
-def decode_api_token(token: str, settings: Settings) -> tuple[int, int]:
+def decode_api_token(token: str, settings: Settings) -> tuple[int, int, str]:
     try:
         payload = jwt.decode(
             token,
@@ -129,7 +145,7 @@ def decode_api_token(token: str, settings: Settings) -> tuple[int, int]:
             audience=settings.api_token_audience,
             options={"require": ["sub", "generation", "iat", "exp", "aud", "jti"]},
         )
-        return int(payload["sub"]), int(payload["generation"])
+        return int(payload["sub"]), int(payload["generation"]), str(payload["jti"])
     except (InvalidTokenError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -148,7 +164,8 @@ def get_current_user(
             detail="Bearer token required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user_id, generation = decode_api_token(credentials.credentials, request.app.state.settings)
+    settings: Settings = request.app.state.settings
+    user_id, generation, jti = decode_api_token(credentials.credentials, settings)
     with Session(request.app.state.engine) as session:
         user = session.get(User, user_id)
         if user is None or not user.is_active or user.api_token_generation != generation:
@@ -162,5 +179,34 @@ def get_current_user(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Password change required",
             )
+        # A token minted without a row (every bare `create_api_token()` call,
+        # including the whole test suite) has nothing to check here and
+        # remains governed solely by the generation match above.
+        record = session.exec(select(ApiToken).where(ApiToken.jti == jti)).first()
+        if record is not None and record.revoked_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired bearer token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         session.expunge(user)
         return user
+
+
+def revoke_all_api_tokens(session: Session, user: User) -> None:
+    """Bump the account's token generation and mark every issued token revoked.
+
+    The generation counter remains the actual security boundary -- it is what
+    invalidates a token minted with no ``ApiToken`` row -- so it is always
+    bumped. Marking the rows too keeps the token-management list accurate
+    rather than silently showing a dead token as still active. Does not
+    commit; callers already commit as part of a larger change.
+    """
+
+    user.api_token_generation += 1
+    session.execute(
+        update(ApiToken)
+        .where(ApiToken.user_id == user.id)
+        .where(ApiToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(timezone.utc))
+    )

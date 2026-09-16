@@ -10,7 +10,7 @@ from sqlmodel import Session
 from app.acl import AccessDenied, AuthorizationContext
 from app.ai_api import DIFF_RESPONSE_OVERHEAD_BYTES, MAX_PAGE_MARKDOWN_CHARS
 from app.auth import create_api_token, hash_password
-from app.models import Group, Permission, User, UserGroup
+from app.models import ApiToken, Group, Permission, User, UserGroup
 from tests.conftest import bearer
 
 
@@ -549,4 +549,130 @@ def test_only_admin_can_revoke_another_users_tokens(client, app_env):
     )
     assert revoked.status_code == 200
     assert revoked.json()["user_id"] == member_id
-    assert client.get("/api/ai/tree", headers=bearer(member_token)).status_code == 401
+
+
+def test_issued_token_carries_description_and_chosen_expiry(client, app_env):
+    _app, _settings, admin, admin_token = app_env
+    issued = client.post(
+        "/api/auth/token",
+        json={
+            "username": "admin",
+            "password": "correct horse battery staple",
+            "description": "ChatGPT connector",
+            "expires_in": "7d",
+        },
+    )
+    assert issued.status_code == 200
+    body = issued.json()
+    assert body["description"] == "ChatGPT connector"
+    assert body["expires_in"] == 7 * 24 * 60 * 60
+    assert body["issued_at"] is not None
+    assert body["expires_at"] is not None
+    assert client.get("/api/ai/tree", headers=bearer(body["access_token"])).status_code == 200
+
+    listed = client.get("/api/auth/tokens", headers=bearer(admin_token)).json()
+    match = next(row for row in listed if row["id"] == body["token_id"])
+    assert match["description"] == "ChatGPT connector"
+    assert match["revoked_at"] is None
+
+
+def test_never_expiring_token_has_no_expires_at_and_stays_valid(client):
+    issued = client.post(
+        "/api/auth/token",
+        json={
+            "username": "admin",
+            "password": "correct horse battery staple",
+            "expires_in": "never",
+        },
+    )
+    assert issued.status_code == 200
+    body = issued.json()
+    assert body["expires_at"] is None
+    assert body["expires_in"] is None
+    assert client.get("/api/ai/tree", headers=bearer(body["access_token"])).status_code == 200
+
+
+def test_revoking_one_token_leaves_the_others_valid(client, app_env):
+    _app, _settings, _admin, admin_token = app_env
+    first = client.post(
+        "/api/auth/token",
+        json={"username": "admin", "password": "correct horse battery staple"},
+    ).json()
+    second = client.post(
+        "/api/auth/token",
+        json={"username": "admin", "password": "correct horse battery staple"},
+    ).json()
+
+    revoked = client.post(
+        f"/api/auth/tokens/{first['token_id']}/revoke", json={}, headers=bearer(admin_token)
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["revoked_at"] is not None
+
+    assert client.get("/api/ai/tree", headers=bearer(first["access_token"])).status_code == 401
+    assert client.get("/api/ai/tree", headers=bearer(second["access_token"])).status_code == 200
+
+    # Revoking an already-revoked token is a harmless no-op, not an error.
+    again = client.post(
+        f"/api/auth/tokens/{first['token_id']}/revoke", json={}, headers=bearer(admin_token)
+    )
+    assert again.status_code == 200
+
+
+def test_revoke_all_also_marks_issued_token_rows_revoked(client, app_env):
+    app, settings, admin, _admin_token = app_env
+    issued = client.post(
+        "/api/auth/token",
+        json={"username": "admin", "password": "correct horse battery staple"},
+    ).json()
+
+    bare = create_api_token(admin, settings)
+    revoked = client.post("/api/auth/tokens/revoke", json={}, headers=bearer(bare))
+    assert revoked.status_code == 200
+
+    with Session(app.state.engine) as session:
+        record = session.get(ApiToken, issued["token_id"])
+        assert record.revoked_at is not None
+
+
+def test_a_user_cannot_list_or_revoke_another_users_token(client, app_env):
+    app, settings, admin, _admin_token = app_env
+    with Session(app.state.engine) as session:
+        member = User(
+            username="member2",
+            email="member2@example.com",
+            password_hash=hash_password("member password is sufficiently long"),
+            display_name="Member Two",
+        )
+        session.add(member)
+        session.commit()
+        session.refresh(member)
+        member_token = create_api_token(member, settings)
+        member_id = member.id
+
+    issued = client.post(
+        "/api/auth/token",
+        json={"username": "admin", "password": "correct horse battery staple"},
+    ).json()
+
+    assert (
+        client.get(f"/api/auth/tokens?user_id={member_id}", headers=bearer(member_token)).json()
+        == []
+    )
+    forbidden_list = client.get(
+        f"/api/auth/tokens?user_id={admin.id}", headers=bearer(member_token)
+    )
+    assert forbidden_list.status_code == 403
+
+    forbidden_revoke = client.post(
+        f"/api/auth/tokens/{issued['token_id']}/revoke", json={}, headers=bearer(member_token)
+    )
+    assert forbidden_revoke.status_code == 403
+
+
+def test_bare_minted_tokens_with_no_row_still_authenticate(client, app_env):
+    """Every existing test mints tokens this way; the new row-based check must not break it."""
+
+    _app, settings, admin, _token = app_env
+    bare = create_api_token(admin, settings)
+    assert client.get("/api/ai/tree", headers=bearer(bare)).status_code == 200
