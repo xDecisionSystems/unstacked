@@ -10,6 +10,16 @@ how long any entry is.
 
 ---
 
+## 2026-09-16 04:23 UTC — Claude Code
+Replaced the "Revoke all tokens" form's free-typed numeric User ID field
+with a dropdown of actual accounts (display name + username), populated
+from the same users list the page already fetches. The user pointed out
+that typing a raw ID was awkward now that the new all-users token list
+already shows names.
+
+Tests: Ruff and focused admin-console/token tests pass.
+- Files: `app/templates/admin.html`, `LOG.md`
+
 ## 2026-09-16 04:05 UTC — Claude Code
 Added `GET /api/admin/tokens`, listing every issued API token across all
 accounts with the owning user's username/display name attached, plus an "All
@@ -172,39 +182,4 @@ Tests: Ruff and full pytest pass (same two pre-existing, unrelated
 failures as before).
 - Files: `app/render.py`, `plans/plan_widget_regression_fixes.md`,
   `tests/test_render.py`, `LOG.md`
-
-## 2026-09-11 15:16 UTC — Claude Code
-Phase 4 (cleanup, no behavior change) of `plans/plan_widget_regression_fixes.md`:
-deleted six functions left fully dead in `app/web.py` since the anonymous-
-access removal (`_public_page`, `_public_context`, `_home_public`,
-`_unauthenticated_destination`, `_public_home_widgets`, `_public_home_context`,
-plus `_container_description`, made dead by this pass' own `book_view`
-consolidation) and fixed a docstring in `app/admin_api.py` that still
-described the removed anonymous-redirect-to-Home behavior as current;
-unified the three independent "is this a generated widget-source path"
-checks (`app/content.py` x2, `app/search.py`) into one
-`is_widget_source_path()`, and the book-directory-name reservation check
-into the same `RESERVED_ROOT_NAMES` Phase 1 already established rather than
-a separately-hardcoded set; drove `home_editor.html`'s widget-type
-classification lists from one server-supplied `source_widget_types` value
-(`app.content.SOURCE_WIDGET_TYPES`, renamed public) instead of six
-hand-copied JS/Jinja literals; removed a byte-identical duplicate CSS rule
-block in `style.css`. While verifying the widget-type-list change in a
-real browser, found and fixed a real, pre-existing bug in the same code
-(confirmed via `git log -p` to predate this plan): the "Add widget" form's
-Title-field visibility never accounted for the `horizontal-rule` type.
-Left one item (aligning client/server widget-id uniqueness checks) as
-comments rather than a behavior change -- traced fully and found the
-current two-layer validation already correct end-to-end; tightening the
-weaker check to match the stricter one would reject currently-valid ids on
-widget types that don't need to slugify cleanly.
-
-Tests: Ruff and full pytest pass (same two pre-existing, unrelated
-failures as before); the widget-type-list and horizontal-rule fixes were
-also verified by driving `/home/edit` in a real headless browser, since
-neither has Python-level test coverage.
-- Files: `app/admin_api.py`, `app/content.py`, `app/search.py`,
-  `app/static/style.css`, `app/static/widget_editor.js`, `app/web.py`,
-  `app/templates/home_editor.html`, `plans/plan_widget_regression_fixes.md`,
-  `tests/test_home_widgets.py`, `LOG.md`
 
