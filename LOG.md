@@ -10,6 +10,18 @@ how long any entry is.
 
 ---
 
+## 2026-09-16 04:35 UTC — Claude Code
+Converted the Settings token panels ("My tokens" and "All tokens (every
+user)") from flat `<article>` rows to real `<table>` markup with column
+headers (User where applicable, Description, Issued, Expires, Status,
+Action), per the user's request. Added a small reusable `.data-table`
+style rather than repurposing the centered-text permission-matrix table.
+
+Tests: Focused admin-console/token tests pass; full pytest suite green
+(one unrelated pre-existing flaky test reproduced failing once, passed on
+rerun in isolation and as part of the full file).
+- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
+
 ## 2026-09-16 04:23 UTC — Claude Code
 Replaced the "Revoke all tokens" form's free-typed numeric User ID field
 with a dropdown of actual accounts (display name + username), populated
@@ -160,26 +172,4 @@ from other, unrelated commits, not caused by that plan's work):
 Tests: Ruff and full pytest pass -- zero failures, not just the same two
 pre-existing ones as prior entries in this log.
 - Files: `tests/test_content_bootstrap.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-11 15:27 UTC — Claude Code
-Phase 5 (efficiency) of `plans/plan_widget_regression_fixes.md`, the last
-phase of that plan: cached `_load_markdown_settings`'s result in
-`app/render.py`, keyed by the `mkdocs.yml` path and mtime. MkDocs' config
-loader does full schema validation (plus its own separate plugin-name
-parse pass first), and a page with several source-backed widgets was
-redoing that once per card/widget on every render. Verified a changed
-config still invalidates the cache correctly (no app restart needed to
-pick up an edited `mkdocs.yml`). Left two other items alone deliberately:
-the `book_view` redundancy (item 15) was already bundled into Phase 3;
-threading pre-validated widget state through `ContentRepository`'s public
-write methods to avoid a third, cheap, in-memory re-validation (item 17)
-would mean real API changes to security/data-integrity-sensitive write
-paths for a gain in the microseconds -- not worth the risk.
-
-This closes out plan_widget_regression_fixes.md: all 5 phases done.
-
-Tests: Ruff and full pytest pass (same two pre-existing, unrelated
-failures as before).
-- Files: `app/render.py`, `plans/plan_widget_regression_fixes.md`,
-  `tests/test_render.py`, `LOG.md`
 
