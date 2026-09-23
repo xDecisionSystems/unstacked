@@ -38,7 +38,7 @@ from app.content import ContentError, ContentExists, ContentMissing, CreatedCont
 from app.models import ApiToken, User
 from app.paths import UnsafePath, make_slug, normalize_relative_path
 from app.search import SearchError, SearchTimeout
-from app.web_auth import get_current_web_user, require_csrf
+from app.web_auth import get_current_web_user, require_csrf, require_normal_web_user
 
 router = APIRouter(prefix="/api", tags=["AI content"])
 
@@ -890,11 +890,27 @@ def delete_asset(
     return DeletedAssetResponse(path=f"assets/{book_slug}/{filename}", commit=commit)
 
 
+def _asset_viewer(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+) -> User:
+    """Accept a bearer token or the browser session cookie.
+
+    Rendered pages and page cards load assets through a plain ``<img src>``,
+    which carries only the session cookie, so a bearer-only route would show
+    every image broken in the browser.  Bearer callers keep the AI rate limit.
+    """
+
+    if credentials is not None:
+        return get_rate_limited_ai_user(request, get_current_user(request, credentials))
+    return require_normal_web_user(get_current_web_user(request))
+
+
 @asset_router.get("/assets/{asset_path:path}", include_in_schema=False)
 def serve_asset(
     asset_path: str,
     request: Request,
-    user: Annotated[User, Depends(get_rate_limited_ai_user)],
+    user: Annotated[User, Depends(_asset_viewer)],
 ):
     """Serve one asset for the live preview only.
 

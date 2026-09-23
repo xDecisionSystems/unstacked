@@ -10,6 +10,20 @@ how long any entry is.
 
 ---
 
+## 2026-09-23 18:10 UTC — Claude Code
+Fixed every uploaded image (page images and page-card images) rendering
+broken in the browser: `GET /assets/...` depended on the bearer-only
+`get_rate_limited_ai_user`, but a plain `<img src>` sends only the session
+cookie, so browsers always got 401. Added an `_asset_viewer` dependency that
+takes a bearer token when present (keeping the AI rate limit) and otherwise
+the session cookie via `require_normal_web_user`; book ACLs still decide
+access and unauthenticated requests still get 401.
+
+Tests: Ruff passes; `tests/test_assets.py` passes, including a new
+browser-session test. Full suite: only the mkdocs-dependent
+`test_public_site.py` failures, which need the `mkdocs` executable on PATH.
+- Files: `app/ai_api.py`, `tests/test_assets.py`, `LOG.md`
+
 ## 2026-09-16 06:09 UTC — Claude Code
 Fixed a real vulnerability the user spotted by asking the right question:
 `clear-inactive` deleting a revoked `ApiToken` row could resurrect that
@@ -172,12 +186,3 @@ Tests: Ruff and focused admin-console test pass.
 
 - Files: `app/static/style.css`, `app/templates/admin.html`, `tests/test_web.py`,
   `LOG.md`
-
-## 2026-09-14 03:28 UTC — Codex
-Made page-editor Save and Cancel controls persist while scrolling: sticky in
-the desktop action rail and floating at the lower right on narrow screens.
-
-Tests: Ruff and focused page-editor tests pass.
-
-- Files: `app/static/style.css`, `LOG.md`
-

@@ -453,6 +453,24 @@ def test_serving_requires_authentication(tmp_path):
         assert client.get("/assets/assets/knowledge/logo.png").status_code == 401
 
 
+def test_a_browser_session_can_load_assets(tmp_path):
+    """Page images and cards are plain ``<img>`` tags, which send only the cookie."""
+
+    app, _settings, token = _make_app(tmp_path)
+    with TestClient(app) as client:
+        _seed_book(client, token)
+        _upload(client, token, "logo.png", png(2, 2))
+        login = client.post(
+            "/login",
+            data={"username": "admin", "password": "correct horse battery staple"},
+            follow_redirects=False,
+        )
+        assert login.status_code == 303
+        served = client.get("/assets/assets/knowledge/logo.png")
+        assert served.status_code == 200
+        assert served.headers["content-type"] == "image/png"
+
+
 # --- Permissions --------------------------------------------------------------
 
 
