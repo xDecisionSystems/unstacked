@@ -161,6 +161,16 @@ def read_deploy_public_key(private_path: Path) -> str | None:
         return None
 
 
+def delete_deploy_key(private_path: Path) -> bool:
+    """Remove a generated keypair; return whether anything was deleted."""
+
+    public = private_path.with_name(private_path.name + ".pub")
+    existed = private_path.exists() or public.exists()
+    private_path.unlink(missing_ok=True)
+    public.unlink(missing_ok=True)
+    return existed
+
+
 def generate_deploy_key(private_path: Path, comment: str = "unstacked-backup") -> str:
     """Create an unencrypted ed25519 keypair and return its public key.
 

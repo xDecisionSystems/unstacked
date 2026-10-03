@@ -482,3 +482,28 @@ def test_admin_can_generate_deploy_key_and_only_public_half_is_returned(
     )
     assert replaced.status_code == 200
     assert replaced.json()["public_key"] != body["public_key"]
+
+
+def test_deploy_key_can_be_deleted_unless_the_linked_target_uses_it(
+    app_env, client, monkeypatch
+):
+    _app, settings, _admin, token = app_env
+    private = backup_config.managed_deploy_key_path(settings)
+    client.post("/api/admin/backup/deploy-key", json={}, headers=bearer(token))
+    assert private.exists()
+
+    in_use = BackupTarget(
+        type=GIT_REMOTE, url="git@git.example:team/wiki.git", ssh_key_path=private
+    )
+    monkeypatch.setattr(backup_config, "effective_target", lambda _settings: in_use)
+    refused = client.delete("/api/admin/backup/deploy-key", headers=bearer(token))
+    assert refused.status_code == 409
+    assert private.exists()
+
+    monkeypatch.undo()
+    deleted = client.delete("/api/admin/backup/deploy-key", headers=bearer(token))
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["public_key"] is None
+    assert not private.exists()
+    assert not private.with_name(private.name + ".pub").exists()
+

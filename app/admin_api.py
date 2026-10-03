@@ -1411,6 +1411,25 @@ def generate_backup_deploy_key(
     return _deploy_key_response(request)
 
 
+@router.delete("/backup/deploy-key", response_model=DeployKeyResponse, dependencies=CsrfGuard)
+def delete_backup_deploy_key(request: Request, actor: AdminActor) -> DeployKeyResponse:
+    """Delete the generated Git sync deploy key once nothing uses it."""
+
+    settings = request.app.state.settings
+    path = backup_config.managed_deploy_key_path(settings)
+    target = backup_config.effective_target(settings)
+    if target.configured and target.ssh_key_path is not None and (
+        target.ssh_key_path.expanduser().resolve() == path.resolve()
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This deploy key is used by the linked sync repository; unlink it first",
+        )
+    if backup_config.delete_deploy_key(path):
+        _audit("admin.backup.deploy_key.delete", actor)
+    return _deploy_key_response(request)
+
+
 @router.put("/backup/config", response_model=BackupConfigResponse, dependencies=CsrfGuard)
 def update_backup_config(
     payload: BackupConfigUpdate,
@@ -1847,6 +1866,23 @@ def generate_pages_deploy_key(
     except ValueError as exc:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from None
     _audit("admin.pages.deploy_key.generate", actor, replaced=payload.replace)
+    return _pages_status(request)
+
+
+@router.delete(
+    "/public-site/pages/deploy-key", response_model=PagesStatusResponse, dependencies=CsrfGuard
+)
+def delete_pages_deploy_key(request: Request, actor: AdminActor) -> PagesStatusResponse:
+    """Delete the generated Pages deploy key once no Pages target uses it."""
+
+    settings = request.app.state.settings
+    if pages_publish.load(settings) is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This deploy key is used by the linked GitHub Pages repository; unlink it first",
+        )
+    if backup_config.delete_deploy_key(pages_publish.deploy_key_path(settings)):
+        _audit("admin.pages.deploy_key.delete", actor)
     return _pages_status(request)
 
 

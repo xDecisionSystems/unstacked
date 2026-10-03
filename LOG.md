@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-10-03 07:42 UTC — Claude Code
+
+Generated SSH deploy keys can now be deleted: DELETE /api/admin/backup/deploy-key and DELETE /api/admin/public-site/pages/deploy-key (409 while the linked target uses the key — unlink first), with "Delete deploy key" buttons beside Generate in both forms. Tests added.
+
+Files: app/backup_config.py, app/admin_api.py, app/templates/admin.html, tests/test_backup_config.py, tests/test_pages_publish.py, LOG.md
+
 ## 2026-10-03 07:27 UTC — Claude Code
 
 Buttons in the new backup/Pages action rows rendered touching: /static was cache-busted with the commit, which is "unknown" without SOURCE_COMMIT, so browsers kept stale style.css lacking the new rules. Static URLs (CSS and JS) now use a content hash of app/static (app.state.asset_version); action-row buttons also have whitespace between them so they never touch even without CSS, and the gap is 12px.
@@ -155,10 +161,3 @@ Tests: Ruff and focused admin-API/token tests pass; full pytest suite green
 (same pre-existing mkdocs-dependent failures as before).
 - Files: `app/admin_api.py`, `app/templates/admin.html`,
   `tests/test_admin_api.py`, `LOG.md`
-
-## 2026-09-16 03:08 UTC — Codex
-Recorded the user's approval for non-secret API-token metadata in SQLite,
-updating the database-boundary guidance while retaining the ban on content and
-raw token storage.
-
-- Files: `AGENTS.md`, `plans/plan_initial.md`, `LOG.md`

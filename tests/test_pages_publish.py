@@ -115,5 +115,13 @@ def test_pages_api_generates_own_key_and_requires_fingerprint(app_env, client, m
     assert saved.json()["configured"] is True
     assert saved.json()["branch"] == "gh-pages"
 
+    refused = client.delete("/api/admin/public-site/pages/deploy-key", headers=bearer(token))
+    assert refused.status_code == 409
+
     cleared = client.delete("/api/admin/public-site/pages", headers=bearer(token))
     assert cleared.json()["configured"] is False
+
+    deleted = client.delete("/api/admin/public-site/pages/deploy-key", headers=bearer(token))
+    assert deleted.status_code == 200
+    assert deleted.json()["public_key"] is None
+    assert not pages_publish.deploy_key_path(settings).exists()
