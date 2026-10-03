@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-10-03 06:53 UTC — Claude Code
+
+Redesigned the Git backup form (user found it ugly): labelled URL field, SSH/HTTPS toggle that shows only the relevant fields (auto-switches from the URL), numbered SSH steps, public key in a copyable monospace box, key path tucked under "Use an existing key file", fingerprint in monospace, and one action row. Submit nulls the inactive mode's credentials.
+
+Files: app/templates/admin.html, app/static/style.css, LOG.md
+
 ## 2026-10-03 06:21 UTC — Claude Code
 
 Git backup form now supports SSH/GitHub deploy keys: URL field accepts git@ URLs, SSH key path + fingerprint check fields added (the JS existed but the form lacked them), and new GET/POST /api/admin/backup/deploy-key generates an ed25519 key in data/ and returns only the public half (replace needs explicit confirm). Test added.
@@ -168,11 +174,3 @@ wrapping, with no way to copy it besides manual text selection. It now sits
 in a bordered box that wraps long text and has a Copy button.
 
 - Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`
-
-## 2026-09-16 02:26 UTC — Claude Code
-Fixed an undefined `issuedToken` reference in the Settings API-token form:
-the `#issued-token` `<pre>` was never queried into a variable, so displaying
-a freshly issued token threw `ReferenceError: issuedToken is not defined`
-instead of showing it.
-
-- Files: `app/templates/admin.html`, `LOG.md`
