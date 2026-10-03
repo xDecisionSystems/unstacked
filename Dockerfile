@@ -28,7 +28,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd --system unstacked && useradd --system --gid unstacked --create-home unstacked
+# UID/GID pinned to the value `--system` already assigned, so the public
+# nginx image can pre-own the shared public-site volume with the same IDs.
+RUN groupadd --system --gid 999 unstacked \
+    && useradd --system --uid 999 --gid unstacked --create-home unstacked
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv

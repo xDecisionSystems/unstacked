@@ -39,7 +39,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
-from app import backup_config, backup_runtime, branding, mailer, smtp_config, theme, theme_config
+from app import (
+    backup_config,
+    backup_runtime,
+    branding,
+    mailer,
+    pages_publish,
+    smtp_config,
+    theme,
+    theme_config,
+)
 from app.acl import AccessPolicy, Rule, explain_access
 from app.auth import bearer_scheme, get_current_user, hash_password, revoke_all_api_tokens
 from app.backup_config import GIT_REMOTE, BackupTarget
@@ -204,6 +213,31 @@ class PublicSiteResponse(BaseModel):
 
     last_success_at: str | None
     last_error: str | None
+
+
+class PagesConfigUpdate(BaseModel):
+    url: str = Field(min_length=1, max_length=2000)
+    branch: str = Field(default="gh-pages", max_length=100)
+    cname: str | None = Field(default=None, max_length=253)
+    ssh_host_fingerprint: str | None = Field(default=None, max_length=200)
+
+
+class PagesStatusResponse(BaseModel):
+    """GitHub Pages publication state; the private key is never included."""
+
+    configured: bool
+    url: str | None = None
+    branch: str | None = None
+    cname: str | None = None
+    ssh_host_fingerprint: str | None = None
+    updated_at: str | None = None
+    public_key: str | None = None
+    last_success_at: str | None = None
+    last_error: str | None = None
+
+
+class PagesPublishResponse(PagesStatusResponse):
+    pushed: bool
 
 
 class OrphanedPermissionResponse(PermissionResponse):
@@ -1768,3 +1802,114 @@ def build_public_site(request: Request, actor: AdminActor) -> PublicSiteResponse
         last_success_at=status_value.last_success_at,
         last_error=status_value.last_error,
     )
+
+
+def _pages_status(request: Request) -> PagesStatusResponse:
+    settings = request.app.state.settings
+    target = pages_publish.load(settings)
+    publisher = request.app.state.pages_publisher
+    return PagesStatusResponse(
+        configured=target is not None,
+        url=target.url if target else None,
+        branch=target.branch if target else None,
+        cname=target.cname if target else None,
+        ssh_host_fingerprint=target.ssh_host_fingerprint if target else None,
+        updated_at=target.updated_at if target else None,
+        public_key=backup_config.read_deploy_public_key(pages_publish.deploy_key_path(settings)),
+        last_success_at=publisher.last_success_at,
+        last_error=publisher.last_error,
+    )
+
+
+@router.get("/public-site/pages", response_model=PagesStatusResponse)
+def read_pages_config(request: Request, actor: AdminActor) -> PagesStatusResponse:
+    """Report the optional GitHub Pages target for the filtered public site."""
+
+    return _pages_status(request)
+
+
+@router.post(
+    "/public-site/pages/deploy-key", response_model=PagesStatusResponse, dependencies=CsrfGuard
+)
+def generate_pages_deploy_key(
+    payload: DeployKeyRequest, request: Request, actor: AdminActor
+) -> PagesStatusResponse:
+    """Generate the Pages repository's own deploy key (never the backup's)."""
+
+    path = pages_publish.deploy_key_path(request.app.state.settings)
+    if path.exists() and not payload.replace:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "A deploy key already exists; replacing it stops the old key from working",
+        )
+    try:
+        backup_config.generate_deploy_key(path, comment="unstacked-pages")
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from None
+    _audit("admin.pages.deploy_key.generate", actor, replaced=payload.replace)
+    return _pages_status(request)
+
+
+@router.put("/public-site/pages", response_model=PagesStatusResponse, dependencies=CsrfGuard)
+def update_pages_config(
+    payload: PagesConfigUpdate, request: Request, actor: AdminActor
+) -> PagesStatusResponse:
+    """Verify access to the Pages repository with a pinned host key, then save."""
+
+    settings = request.app.state.settings
+    try:
+        url, branch, cname = pages_publish.validate(payload.url, payload.branch, payload.cname)
+        discovered = backup_config.discover_ssh_host_key(url)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
+    if discovered is None or payload.ssh_host_fingerprint != discovered.fingerprint:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Confirm the current SSH server fingerprint before linking this repository",
+        )
+    known_hosts = pages_publish.known_hosts_path(settings)
+    snapshot = backup_config.FileSnapshot(pages_publish.config_path(settings), known_hosts)
+    try:
+        backup_config.write_private_bytes(
+            known_hosts, discovered.known_hosts_line.encode("utf-8")
+        )
+        pages_publish.test_access(settings, url)
+        stored = pages_publish.save(
+            settings,
+            pages_publish.PagesTarget(
+                url=url, branch=branch, cname=cname, ssh_host_fingerprint=discovered.fingerprint
+            ),
+            discovered.known_hosts_line,
+        )
+    except pages_publish.PagesPublishError as exc:
+        snapshot.undo()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
+    except Exception:
+        snapshot.undo()
+        raise
+    _audit("admin.pages.configure", actor, url=stored.url, branch=stored.branch)
+    return _pages_status(request)
+
+
+@router.delete("/public-site/pages", response_model=PagesStatusResponse, dependencies=CsrfGuard)
+def clear_pages_config(request: Request, actor: AdminActor) -> PagesStatusResponse:
+    """Stop publishing to GitHub Pages; the already-published site is left as is."""
+
+    pages_publish.clear(request.app.state.settings)
+    _audit("admin.pages.clear", actor)
+    return _pages_status(request)
+
+
+@router.post(
+    "/public-site/pages/publish", response_model=PagesPublishResponse, dependencies=CsrfGuard
+)
+def publish_pages_now(request: Request, actor: AdminActor) -> PagesPublishResponse:
+    """Push the current public build to GitHub Pages immediately."""
+
+    builder = request.app.state.public_site_builder
+    try:
+        pushed = request.app.state.pages_publisher.publish_now(builder.destination)
+    except pages_publish.PagesPublishError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    _audit("admin.pages.publish", actor, pushed=pushed)
+    return PagesPublishResponse(**_pages_status(request).model_dump(), pushed=pushed)

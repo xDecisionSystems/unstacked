@@ -13,6 +13,7 @@ import re
 import shutil
 import tempfile
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,6 +47,9 @@ class PublicSiteBuilder:
         self.destination = settings.public_site_path.resolve()
         self._last_success_at: str | None = None
         self._last_error: str | None = None
+        # Optional follow-on publication (GitHub Pages).  Must not raise: a
+        # failed push never turns a successful local build into a failure.
+        self.on_published: Callable[[Path], None] | None = None
 
     def status(self) -> PublicSiteStatus:
         return PublicSiteStatus(self._last_success_at, self._last_error)
@@ -79,6 +83,8 @@ class PublicSiteBuilder:
                 self._publish(candidate)
         self._last_success_at = datetime.now(timezone.utc).isoformat()
         self._last_error = None
+        if self.on_published is not None:
+            self.on_published(self.destination)
         return self.destination
 
     def build_recording_failure(self) -> None:

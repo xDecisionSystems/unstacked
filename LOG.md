@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-10-03 07:11 UTC — Claude Code
+
+Added optional GitHub Pages publication of the filtered public site (new app/pages_publish.py; admin API under /api/admin/public-site/pages; UI in Settings → Public website). Own deploy key/known_hosts/config in data/, fast-forward-only push to a configurable branch (default gh-pages) with .nojekyll and optional CNAME; triggered after each successful public build via PublicSiteBuilder.on_published. Also fixed a pre-existing Docker bug: the shared public-site volume was seeded root-owned from the nginx image so the app (UID 999) could never build the public site — pinned app UID/GID 999 and made the nginx image ship an empty UID-999 html dir; README has a one-time repair command for existing volumes.
+
+Files: app/pages_publish.py, app/admin_api.py, app/public_site.py, app/public_site_runtime.py, app/backup_config.py, app/templates/admin.html, app/static/style.css, tests/test_pages_publish.py, Dockerfile, deploy/public.Dockerfile, README.md, LOG.md
+
 ## 2026-10-03 06:53 UTC — Claude Code
 
 Redesigned the Git backup form (user found it ugly): labelled URL field, SSH/HTTPS toggle that shows only the relevant fields (auto-switches from the URL), numbered SSH steps, public key in a copyable monospace box, key path tucked under "Use an existing key file", fingerprint in monospace, and one action row. Submit nulls the inactive mode's credentials.
@@ -167,10 +173,3 @@ failures as before).
   `app/migrations/versions/20260915_0004_api_tokens.py`, `app/models.py`,
   `app/templates/admin.html`, `app/web.py`, `app/web_auth.py`,
   `tests/test_ai_api.py`, `tests/test_models.py`, `LOG.md`
-
-## 2026-09-16 02:31 UTC — Claude Code
-The issued API token was a raw `<pre>` that overflowed its column instead of
-wrapping, with no way to copy it besides manual text selection. It now sits
-in a bordered box that wraps long text and has a Copy button.
-
-- Files: `app/templates/admin.html`, `app/static/style.css`, `LOG.md`

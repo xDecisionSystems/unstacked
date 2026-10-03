@@ -16,3 +16,11 @@ COPY deploy/public-nginx.conf /etc/nginx/conf.d/default.conf
 # otherwise also try to load this snippet directly as its own top-level
 # server config, which it is not.
 COPY deploy/public-security-headers.conf /etc/nginx/public-security-headers.conf
+# The public-site volume is shared with the app container, and Docker seeds a
+# fresh named volume from whichever container mounts it first. nginx's default
+# html (root-owned) would otherwise win and leave the app -- which runs as
+# UID 999 -- unable to write builds. An empty directory owned by that UID
+# seeds the volume correctly regardless of start order.
+RUN rm -rf /usr/share/nginx/html \
+    && mkdir /usr/share/nginx/html \
+    && chown 999:999 /usr/share/nginx/html

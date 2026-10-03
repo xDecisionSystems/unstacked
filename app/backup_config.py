@@ -161,7 +161,7 @@ def read_deploy_public_key(private_path: Path) -> str | None:
         return None
 
 
-def generate_deploy_key(private_path: Path) -> str:
+def generate_deploy_key(private_path: Path, comment: str = "unstacked-backup") -> str:
     """Create an unencrypted ed25519 keypair and return its public key.
 
     Generated in a scratch directory beside the target and moved into place, so
@@ -174,8 +174,7 @@ def generate_deploy_key(private_path: Path) -> str:
         key = Path(scratch) / "key"
         try:
             subprocess.run(
-                ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "unstacked-backup",
-                 "-f", str(key)],
+                ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", str(key)],
                 check=True,
                 capture_output=True,
                 timeout=15,

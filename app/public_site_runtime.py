@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import backup_runtime
+from app.pages_publish import PagesPublisher
 from app.public_site import PublicSiteBuilder, PublicSiteWorker
 
 
@@ -15,7 +16,10 @@ def install(app: FastAPI) -> None:
     """Create the public builder without starting background work in tests."""
 
     builder = PublicSiteBuilder(app.state.settings, app.state.content)
+    publisher = PagesPublisher(app.state.settings)
+    builder.on_published = publisher.publish_recording_failure
     worker = PublicSiteWorker(builder)
+    app.state.pages_publisher = publisher
     app.state.public_site_builder = builder
     app.state.public_site_worker = worker
     app.state.content.git.add_commit_listener(worker.request_build)

@@ -100,6 +100,25 @@ Marking a book or Home public queues a filtered MkDocs build. A failed build
 keeps the previous public site live. Content linking to omitted private
 Markdown fails publication rather than leaking the target path in public HTML.
 
+Optionally, each successful public build can also be pushed to a GitHub Pages
+repository (Settings → Public website → Publish to GitHub Pages, or
+`GET`/`PUT`/`DELETE /api/admin/public-site/pages`). Only the filtered public
+HTML is pushed, with a `.nojekyll` file and an optional `CNAME`. Use a
+different repository from Git sync, which carries all content including drafts.
+The Pages target has its own app-generated SSH deploy key and a pinned host
+key, and it pushes fast-forward only, never with force. In GitHub, set the
+repository's Pages source to "Deploy from a branch" on the configured branch
+(default `gh-pages`, root folder). A failed push never fails the local build.
+
+Deployments created before the shared volume's ownership fix have a root-owned
+`public-site` volume, and the public site never builds there. Repair it once,
+without deleting any data:
+
+```bash
+docker compose -f docker-compose.yaml run --rm --no-deps -u root app \
+  sh -c 'find /app/public-site -mindepth 1 -maxdepth 1 ! -name site -exec rm -rf {} + ; chown -R unstacked:unstacked /app/public-site'
+```
+
 ## Local Docker deployment
 
 Docker Compose runs the API with two named volumes: `data` holds the SQLite
