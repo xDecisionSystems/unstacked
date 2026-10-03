@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-10-03 06:02 UTC — Claude Code
+
+Docker image now runs `python -m app.bootstrap` before uvicorn so a fresh deploy gets `admin`/`admin` (forced password change) without a manual step; README updated.
+
+Files: Dockerfile, README.md, LOG.md
+
 ## 2026-09-23 18:10 UTC — Claude Code
 Fixed every uploaded image (page images and page-card images) rendering
 broken in the browser: `GET /assets/...` depended on the bearer-only
@@ -177,12 +183,3 @@ failures as before).
 - Files: `app/admin_api.py`, `app/invitations.py`, `app/mailer.py`,
   `app/templates/accept_invite.html`, `app/templates/admin.html`,
   `app/web.py`, `tests/test_admin_api.py`, `tests/test_web.py`, `LOG.md`
-
-## 2026-09-14 04:39 UTC — Codex
-Moved SMTP test-email feedback beside its Test button, with inline success and
-error states instead of using the page-level settings message.
-
-Tests: Ruff and focused admin-console test pass.
-
-- Files: `app/static/style.css`, `app/templates/admin.html`, `tests/test_web.py`,
-  `LOG.md`

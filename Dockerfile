@@ -68,4 +68,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # A single worker matches the project's concurrency model: one file lock
 # serializes Git mutations, and running more than one worker would call the
 # startup migration/bootstrap logic in create_app() more than once.
-CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# app.bootstrap runs first so a fresh volume gets the initial admin:admin
+# account (forced password change); it is a no-op once any user exists.
+CMD ["sh", "-c", "python -m app.bootstrap && exec uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000 --workers 1"]

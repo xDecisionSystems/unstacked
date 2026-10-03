@@ -111,10 +111,10 @@ export UNSTACKED_API_TOKEN_SECRET="$(python -c 'import secrets; print(secrets.to
 docker compose -f docker-compose.yaml up --build -d
 curl http://127.0.0.1:8001/healthz
 curl http://127.0.0.1:8081/
-docker compose -f docker-compose.yaml exec app python -m app.bootstrap
 ```
 
-Bootstrap creates the one initial administrator as `admin:admin`. Its first
+The container runs bootstrap on every start, which creates the one initial
+administrator as `admin:admin` on an empty database (and does nothing otherwise). Its first
 login is restricted to changing that default password; it cannot access content
 or issue API tokens until the change succeeds.
 The Compose configuration uses production mode, so it refuses to start without
@@ -336,18 +336,11 @@ required and the compose file will refuse to deploy without it.
 
 ### First admin user (either option)
 
-Bootstrap only creates users; it never runs automatically, since a fresh
-deploy shouldn't silently create an admin account. After the first
-successful deploy, use Coolify's container terminal to run it once:
-
-```bash
-python -m app.bootstrap
-```
-
-It takes no arguments and always creates exactly one administrator,
-`admin` / `admin`, forced to change that password on first login. Re-running
-it on a later deploy is safe — if any user already exists, it leaves them
-untouched and does nothing.
+The container's start command runs `python -m app.bootstrap` before the
+server, so a fresh deploy automatically gets one administrator,
+`admin` / `admin`, forced to change that password on first login. On later
+starts it is a no-op because a user already exists. Change the password
+immediately after first sign-in.
 
 ### Backing up the wiki
 
