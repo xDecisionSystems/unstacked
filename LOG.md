@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-10-03 07:27 UTC — Claude Code
+
+Buttons in the new backup/Pages action rows rendered touching: /static was cache-busted with the commit, which is "unknown" without SOURCE_COMMIT, so browsers kept stale style.css lacking the new rules. Static URLs (CSS and JS) now use a content hash of app/static (app.state.asset_version); action-row buttons also have whitespace between them so they never touch even without CSS, and the gap is 12px.
+
+Files: app/main.py, app/templates/*.html (static ?v=), app/templates/admin.html, app/static/style.css, tests/test_web.py, LOG.md
+
 ## 2026-10-03 07:11 UTC — Claude Code
 
 Added optional GitHub Pages publication of the filtered public site (new app/pages_publish.py; admin API under /api/admin/public-site/pages; UI in Settings → Public website). Own deploy key/known_hosts/config in data/, fast-forward-only push to a configurable branch (default gh-pages) with .nojekyll and optional CNAME; triggered after each successful public build via PublicSiteBuilder.on_published. Also fixed a pre-existing Docker bug: the shared public-site volume was seeded root-owned from the nginx image so the app (UID 999) could never build the public site — pinned app UID/GID 999 and made the nginx image ship an empty UID-999 html dir; README has a one-time repair command for existing volumes.
@@ -156,20 +162,3 @@ updating the database-boundary guidance while retaining the ban on content and
 raw token storage.
 
 - Files: `AGENTS.md`, `plans/plan_initial.md`, `LOG.md`
-
-## 2026-09-16 03:04 UTC — Claude Code
-Issuing a token now records a description and a chosen lifetime (1h/1d/7d/
-30d/90d/never) in a new `api_token` table, and shows the issue date and
-expiry alongside the token. A token can be revoked individually without
-logging out every other integration on the account; the existing "revoke
-all" action now also marks the affected rows so the list stays accurate.
-Every existing bare-minted token (the whole test suite, bootstrap, etc.)
-keeps working unchanged -- the account-generation counter remains the actual
-security boundary, and the new per-row check only applies when a row exists.
-
-Tests: Ruff and full pytest suite pass (same pre-existing mkdocs-dependent
-failures as before).
-- Files: `app/admin_api.py`, `app/ai_api.py`, `app/auth.py`,
-  `app/migrations/versions/20260915_0004_api_tokens.py`, `app/models.py`,
-  `app/templates/admin.html`, `app/web.py`, `app/web_auth.py`,
-  `tests/test_ai_api.py`, `tests/test_models.py`, `LOG.md`

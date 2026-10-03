@@ -1329,7 +1329,7 @@ def test_book_page_carries_page_drag_reorder_markup(client, book_with_pages):
 
     _login(client, "admin")
     page = client.get("/books/handbook")
-    assert '<script src="/static/reorder.js"></script>' in page.text
+    assert '<script src="/static/reorder.js?v=' in page.text
     assert "initDragReorder(document.querySelector('#book-page-cards')" in page.text
     assert 'class="drag-handle"' not in page.text
     assert 'class="page-card" draggable="true" data-key="handbook/leave"' in page.text

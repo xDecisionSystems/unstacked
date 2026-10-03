@@ -1,3 +1,4 @@
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -28,6 +29,15 @@ STATIC_DIR = Path(__file__).parent / "static"
 # has access to on at least one real deployment platform (Coolify imports a
 # plain file snapshot of the commit, no `.git` directory at all).
 _BAKED_COMMIT_FILE = Path("/app/GIT_COMMIT")
+
+
+def _static_asset_version() -> str:
+    digest = hashlib.sha256()
+    for path in sorted(STATIC_DIR.rglob("*")):
+        if path.is_file():
+            digest.update(path.relative_to(STATIC_DIR).as_posix().encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
 
 
 def _resolve_commit() -> str:
@@ -88,6 +98,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Resolved once at startup, not per request: it never changes for the
     # life of the process, and the local-checkout fallback path shells out.
     app.state.commit = _resolve_commit()
+    # Cache-busting for /static: a content hash, not the commit, which is
+    # "unknown" in builds without SOURCE_COMMIT and would pin stale CSS/JS.
+    app.state.asset_version = _static_asset_version()
     # A backup target is optional, and now also runtime-editable: it may be
     # configured here from an already-persisted record (or the environment), or
     # later by an administrator through `PUT /api/admin/backup/config`.  No

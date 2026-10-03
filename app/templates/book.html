@@ -36,8 +36,8 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
-<script src="/static/reorder.js"></script>
-<script src="/static/filter_toggle.js"></script>
+<script src="/static/reorder.js?v={{ request.app.state.asset_version }}"></script>
+<script src="/static/filter_toggle.js?v={{ request.app.state.asset_version }}"></script>
 <script>
 initDragReorder(document.querySelector('#book-page-cards'), {
   itemSelector: '.page-card',

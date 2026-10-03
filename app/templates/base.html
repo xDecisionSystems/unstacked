@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Unstacked{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css?v={{ request.app.state.commit }}">
+  <link rel="stylesheet" href="/static/style.css?v={{ request.app.state.asset_version }}">
   {{ theme_style(request) }}
 </head>
 <body>
@@ -29,9 +29,9 @@
   <main class="content">
     {% block content %}{% endblock %}
   </main>
-  <script src="/static/feature-popover.js"></script>
-  <script src="/static/widget_filters.js"></script>
-  <script src="/static/widget_editor.js"></script>
+  <script src="/static/feature-popover.js?v={{ request.app.state.asset_version }}"></script>
+  <script src="/static/widget_filters.js?v={{ request.app.state.asset_version }}"></script>
+  <script src="/static/widget_editor.js?v={{ request.app.state.asset_version }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
