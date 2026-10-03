@@ -269,6 +269,19 @@ class SshHostKeyResponse(BaseModel):
     fingerprint: str
 
 
+class DeployKeyRequest(BaseModel):
+    # Replacing invalidates the key already registered with the Git host, so it
+    # must be asked for explicitly.
+    replace: bool = False
+
+
+class DeployKeyResponse(BaseModel):
+    """The public half only; the private key is never returned."""
+
+    public_key: str | None
+    key_path: str
+
+
 class BackupConfigResponse(BaseModel):
     """Backup status for the admin UI: never a token, key, or its content."""
 
@@ -1329,6 +1342,39 @@ def discover_backup_ssh_host_key(
             "An SSH Git URL is required to retrieve a server fingerprint",
         )
     return SshHostKeyResponse(fingerprint=discovered.fingerprint)
+
+
+def _deploy_key_response(request: Request) -> DeployKeyResponse:
+    path = backup_config.managed_deploy_key_path(request.app.state.settings)
+    public_key = backup_config.read_deploy_public_key(path)
+    return DeployKeyResponse(public_key=public_key, key_path=str(path))
+
+
+@router.get("/backup/deploy-key", response_model=DeployKeyResponse)
+def read_backup_deploy_key(request: Request, actor: AdminActor) -> DeployKeyResponse:
+    """Show the generated deploy key's public half, if one exists."""
+
+    return _deploy_key_response(request)
+
+
+@router.post("/backup/deploy-key", response_model=DeployKeyResponse, dependencies=CsrfGuard)
+def generate_backup_deploy_key(
+    payload: DeployKeyRequest, request: Request, actor: AdminActor
+) -> DeployKeyResponse:
+    """Generate a server-held SSH deploy key to register with the Git host."""
+
+    path = backup_config.managed_deploy_key_path(request.app.state.settings)
+    if path.exists() and not payload.replace:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "A deploy key already exists; replacing it stops the old key from working",
+        )
+    try:
+        backup_config.generate_deploy_key(path)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from None
+    _audit("admin.backup.deploy_key.generate", actor, replaced=payload.replace)
+    return _deploy_key_response(request)
 
 
 @router.put("/backup/config", response_model=BackupConfigResponse, dependencies=CsrfGuard)

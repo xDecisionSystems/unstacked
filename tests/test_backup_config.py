@@ -453,3 +453,32 @@ def test_validation_error_does_not_echo_a_token(app_env, client):
     )
     assert response.status_code == 422
     assert embedded not in response.text
+
+
+def test_admin_can_generate_deploy_key_and_only_public_half_is_returned(
+    app_env, client, tmp_path
+):
+    _app, settings, _admin, token = app_env
+    private = backup_config.managed_deploy_key_path(settings)
+    assert client.get("/api/admin/backup/deploy-key", headers=bearer(token)).json()[
+        "public_key"
+    ] is None
+
+    created = client.post(
+        "/api/admin/backup/deploy-key", json={}, headers=bearer(token)
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert body["public_key"].startswith("ssh-ed25519 ")
+    assert body["key_path"] == str(private)
+    assert "PRIVATE KEY" not in created.text
+    assert private.stat().st_mode & 0o077 == 0
+
+    again = client.post("/api/admin/backup/deploy-key", json={}, headers=bearer(token))
+    assert again.status_code == 409
+
+    replaced = client.post(
+        "/api/admin/backup/deploy-key", json={"replace": True}, headers=bearer(token)
+    )
+    assert replaced.status_code == 200
+    assert replaced.json()["public_key"] != body["public_key"]

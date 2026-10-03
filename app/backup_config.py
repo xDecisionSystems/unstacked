@@ -64,6 +64,7 @@ NO_TARGET = "none"
 # setting locates both.
 MANAGED_TOKEN_FILENAME = "backup_token"
 MANAGED_KNOWN_HOSTS_FILENAME = "backup_known_hosts"
+MANAGED_DEPLOY_KEY_FILENAME = "backup_deploy_key"
 
 # Owner-only, as with every other secret this application writes.
 _PRIVATE_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
@@ -142,6 +143,51 @@ def managed_known_hosts_path(settings: Settings) -> Path:
     """Location of the host key confirmed through the Settings UI."""
 
     return settings.backup_config_path.parent / MANAGED_KNOWN_HOSTS_FILENAME
+
+
+def managed_deploy_key_path(settings: Settings) -> Path:
+    """Where a deploy key generated through the admin UI is stored."""
+
+    return settings.backup_config_path.parent / MANAGED_DEPLOY_KEY_FILENAME
+
+
+def read_deploy_public_key(private_path: Path) -> str | None:
+    """The public half of a generated deploy key, or ``None`` if there is none."""
+
+    public = private_path.with_name(private_path.name + ".pub")
+    try:
+        return public.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def generate_deploy_key(private_path: Path) -> str:
+    """Create an unencrypted ed25519 keypair and return its public key.
+
+    Generated in a scratch directory beside the target and moved into place, so
+    a failure never leaves a half-written or mismatched pair.  Only the public
+    key is ever returned; the private file stays owner-only on this server.
+    """
+
+    private_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=private_path.parent, prefix=".deploykey.") as scratch:
+        key = Path(scratch) / "key"
+        try:
+            subprocess.run(
+                ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "unstacked-backup",
+                 "-f", str(key)],
+                check=True,
+                capture_output=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise ValueError("could not generate an SSH key on this server") from exc
+        public = key.with_name("key.pub")
+        public_bytes = public.read_bytes()
+        os.chmod(key, _PRIVATE_FILE_MODE)
+        os.replace(key, private_path)
+        write_private_bytes(private_path.with_name(private_path.name + ".pub"), public_bytes)
+    return public_bytes.decode("utf-8").strip()
 
 
 @dataclass(frozen=True)

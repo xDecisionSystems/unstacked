@@ -10,6 +10,12 @@ how long any entry is.
 
 ---
 
+## 2026-10-03 06:21 UTC — Claude Code
+
+Git backup form now supports SSH/GitHub deploy keys: URL field accepts git@ URLs, SSH key path + fingerprint check fields added (the JS existed but the form lacked them), and new GET/POST /api/admin/backup/deploy-key generates an ed25519 key in data/ and returns only the public half (replace needs explicit confirm). Test added.
+
+Files: app/backup_config.py, app/admin_api.py, app/templates/admin.html, tests/test_backup_config.py, LOG.md
+
 ## 2026-10-03 06:02 UTC — Claude Code
 
 Docker image now runs `python -m app.bootstrap` before uvicorn so a fresh deploy gets `admin`/`admin` (forced password change) without a manual step; README updated.
@@ -170,16 +176,3 @@ a freshly issued token threw `ReferenceError: issuedToken is not defined`
 instead of showing it.
 
 - Files: `app/templates/admin.html`, `LOG.md`
-
-## 2026-09-15 00:59 UTC — Claude Code
-Added email invitations for user account creation: administrators can invite
-a user by email and display name from Settings, and the recipient follows a
-signed 7-day link to choose their own username and password. New accounts
-start in no groups, so every active administrator gets an email nudge to
-assign group memberships once the invite is accepted.
-
-Tests: Ruff and full pytest suite pass (same pre-existing mkdocs-dependent
-failures as before).
-- Files: `app/admin_api.py`, `app/invitations.py`, `app/mailer.py`,
-  `app/templates/accept_invite.html`, `app/templates/admin.html`,
-  `app/web.py`, `tests/test_admin_api.py`, `tests/test_web.py`, `LOG.md`
